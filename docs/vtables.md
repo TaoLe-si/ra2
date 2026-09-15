@@ -1,3 +1,10 @@
+> [!] 2026-09-15 更新：本文件由 `tools/analyze.py` 的**启发式**虚表定界生成，
+> 现在已有更准确的数据来源 —— MSVC RTTI。RTTI 直接给出 949 个类的名字、
+> 继承关系和 1209 张虚表的**确切**边界，见 `docs/class-hierarchy.md`。
+>
+> 启发式定界已知有误（例：`0x007EC258` 这里判 109 槽，实际是
+> `IsometricTileClass` 的 122 槽）。本文件保留作为对照，但不要再作为依据。
+
 # 虚函数表映射证据（供人工确认）
 
 由 `tools/vtmap.py` 生成。本二进制**没有** RTTICompleteObjectLocator，

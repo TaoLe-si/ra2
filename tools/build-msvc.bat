@@ -6,6 +6,11 @@ REM
 REM Why not cmake: the VS2026 cmake generator name varies by install, while
 REM invoking cl.exe directly always works. If your cmake knows the generator:
 REM   cmake -B build -S . && cmake --build build --config Release
+REM
+REM [!] 2026-09-15：在受限沙箱里 vcvarsall.bat 会失败，因为它内部调用 reg.exe
+REM     查注册表，而 reg.exe 被安全策略拦截。改用 tools\build.py：
+REM       python tools\build.py --run
+REM     它自己拼 INCLUDE / LIB / PATH，不需要碰注册表。
 
 setlocal
 set VSROOT=C:\Program Files\Microsoft Visual Studio\18\Enterprise

@@ -170,52 +170,64 @@ Debug(0x3E1610)、IAT(0x3E1000)。**没有导出表、没有异常表、没有�
 
 ---
 
-## 11. 虚函数表与继承层次
+## 11. 虚函数表、类名与继承层次（RTTI 实证）
 
-`tools/vtmap.py` 产出，完整表格见 `docs/vtables.md`，机器可读数据见 `db/vtmap.json`。
+> **2026-09-15 更正**：本节早期版本称"本二进制没有类层次数据、`CompleteObjectLocator` 为 0"，
+> 那是 `tools/rtti.py` 的两个 bug 造成的假象，结论已被推翻。现在类名与继承关系
+> **直接来自二进制的 MSVC RTTI**，不是推断。
 
-### 11.1 定界算法的修正
+### 11.1 两个 bug：为什么一开始以为 RTTI 不可用
 
-初版把"是否已被识别为函数起点"当作虚表延续条件，导致虚表被大量截断：
-`0x007E19D0` 实际至少 24 个槽位，却只识别出 13 个——虚函数里有一部分是 thunk
-或非标准开场，不在函数表里。
+1. `TypeDescriptor` 的键存错。MSVC 的布局是
+   `struct TypeDescriptor { const void* pVFTable; void* spare; char name[]; }`，
+   名字在 **+8** 处。原代码把 `".?AVFoo@@"` 字符串的 RVA 当作描述符 RVA 存，
+   而 `RTTICompleteObjectLocator.pTypeDescriptor` 指向的是描述符起始 —— 差 8 字节，
+   988 个描述符一个都匹配不上，于是 `coll = 0`。
+2. `parse_coll()` 把 `pTypeDescriptor` / `pClassDescriptor` 当 RVA 用，
+   但这两个字段存的是 **VA**，没减 image_base。
 
-改成"值落在 .text 范围内即可延续 + 用代码引用点（构造函数里的
-`mov [this], offset vftable`）定界"之后，虚表从 **231 张增加到 1026 张**，
-槽位分布才符合真实情况（原来 174 张只有 3 槽，明显不合理）。
+修掉这两处后：`types=988, coll=1214, vtables=1209, classes=949`。
 
-同时限定只扫 `.rdata`（虚表是只读的）并把槽位上限设为 128，
-避免把 `.data` 里上千项的普通指针数组误判成虚表。
+### 11.2 虚表定界：必须用 COL 反查，不能靠启发式
 
-### 11.2 继承判据：不能用"前缀完全一致"
+`tools/analyze.py` 的启发式（"值落在 .text 就延续"+128 槽上限）给出 1026 张虚表，
+但**定界是错的**。对照 RTTI：`0x007EC258` 启发式判为 109 槽，实际是
+`IsometricTileClass` 的 **122** 槽 —— 被截短了。
 
-派生类一旦重写（override）基类的虚函数，对应槽位的值就变了，
-前缀必然在某处断开。实测 231 张里一张都匹配不上，全是"根"。
+现在的做法（`tools/rtti.py`）：先用 COL 的引用点确定每张虚表的**确切起点**
+（COL 位于 `vtable[-1]`），再向后延伸到"下一个已知虚表起点"或"值不在 .text"。
 
-正确做法：在**基类的槽位范围内**统计一致比例——未被重写的槽位仍然指向基类的实现。
-
-### 11.3 推断出的主链
+### 11.3 游戏对象模型（实证）
 
 ```
-0x007E8FE8  128 槽   根
-0x007E46E4  125 槽   <- 0x007E3354 (79%)
-0x007E3354  124 槽   <- 0x007EF954 (81%)
-0x007EF954  123 槽   <- 0x007EF060 (91%)
-  ├ 0x007EF060 / 0x007F32FC / 0x007F66A8 / 0x007F6BF4 / 0x007EF3D4
-  ├ 0x007F6318 / 0x007E3AD0 / 0x007F522C  ... 共 9 张 122 槽
-  └ 共同基类 0x007EC258 (109 槽)，一致比例 79%~90%
+AbstractClass        24 槽  0x007E1F50   （多重继承 IPersistStream）
+├─ ObjectClass      122 槽  0x007EF060
+│  ├─ MissionClass  157 槽  0x007EDCC0
+│  │  └─ RadioClass 161 槽  0x007F0508
+│  │     └─ TechnoClass 309 槽 0x007F4960
+│  │        ├─ FootClass     341 槽 0x007E8C94
+│  │        │  ├─ UnitClass     344 槽 0x007F5C70
+│  │        │  ├─ InfantryClass 343 槽 0x007EB058
+│  │        │  └─ AircraftClass 341 槽 0x007E22A4
+│  │        └─ BuildingClass    322 槽 0x007E3EBC
+│  ├─ AnimClass 124 / BulletClass 125 / ParticleClass 123
+│  └─ TerrainClass, OverlayClass, SmudgeClass, IsometricTileClass,
+│     VoxelAnimClass, WaveClass, ParticleSystemClass,
+│     BuildingLightClass, VeinholeMonsterClass        （各 122）
+├─ AbstractTypeClass  27 槽  0x007E2000
+│  └─ ObjectTypeClass 40 槽  0x007EF2D8
+│     └─ TechnoTypeClass 48 槽 → {Aircraft,Building,Infantry,Unit}TypeClass
+└─ HouseClass, CellClass, FactoryClass, TeamClass, TriggerClass, TagClass ... （24）
 ```
 
-9 张 122 槽虚表槽位数相同、彼此高度相似、共享同一个 109 槽基类，
-是典型的"同一继承层、各自重写不同虚函数"形态。
+这张图和社区对 TS/RA2 引擎的描述完全吻合，反过来也互相印证了 RTTI 解析是对的。
 
-对照 RTTI 已知的类名（`AbstractClass -> ObjectClass -> TechnoClass -> FootClass
--> {UnitClass, InfantryClass, AircraftClass}` 与 `TechnoClass -> BuildingClass`），
-最自然的猜测是：109 槽 ≈ `ObjectClass` 一带，9 张 122 槽 ≈ `TechnoClass` 派生族。
-
-> **这仍是推断，不是查表结果。** 要坐实，需要看每张虚表对应的构造函数
-> （`tools/vtmap.py` 已把引用函数列出来了）具体初始化了哪些字段，
-> 再与 INI 段名交叉验证。在此之前不要把它写进结构体布局。
+产物：
+- `src/re/ClassHierarchy.h` —— 自动生成，949 个类的 `ClassInfo` 表 +
+  12717 个槽位，带 `ClassIndex` / `FindClassByVTable` / `VirtualEntry` / `IsDerivedFrom`。
+  有了它，还原出的代码可以在**运行时用 vptr 反查类名**。
+- `docs/class-hierarchy.md` —— 同一份数据的人类可读版。
+- `db/virtuals.json` —— 每个类的槽位 → 函数入口。
 
 ### 11.4 3 槽虚表 = COM 接口
 
@@ -223,3 +235,49 @@ Debug(0x3E1610)、IAT(0x3E1000)。**没有导出表、没有异常表、没有�
 （QueryInterface / AddRef / Release），RTTI 里也确实有一大堆 `I*` 接口：
 `IUnknown`、`IClassFactory`、`IPersist`、`IStream`、`ILocomotion`、
 `IGameMap`、`IHouse`、`IRTTITypeInfo` 等。这些不是游戏对象类。
+
+## 12. 类大小（sizeof）实测
+
+`tools/sizeofscan.py`，数据 `db/sizes.json`，文档 `docs/sizes.md`，
+代码产物 `src/re/ObjectSizes.h`。
+
+### 12.1 方法
+
+1. **定位 `operator new`**：它不在导入表里（CRT 静态链接）。用"被调用前紧跟
+   `push <常量>` 次数最多的函数"来识别，实测命中 `0x007C8E17`；
+   反汇编确认其函数体是 `push 1; push [esp+8]; call _nh_malloc`，无误。
+2. **找构造函数**：函数开头 32 条指令内出现 `mov [<this>], <虚表 VA>`。
+   注意 this 不一定还在 `ecx` —— MSVC 常先 `mov esi, ecx`（`AircraftClass`
+   的构造函数就用 `esi` 写虚表），只认 ecx 会漏掉一批类。
+3. **配对**三种形态：
+   - `push N; call new` 之后紧邻写虚表（构造函数被内联）
+   - `push N; call new` 之后 16 条指令内 `call <构造函数>`
+   - 工厂函数：整个函数只有一处分配、只调用一个类的构造函数
+     （`0x006Cxxxx` 那批 `new XTypeClass(ini)` 就是这种）
+
+结果：**233 个类**拿到 sizeof，其中票数 ≥4 的 67 条写进了 `ObjectSizes.h`。
+
+### 12.2 关键值
+
+| 类 | sizeof | 票数 |
+|---|---:|---:|
+| `UnitClass` | 2280 | 23 |
+| `InfantryClass` | 1776 | 21 |
+| `AircraftClass` | 1752 | 4 |
+| `AircraftTypeClass` | 3600 | 6 |
+| `ObjectClass` | 172 | 3 |
+| `TerrainClass` | 224 | 14 |
+| `OverlayClass` / `SmudgeClass` / `IsometricTileClass` | 176 | 8 / 5 / 4 |
+
+`AircraftClass` 的构造函数最后一个字段写在 `[esi+0x6D4]`（1 字节），
+`0x6D5 + 1 = 0x6D8 = 1752` 正好等于 `new` 的大小 —— 自洽。
+
+### 12.3 已知未解决
+
+`BuildingClass`、`TechnoClass`、`FootClass`、`MissionClass`、`RadioClass`
+这类**中间层/静态数组**的类拿不到：`BuildingClass` 的两个构造函数调用点上
+都没有 `new`，说明它来自静态对象池（`.data` 的 BSS 部分有 3.5MB 未初始化数据）。
+`CellClass`、`HouseClass`、`TeamClass`、`AnimClass`、`BulletClass` 同理。
+
+试过用"引用 BSS 地址的函数里的 `add reg, <常量>`"反推数组步长，
+噪声太大（同一个函数里几十个常量），**这条路没走通**，暂时搁置。

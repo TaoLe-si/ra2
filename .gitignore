@@ -24,6 +24,7 @@ Release/
 db/functions.json
 db/strings.json
 db/vtables.json
+db/virtuals.json
 !db/names.json
 !db/rtti.json
 !db/summary.md
@@ -45,3 +46,7 @@ db/vtables.json
 *.lcf
 *.tlb
 rmcache/
+.workbuddy/
+*.obj
+*.exe
+*.pdb

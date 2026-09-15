@@ -1,0 +1,122 @@
+"""
+build.py -- 在不依赖 vcvarsall.bat 的前提下调用 MSVC cl.exe 构建 ra2core。
+
+为什么需要它：
+  vcvarsall.bat 内部会调用 reg.exe 查注册表，而在受限沙箱里 reg.exe 被拦截，
+  导致 `call vcvarsall.bat x64` 直接失败。这里改为自己拼 INCLUDE / LIB / PATH，
+  效果等价但不需要碰注册表。
+
+用法：
+  python tools/build.py            # Release，输出到 build/ra2core.exe
+  python tools/build.py --clean
+  python tools/build.py --run      # 构建完立刻跑冒烟测试
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SOURCES = [
+    "src/main.cpp",
+    "src/map/Map.cpp",
+    "src/ai/PathFinder.cpp",
+    "src/engine/FrameQueue.cpp",
+    "src/engine/GameLoop.cpp",
+    "src/threading/TaskSystem.cpp",
+    "src/io/FileSystem.cpp",
+    "src/core/Subsystems.cpp",
+]
+
+CFLAGS = ["/nologo", "/std:c++17", "/EHsc", "/W3", "/O2", "/GL-", "/bigobj",
+          "/D_CRT_SECURE_NO_WARNINGS"]
+
+
+def find_msvc() -> str:
+    pats = [
+        r"C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\*\VC\Tools\MSVC\*",
+    ]
+    hits = []
+    for p in pats:
+        hits += glob.glob(p)
+    hits = [h for h in hits if os.path.isdir(os.path.join(h, "bin", "Hostx64", "x64"))]
+    if not hits:
+        sys.exit("[x] 找不到 MSVC 工具链（VC/Tools/MSVC/*/bin/Hostx64/x64）")
+    # 取版本号最大的（字符串排序对 14.xx.xxxxx 够用，先进位更长）
+    hits.sort(key=lambda h: [int(x) if x.isdigit() else 0
+                             for x in os.path.basename(h).split(".")])
+    return hits[-1]
+
+
+def find_sdk() -> tuple[str, str]:
+    inc = sorted(glob.glob(r"C:\Program Files (x86)\Windows Kits\10\Include\*"))
+    lib = sorted(glob.glob(r"C:\Program Files (x86)\Windows Kits\10\Lib\*"))
+    if not inc or not lib:
+        sys.exit("[x] 找不到 Windows 10 SDK")
+    return inc[-1], lib[-1]
+
+
+def build_env() -> dict:
+    msvc = find_msvc()
+    sdk_inc, sdk_lib = find_sdk()
+    msvc_inc = os.path.join(msvc, "include")
+    msvc_lib = os.path.join(msvc, "lib", "x64")
+    bin_dir = os.path.join(msvc, "bin", "Hostx64", "x64")
+
+    env = dict(os.environ)
+    env["INCLUDE"] = os.pathsep.join([
+        msvc_inc,
+        os.path.join(sdk_inc, "ucrt"),
+        os.path.join(sdk_inc, "um"),
+        os.path.join(sdk_inc, "shared"),
+        os.path.join(sdk_inc, "winrt"),
+    ])
+    env["LIB"] = os.pathsep.join([
+        msvc_lib,
+        os.path.join(sdk_lib, "ucrt", "x64"),
+        os.path.join(sdk_lib, "um", "x64"),
+    ])
+    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+    return env
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--clean", action="store_true")
+    ap.add_argument("--run", action="store_true")
+    a = ap.parse_args()
+
+    build = os.path.join(ROOT, "build")
+    os.makedirs(build, exist_ok=True)
+    if a.clean:
+        for f in glob.glob(os.path.join(build, "*.obj")):
+            os.remove(f)
+
+    env = build_env()
+    cl = os.path.join(find_msvc(), "bin", "Hostx64", "x64", "cl.exe")
+    # 注意：cl 的 /Fo /Fe 必须写成 /Fo:xxx 形式；写成 "/Fo" "xxx" 两个参数时
+    # cl 不会把第二个参数当路径，而是当成源文件，报 D9024。
+    cmd = [cl] + CFLAGS + ["/I", os.path.join(ROOT, "src"),
+                           "/Fo:" + build + os.sep,
+                           "/Fe:" + os.path.join(build, "ra2core.exe")]
+    cmd += [os.path.join(ROOT, s) for s in SOURCES]
+
+    print("[.] " + " ".join(cmd[:3]) + " ... (%d 个源文件)" % len(SOURCES))
+    r = subprocess.run(cmd, cwd=ROOT, env=env)
+    if r.returncode != 0:
+        sys.exit("[x] 构建失败")
+
+    exe = os.path.join(build, "ra2core.exe")
+    print("[OK] " + exe)
+    if a.run:
+        sys.exit(subprocess.run([exe], cwd=ROOT).returncode)
+
+
+if __name__ == "__main__":
+    main()

@@ -110,17 +110,35 @@ RA2/YR 是**确定性锁步**。这条约束压倒了所有其它考虑：
 
 按优先级：
 
-1. **虚表 → 类名映射**。虚表已定位 1026 张（其中 800 张有代码引用），
-   并用 `tools/vtmap.py` 推断出了主继承链（见 `docs/binary-baseline.md` §11）：
-   109 槽的共同基类下有 9 张 122 槽的派生族，再往上 123/124/125/128 槽逐级派生。
+1. **虚表 → 类名映射** —— ✅ 已完成（2026-09-15）
 
-   **已经试过并且失败的路**：靠"引用虚表的函数所引用的字符串"反推类名。
-   实测 231 张里只有 6 张有弱线索（"Battles"、"ScriptTypes" 之类），
-   根本不够——构造函数不引用类名字符串，这条路走不通。
+   之前"靠引用字符串反推类名"失败（231 张里只有 6 张弱线索），
+   是因为走错了路：`CompleteObjectLocator` 一直都在，是 `tools/rtti.py` 的
+   两个 bug（TypeDescriptor 键差 8 字节、COL 里 VA 当 RVA 用）让人误以为
+   二进制没有类层次数据。
 
-   **接下来该做的**：看每张虚表对应的构造函数具体初始化了哪些字段，
-   再与 INI 段名交叉验证。`tools/vtmap.py` 已把引用函数逐条列出，
-   `db/vtmap.json` 里可以直接查。
+   修完之后**直接从 RTTI 拿到 949 个类的名字 + 继承关系 + 1209 张虚表 + 12717 个槽位**。
+   产物 `src/re/ClassHierarchy.h`（自动生成，带 `FindClassByVTable` 等查询）
+   和 `docs/class-hierarchy.md`。详见 `docs/binary-baseline.md` §11。
+
+   下一步不再是"猜类名"，而是**给虚函数命名**：每个槽位的入口地址已知，
+   可以逐个反汇编、按函数体引用的字符串和调用关系推断语义。
+
+2. **`sizeof` 与字段偏移** —— 部分完成
+
+   `tools/sizeofscan.py` 已实测出 233 个类的大小，核心的
+   `UnitClass=2280` / `InfantryClass=1776` / `AircraftClass=1752` 都是
+   多个独立调用点互相印证的硬数据（见 `docs/binary-baseline.md` §12、
+   `docs/sizes.md`）。产物 `src/re/ObjectSizes.h`。
+
+   还剩：
+   - `BuildingClass` / `CellClass` / `HouseClass` / `AnimClass` / `BulletClass`
+     等静态对象池里的类 —— 它们的构造点上没有 `new`，靠分配大小抓不到。
+   - 各类的**字段偏移**：需要逐个构造函数做"写入偏移直方图"，
+     现在只有 `AircraftClass` 手工验证过（`[esi+0x6D4]` 是最后字段）。
+
+   抓手仍然是 `0x005659F0`（`MapClass::Init_Clear`）里的缓冲区分配，
+   以及 `0x00652E90`（`RadarClass::Init_For_House`）的循环步进。
 
 2. **`sizeof(CellClass)` 与字段偏移**。抓手：`0x005659F0`
    （`MapClass::Init_Clear`）里的缓冲区分配；`0x00652E90`

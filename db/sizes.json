@@ -1,0 +1,1896 @@
+{
+ "operator_new": 8162839,
+ "classes": {
+  "VSmudgeTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "BufferIOFileClass": {
+   "sizeof": 72,
+   "votes": 2,
+   "evidence": "stride",
+   "candidates": {
+    "72": 2
+   }
+  },
+  "VAircraftTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "ParasiteClass": {
+   "sizeof": 88,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "88": 4
+   }
+  },
+  "CCINIClass": {
+   "sizeof": 88,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "88": 6
+   }
+  },
+  "TunnelLocomotionClass": {
+   "sizeof": 60,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "60": 2
+   }
+  },
+  "PAVTechnoClass::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 9,
+   "evidence": "new",
+   "candidates": {
+    "24": 9,
+    "20": 1
+   }
+  },
+  "MixFileClass": {
+   "sizeof": 40,
+   "votes": 106,
+   "evidence": "new",
+   "candidates": {
+    "40": 106
+   }
+  },
+  "VSuperWeaponTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "ATL::VCNetUtilEventSink::?$CComObject": {
+   "sizeof": 32,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "32": 2
+   }
+  },
+  "TemporalClass": {
+   "sizeof": 80,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "80": 4
+   }
+  },
+  "INIClass::PAUINISection::?$Node": {
+   "sizeof": 68,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "68": 3
+   }
+  },
+  "VFactoryClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVMSAnim::?$VectorClass": {
+   "sizeof": 44,
+   "votes": 2,
+   "evidence": "stride",
+   "candidates": {
+    "44": 2
+   }
+  },
+  "AbstractTypeClass": {
+   "sizeof": 160,
+   "votes": 1,
+   "evidence": "stride",
+   "candidates": {
+    "160": 1,
+    "168": 1
+   }
+  },
+  "VTerrainTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "GenericNode": {
+   "sizeof": 88,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "88": 2
+   }
+  },
+  "AircraftTypeClass": {
+   "sizeof": 3600,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "3600": 6
+   }
+  },
+  "PAVCellClass::?$VectorClass": {
+   "sizeof": 576,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "576": 2
+   }
+  },
+  "II::U?$HashObject::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 3,
+   "evidence": "stride",
+   "candidates": {
+    "24": 3
+   }
+  },
+  "PBVParticleSystemTypeClass::?$VectorClass": {
+   "sizeof": 1940,
+   "votes": 1,
+   "evidence": "stride",
+   "candidates": {
+    "1940": 1
+   }
+  },
+  "TaskForceClass": {
+   "sizeof": 212,
+   "votes": 10,
+   "evidence": "new",
+   "candidates": {
+    "212": 10
+   }
+  },
+  "PAD::PAV?$DynamicVectorClass::?$VectorClass": {
+   "sizeof": 76,
+   "votes": 2,
+   "evidence": "stride",
+   "candidates": {
+    "76": 2
+   }
+  },
+  "SmudgeTypeClass": {
+   "sizeof": 676,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "676": 6
+   }
+  },
+  "PAD::?$VectorClass": {
+   "sizeof": 1824,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "1824": 2,
+    "16": 2
+   }
+  },
+  "VBombClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VAITriggerTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VHouseClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTiberiumClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "XSurface": {
+   "sizeof": 32,
+   "votes": 27,
+   "evidence": "new",
+   "candidates": {
+    "32": 27
+   }
+  },
+  "VAircraftClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "BinkMovieHandle": {
+   "sizeof": 20,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "20": 2
+   }
+  },
+  "PAVPlanningMemberClass::?$VectorClass": {
+   "sizeof": 184,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "184": 2
+   }
+  },
+  "NeuronClass": {
+   "sizeof": 56,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "56": 3
+   }
+  },
+  "LoadProgressMgr": {
+   "sizeof": 100,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "100": 2
+   }
+  },
+  "VWaypointPathClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "CenterTeamCommandClass": {
+   "sizeof": 8,
+   "votes": 20,
+   "evidence": "new",
+   "candidates": {
+    "8": 20
+   }
+  },
+  "VDriveLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVSchemeNode::VHashString::U?$HashObject::?$VectorClass": {
+   "sizeof": 16,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "16": 1
+   }
+  },
+  "SmudgeClass": {
+   "sizeof": 176,
+   "votes": 5,
+   "evidence": "new",
+   "candidates": {
+    "176": 5
+   }
+  },
+  "PAD::?$DynamicVectorClass": {
+   "sizeof": 16,
+   "votes": 11,
+   "evidence": "new",
+   "candidates": {
+    "16": 11,
+    "24": 4
+   }
+  },
+  "NullModemConnClass": {
+   "sizeof": 84,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "84": 2
+   }
+  },
+  "WorldDominationTour::Voices::Anim": {
+   "sizeof": 32,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "32": 2
+   }
+  },
+  "VParticleSystemTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "ATL::VCChatEventSink::?$CComObject": {
+   "sizeof": 32,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "32": 2
+   }
+  },
+  "CounterClass": {
+   "sizeof": 8,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "8": 1
+   }
+  },
+  "VSuperClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "RadSiteClass": {
+   "sizeof": 116,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "116": 6
+   }
+  },
+  "VShipLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTEventClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "FlyLocomotionClass": {
+   "sizeof": 96,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "96": 2
+   }
+  },
+  "VCell::?$DynamicVectorClass": {
+   "sizeof": 24,
+   "votes": 14,
+   "evidence": "new",
+   "candidates": {
+    "24": 14,
+    "20": 4
+   }
+  },
+  "CCFileClass": {
+   "sizeof": 36,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "36": 4,
+    "28": 4,
+    "40": 2,
+    "16": 2,
+    "108": 2
+   }
+  },
+  "SpawnManagerClass::PAUSpawnControl::?$DynamicVectorClass": {
+   "sizeof": 116,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "116": 2
+   }
+  },
+  "VInfantryTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "BombClass": {
+   "sizeof": 92,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "92": 4
+   }
+  },
+  "H::V?$TRect::?$VectorClass": {
+   "sizeof": 112,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "112": 2
+   }
+  },
+  "MSVQAnim": {
+   "sizeof": 48,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "48": 3
+   }
+  },
+  "BitFont": {
+   "sizeof": 68,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "68": 2
+   }
+  },
+  "VWaypointClass::?$DynamicVectorClass": {
+   "sizeof": 64,
+   "votes": 24,
+   "evidence": "new",
+   "candidates": {
+    "64": 24
+   }
+  },
+  "MultiplayerSiegeAttackerTeam": {
+   "sizeof": 12,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "12": 1
+   }
+  },
+  "VParasiteClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "H::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 4,
+   "evidence": "stride",
+   "candidates": {
+    "24": 4
+   }
+  },
+  "VUnitClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "TActionClass": {
+   "sizeof": 148,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "148": 3
+   }
+  },
+  "PAVPlanningNodeClass::?$VectorClass": {
+   "sizeof": 156,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "156": 1
+   }
+  },
+  "PBVBuildingTypeClass::?$VectorClass": {
+   "sizeof": 2220,
+   "votes": 2,
+   "evidence": "stride",
+   "candidates": {
+    "2220": 2
+   }
+  },
+  "PAUIConnectionPoint::?$VectorClass": {
+   "sizeof": 36,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "36": 2
+   }
+  },
+  "WorldDominationTour::MapSizeGameOption": {
+   "sizeof": 12,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "12": 2
+   }
+  },
+  "TextLabelClass": {
+   "sizeof": 76,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "76": 4
+   }
+  },
+  "InfantryClass": {
+   "sizeof": 1776,
+   "votes": 21,
+   "evidence": "new",
+   "candidates": {
+    "1776": 21
+   }
+  },
+  "PAVMultiplayerGameMode::?$DynamicVectorClass": {
+   "sizeof": 133,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "133": 2
+   }
+  },
+  "WorldDominationTour::VCampaign::?$rc_ptr": {
+   "sizeof": 76,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "76": 2
+   }
+  },
+  "VHouseTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MultiplayerObserverTeam": {
+   "sizeof": 12,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "12": 2
+   }
+  },
+  "CCToolTip": {
+   "sizeof": 616,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "616": 3
+   }
+  },
+  "MultiplayerSiegeDefenderTeam": {
+   "sizeof": 12,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "12": 1
+   }
+  },
+  "TeleportLocomotionClass": {
+   "sizeof": 76,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "76": 2
+   }
+  },
+  "VCaptureManagerClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VParticleTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAUtConnInfoStruct::?$VectorClass": {
+   "sizeof": 20,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "20": 2
+   }
+  },
+  "VTeamClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "TEventClass": {
+   "sizeof": 88,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "88": 3
+   }
+  },
+  "IPXConnClass": {
+   "sizeof": 184,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "184": 4
+   }
+  },
+  "PBVAnimTypeClass::?$TypeList": {
+   "sizeof": 464,
+   "votes": 8,
+   "evidence": "new",
+   "candidates": {
+    "464": 8,
+    "3792": 6,
+    "296": 4
+   }
+  },
+  "VVoxelAnimTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "TagClass": {
+   "sizeof": 56,
+   "votes": 8,
+   "evidence": "new",
+   "candidates": {
+    "56": 8
+   }
+  },
+  "CampaignClass": {
+   "sizeof": 928,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "928": 4
+   }
+  },
+  "VWeaponTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVTechnoClass::?$DynamicVectorClass": {
+   "sizeof": 24,
+   "votes": 10,
+   "evidence": "new",
+   "candidates": {
+    "24": 10
+   }
+  },
+  "VLightSourceClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VDiskLaserClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VParticleClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VEMPulseClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VJumpjetLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VDropPodLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "ControlClass": {
+   "sizeof": 56,
+   "votes": 1,
+   "evidence": "stride",
+   "candidates": {
+    "56": 1
+   }
+  },
+  "VIsometricTileTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "AddTeamCommandClass": {
+   "sizeof": 8,
+   "votes": 20,
+   "evidence": "new",
+   "candidates": {
+    "8": 20
+   }
+  },
+  "VBuildingTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VWDTState::?$rc_ptr": {
+   "sizeof": 76,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "76": 2
+   }
+  },
+  "VWarheadTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PBVToolTip::?$DynamicVectorClass": {
+   "sizeof": 616,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "616": 3
+   }
+  },
+  "TerrainTypeClass": {
+   "sizeof": 700,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "700": 6
+   }
+  },
+  "VRGBClass::?$TypeList": {
+   "sizeof": 792,
+   "votes": 11,
+   "evidence": "new",
+   "candidates": {
+    "792": 11
+   }
+  },
+  "H::?$DynamicVectorClass": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "VTunnelLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "RocketLocomotionClass": {
+   "sizeof": 96,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "96": 2
+   }
+  },
+  "UtagCONNECTDATA::?$DynamicVectorClass": {
+   "sizeof": 52,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "52": 2
+   }
+  },
+  "CreateTeamCommandClass": {
+   "sizeof": 8,
+   "votes": 20,
+   "evidence": "new",
+   "candidates": {
+    "8": 20
+   }
+  },
+  "W4DiskID::?$TypeList": {
+   "sizeof": 444,
+   "votes": 7,
+   "evidence": "new",
+   "candidates": {
+    "444": 7
+   }
+  },
+  "Mouse": {
+   "sizeof": 152,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "152": 6
+   }
+  },
+  "VSpawnManagerClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "SelectTeamCommandClass": {
+   "sizeof": 8,
+   "votes": 20,
+   "evidence": "new",
+   "candidates": {
+    "8": 20
+   }
+  },
+  "VBulletTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MSFont": {
+   "sizeof": 32,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "32": 4
+   }
+  },
+  "PAVFoggedObjectClass::?$DynamicVectorClass": {
+   "sizeof": 24,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "24": 4
+   }
+  },
+  "VCellClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVParticleClass::?$DynamicVectorClass": {
+   "sizeof": 256,
+   "votes": 19,
+   "evidence": "new",
+   "candidates": {
+    "256": 19,
+    "456": 1
+   }
+  },
+  "VScriptTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VNeuronClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "WorldDominationTour::VCampaignProperties::?$rc_ptr": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "CampaignScoreClass": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "WebBrowser": {
+   "sizeof": 1044,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "1044": 1
+   }
+  },
+  "TauntCommandClass": {
+   "sizeof": 8,
+   "votes": 16,
+   "evidence": "new",
+   "candidates": {
+    "8": 16
+   }
+  },
+  "TerrainClass": {
+   "sizeof": 224,
+   "votes": 14,
+   "evidence": "new",
+   "candidates": {
+    "224": 14
+   }
+  },
+  "WinModemClass": {
+   "sizeof": 8328,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "8328": 4
+   }
+  },
+  "SuperClass": {
+   "sizeof": 128,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "128": 2
+   }
+  },
+  "VCStreamClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTActionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VBuildingLightClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTerrainClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VMechLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "UtagCONNECTDATA::?$VectorClass": {
+   "sizeof": 36,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "36": 2
+   }
+  },
+  "FoggedObjectClass::UDrawRecord::?$DynamicVectorClass": {
+   "sizeof": 120,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "120": 2
+   }
+  },
+  "ScriptTypeClass": {
+   "sizeof": 564,
+   "votes": 12,
+   "evidence": "new",
+   "candidates": {
+    "564": 12
+   }
+  },
+  "VScriptClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "EMPulseClass": {
+   "sizeof": 52,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "52": 2
+   }
+  },
+  "VWDTTerritory::?$rc_ptr": {
+   "sizeof": 64,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "64": 1,
+    "108": 1
+   }
+  },
+  "USubzoneConnectionStruct::?$DynamicVectorClass": {
+   "sizeof": 36,
+   "votes": 2,
+   "evidence": "stride",
+   "candidates": {
+    "36": 2
+   }
+  },
+  "ShapeButtonClass": {
+   "sizeof": 96,
+   "votes": 2,
+   "evidence": "stride",
+   "candidates": {
+    "96": 2
+   }
+  },
+  "VTriggerTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PixelFXClass": {
+   "sizeof": 60,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "60": 4
+   }
+  },
+  "VRadSiteClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MechLocomotionClass": {
+   "sizeof": 52,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "52": 2
+   }
+  },
+  "rc_ptr_base": {
+   "sizeof": 16,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "16": 4,
+    "20": 4,
+    "12": 3,
+    "133": 1
+   }
+  },
+  "INoticeSink": {
+   "sizeof": 92,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "92": 2,
+    "56": 1
+   }
+  },
+  "VWalkLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VParticleSystemClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MultiplayerBattle": {
+   "sizeof": 64,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "64": 1
+   }
+  },
+  "VTubeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "TubeClass": {
+   "sizeof": 452,
+   "votes": 8,
+   "evidence": "new",
+   "candidates": {
+    "452": 8
+   }
+  },
+  "VCell::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "24": 6,
+    "80": 2
+   }
+  },
+  "IUSubzoneConnectionStruct::U?$HashObject::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 3,
+   "evidence": "stride",
+   "candidates": {
+    "24": 3
+   }
+  },
+  "PBD::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "VOverlayTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "UnholyAlliance": {
+   "sizeof": 64,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "64": 1
+   }
+  },
+  "INIClass::PAUINISection::?$List": {
+   "sizeof": 88,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "88": 4
+   }
+  },
+  "VCampaignClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "AlphaShapeClass": {
+   "sizeof": 528,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "528": 2,
+    "64": 2
+   }
+  },
+  "PAUNodeNameType::?$DynamicVectorClass": {
+   "sizeof": 836,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "836": 1
+   }
+  },
+  "VeinholeMonsterClass": {
+   "sizeof": 264,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "264": 2
+   }
+  },
+  "VPoint2D::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 6,
+   "evidence": "stride",
+   "candidates": {
+    "24": 6
+   }
+  },
+  "WalkLocomotionClass": {
+   "sizeof": 60,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "60": 2
+   }
+  },
+  "ReferenceCounted": {
+   "sizeof": 16,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "16": 4,
+    "20": 4,
+    "48": 2,
+    "212": 2
+   }
+  },
+  "VSlaveManagerClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTriggerClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVSubTitle::?$DynamicVectorClass": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "VAnimClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "AirstrikeClass": {
+   "sizeof": 96,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "96": 4
+   }
+  },
+  "VBulletClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VBuildingClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "WDTTerritory": {
+   "sizeof": 64,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "64": 2
+   }
+  },
+  "VSideClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "ATL::VCDownloadEventSink::?$CComObject": {
+   "sizeof": 32,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "32": 2
+   }
+  },
+  "MapSeedClass": {
+   "sizeof": 376,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "376": 4
+   }
+  },
+  "OverlayClass": {
+   "sizeof": 176,
+   "votes": 8,
+   "evidence": "new",
+   "candidates": {
+    "176": 8
+   }
+  },
+  "ScriptClass": {
+   "sizeof": 48,
+   "votes": 9,
+   "evidence": "new",
+   "candidates": {
+    "48": 9
+   }
+  },
+  "PAVPlanningNodeClass::?$DynamicVectorClass": {
+   "sizeof": 156,
+   "votes": 9,
+   "evidence": "new",
+   "candidates": {
+    "156": 9
+   }
+  },
+  "VHoverLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVReestablish::?$VectorClass": {
+   "sizeof": 8,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "8": 1
+   }
+  },
+  "USubzoneConnectionStruct::?$VectorClass": {
+   "sizeof": 24,
+   "votes": 4,
+   "evidence": "stride",
+   "candidates": {
+    "24": 4
+   }
+  },
+  "VTemporalClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTactical::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PAVTechnoClass::URadarTrackingStruct::U?$HashObject::?$VectorClass": {
+   "sizeof": 16,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "16": 2
+   }
+  },
+  "VFoggedObjectClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "DiskLaserClass": {
+   "sizeof": 64,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "64": 4
+   }
+  },
+  "VQMovieHandle": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "VTagClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VVoxelAnimClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MSShapeAnim": {
+   "sizeof": 64,
+   "votes": 3,
+   "evidence": "new",
+   "candidates": {
+    "64": 3,
+    "72": 2
+   }
+  },
+  "VFlyLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VTeleportLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "WorldDominationTour::GameOption": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "GraphicMenuImageItem": {
+   "sizeof": 56,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "56": 2
+   }
+  },
+  "LightSourceClass": {
+   "sizeof": 76,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "76": 4
+   }
+  },
+  "VAlphaShapeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "H::?$TypeList": {
+   "sizeof": 180,
+   "votes": 8,
+   "evidence": "new",
+   "candidates": {
+    "180": 8,
+    "352": 6
+   }
+  },
+  "I::?$VectorClass": {
+   "sizeof": 20,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "20": 2
+   }
+  },
+  "DSurface": {
+   "sizeof": 36,
+   "votes": 41,
+   "evidence": "new",
+   "candidates": {
+    "36": 41,
+    "16384": 2
+   }
+  },
+  "TriggerClass": {
+   "sizeof": 72,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "72": 6
+   }
+  },
+  "VUnitTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VRocketLocomotionClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "FreeForAll": {
+   "sizeof": 64,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "64": 1
+   }
+  },
+  "PAUControlNode::?$DynamicVectorClass": {
+   "sizeof": 80,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "80": 2
+   }
+  },
+  "VAnimTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MultiplayerSiege": {
+   "sizeof": 64,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "64": 1
+   }
+  },
+  "IsometricTileClass": {
+   "sizeof": 176,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "176": 4
+   }
+  },
+  "DropPodLocomotionClass": {
+   "sizeof": 48,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "48": 2
+   }
+  },
+  "WorldDominationTour::VTerritory::?$rc_ptr": {
+   "sizeof": 44,
+   "votes": 1,
+   "evidence": "stride",
+   "candidates": {
+    "44": 1
+   }
+  },
+  "MSAnim": {
+   "sizeof": 52,
+   "votes": 12,
+   "evidence": "new",
+   "candidates": {
+    "52": 12,
+    "60": 10
+   }
+  },
+  "VWstring::?$DynamicVectorClass": {
+   "sizeof": 444,
+   "votes": 6,
+   "evidence": "new",
+   "candidates": {
+    "444": 6
+   }
+  },
+  "UnitClass": {
+   "sizeof": 2280,
+   "votes": 23,
+   "evidence": "new",
+   "candidates": {
+    "2280": 23
+   }
+  },
+  "VAirstrikeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "ObjectClass": {
+   "sizeof": 172,
+   "votes": 3,
+   "evidence": "stride",
+   "candidates": {
+    "172": 3
+   }
+  },
+  "VTagTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "VWaveClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "AircraftClass": {
+   "sizeof": 1752,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "1752": 4
+   }
+  },
+  "PBVTechnoTypeClass::?$DynamicVectorClass": {
+   "sizeof": 116,
+   "votes": 26,
+   "evidence": "new",
+   "candidates": {
+    "116": 26
+   }
+  },
+  "SlaveManagerClass::PAUSlaveControl::?$DynamicVectorClass": {
+   "sizeof": 100,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "100": 2
+   }
+  },
+  "VTaskForceClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "GraphicMenuAnimItem": {
+   "sizeof": 40,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "40": 2
+   }
+  },
+  "VInfantryClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "PBD::?$DynamicVectorClass": {
+   "sizeof": 24,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "24": 2
+   }
+  },
+  "VTeamTypeClass::?$TClassFactory": {
+   "sizeof": 8,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "8": 2
+   }
+  },
+  "MultiplayerManBattle": {
+   "sizeof": 64,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "64": 1
+   }
+  },
+  "ScoreFontClass": {
+   "sizeof": 24,
+   "votes": 1,
+   "evidence": "new",
+   "candidates": {
+    "24": 1
+   }
+  },
+  "CStreamClass": {
+   "sizeof": 44,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "44": 2
+   }
+  },
+  "TriggerTypeClass": {
+   "sizeof": 180,
+   "votes": 11,
+   "evidence": "new",
+   "candidates": {
+    "180": 11
+   }
+  },
+  "I::?$DynamicVectorClass": {
+   "sizeof": 40,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "40": 4
+   }
+  },
+  "Surface": {
+   "sizeof": 32,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "32": 4
+   }
+  },
+  "E::?$BlitPlainXlat": {
+   "sizeof": 256,
+   "votes": 2,
+   "evidence": "new",
+   "candidates": {
+    "256": 2
+   }
+  },
+  "RawFileClass": {
+   "sizeof": 36,
+   "votes": 4,
+   "evidence": "new",
+   "candidates": {
+    "36": 4,
+    "487": 2
+   }
+  }
+ }
+}

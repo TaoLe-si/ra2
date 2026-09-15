@@ -12,6 +12,7 @@
 
 #include "ai/PathFinder.h"
 #include "core/VTableMap.h"
+#include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "io/FileSystem.h"
 #include "map/Map.h"
@@ -138,11 +139,39 @@ int main(int argc, char** argv) {
                 par_ms > 0.0 ? serial_ms / par_ms : 0.0);
     std::printf("OK  锁步帧队列行为正确，帧 CRC = 0x%08X\n", q.Compute_CRC());
 
-    // 虚表：打印推断出的继承骨架（数据来自 db/vtmap.json，属推断，未证实）
-    static_assert(vtable::kFamily122Count == 9, "122 槽派生族应为 9 张");
-    std::printf("INFO 虚表继承骨架（推断）：共同基类 0x%08X(109槽) -> %d 张 122 槽 -> "
-                "0x%08X(123) -> 0x%08X(124) -> 0x%08X(125)\n",
-                vtable::kRootBase109, vtable::kFamily122Count,
-                vtable::kLevel123, vtable::kLevel124, vtable::kLevel125);
+    // ---- 类层次 ----
+    // 这部分不再是推断，而是 gamemd.exe 的 MSVC RTTI 原文（src/re/ClassHierarchy.h）。
+    // 下面几条 static_assert 是回归测试：一旦重新抽取的类表不再满足这些关系，
+    // 说明要么 RTTI 解析退化了，要么我们对引擎对象模型的理解是错的。
+    static_assert(re::IsDerivedFrom(vtable::cls::kUnitClass, vtable::cls::kTechnoClass),
+                  "UnitClass 必须派生自 TechnoClass");
+    static_assert(re::IsDerivedFrom(vtable::cls::kInfantryClass, vtable::cls::kFootClass),
+                  "InfantryClass 必须派生自 FootClass");
+    static_assert(re::IsDerivedFrom(vtable::cls::kBuildingClass, vtable::cls::kTechnoClass),
+                  "BuildingClass 必须派生自 TechnoClass");
+    static_assert(!re::IsDerivedFrom(vtable::cls::kAnimClass, vtable::cls::kTechnoClass),
+                  "AnimClass 挂在 ObjectClass 下，不是 TechnoClass");
+
+    // 类大小：来自二进制里 `push <size>; call operator new` 的实测值，
+    // 不是按字段推算的。这几个数对多核改造是硬约束 —— 对象 2KB 级别，
+    // 一次遍历的访存量远大于计算量，并行必须按缓存行切分而不是按对象切分。
+    const uint32_t sz_unit = re::SizeOf("UnitClass");
+    const uint32_t sz_inf = re::SizeOf("InfantryClass");
+    const uint32_t sz_air = re::SizeOf("AircraftClass");
+    if (sz_unit == 0 || sz_inf == 0 || sz_air == 0) {
+        std::printf("FAIL: 关键类的 sizeof 未能从二进制中提取\n");
+        return 1;
+    }
+    std::printf("INFO sizeof 实测：UnitClass=%u InfantryClass=%u AircraftClass=%u（共 %d 条）\n",
+                sz_unit, sz_inf, sz_air, re::kSizeCount);
+
+    std::printf("INFO 类层次取自 RTTI 实证：%d 个类 / %d 个虚表槽位\n",
+                re::kClassCount, re::kFlatSlotCount);
+    std::printf("     UnitClass 链：");
+    for (int id = vtable::cls::kUnitClass; id >= 0;
+         id = re::kClassTable[id].base_index) {
+        std::printf("%s(%d槽) ", re::kClassTable[id].name, re::kClassTable[id].slots);
+    }
+    std::printf("\n");
     return 0;
 }

@@ -47,7 +47,8 @@ def _demangle_type(name: str) -> str:
 class RTTIExtractor:
     def __init__(self, img: PEImage):
         self.img = img
-        self.types: dict[int, str] = {}          # TD name RVA -> 原始名 ".?AVFoo@@"
+        self.types: dict[int, str] = {}          # TypeDescriptor RVA -> 原始名 ".?AVFoo@@"
+        self.name_rvas: dict[int, int] = {}      # name 字符串 RVA -> TypeDescriptor RVA
         self.coll_rvas: list[int] = []           # RTTICompleteObjectLocator RVA
         self.refs: dict[int, list[int]] = {}     # 被指向的 VA -> 引用它的 RVA 列表
         self.vtables: dict[int, dict] = {}       # vftable RVA -> 信息
@@ -80,8 +81,22 @@ class RTTIExtractor:
                         s = raw.decode("ascii")
                     except UnicodeDecodeError:
                         continue
-                    rva = sec["rva"] + i
-                    self.types[rva] = s
+                    # 关键：MSVC 的 TypeDescriptor 布局是
+                    #   struct TypeDescriptor { const void* pVFTable; void* spare; char name[]; };
+                    # 也就是说 name[] 位于描述符起始 +8 处。
+                    # 而 RTTICompleteObjectLocator.pTypeDescriptor 指向的是描述符起始，不是字符串，
+                    # 所以这里必须以 "字符串 RVA - 8" 作为键，否则后续匹配必然全部落空。
+                    name_rva = sec["rva"] + i
+                    td_rva = name_rva - 8
+                    # 校验描述符头：pVFTable 非空且可读，spare 必须为 0
+                    if td_rva < 0:
+                        continue
+                    pvft = self.img.u32(td_rva)
+                    spare = self.img.u32(td_rva + 4)
+                    if not pvft or spare != 0:
+                        continue
+                    self.types[td_rva] = s
+                    self.name_rvas[name_rva] = td_rva
 
     # ---------- 2. 建立 "被指向 VA -> 引用位置" 索引 ----------
     def build_ref_index(self) -> None:
@@ -128,8 +143,10 @@ class RTTIExtractor:
         sig = self.img.u32(coll_rva)
         offset = self.img.u32(coll_rva + 4)
         cd_offset = self.img.u32(coll_rva + 8)
-        ptd = self.img.u32(coll_rva + 12)
-        pcd = self.img.u32(coll_rva + 16)
+        # 注意：COL 里的 pTypeDescriptor / pClassDescriptor 存的是 VA，必须减去 image_base
+        # 才能当作 RVA 用（本二进制 relocations 已剥离，VA - image_base 即 RVA）。
+        ptd = self.img.u32(coll_rva + 12) - ib
+        pcd = self.img.u32(coll_rva + 16) - ib
         return {
             "rva": coll_rva,
             "va": ib + coll_rva,
@@ -171,28 +188,43 @@ class RTTIExtractor:
     def build_vtables(self) -> None:
         ib = self.img.image_base
         lo, hi = self.img.text_range()
+
+        # 第一遍：先用 COL 引用点确定所有虚表的确切起点
+        starts: dict[int, dict] = {}
         for coll in self.coll_rvas:
             info = self.parse_coll(coll)
             for slot_rva in self.refs.get(ib + coll, []):
                 vt_rva = slot_rva + 4
-                if vt_rva in self.vtables:
-                    continue
-                entries = []
-                cur = vt_rva
-                while True:
-                    v = self.img.u32(cur)
-                    if v is None:
+                if vt_rva not in starts:
+                    starts[vt_rva] = info
+        sorted_starts = sorted(starts)
+        start_set = set(sorted_starts)
+
+        # 第二遍：定界。延伸条件 = 值落在 .text 且 4 字节对齐；
+        # 额外用「下一张已知虚表起点」截断，避免相邻虚表粘连成一张超长表。
+        for idx, vt_rva in enumerate(sorted_starts):
+            nxt = sorted_starts[idx + 1] if idx + 1 < len(sorted_starts) else None
+            entries = []
+            cur = vt_rva
+            while True:
+                if nxt is not None and cur >= nxt:
+                    break
+                if cur in start_set and cur != vt_rva:
+                    break
+                v = self.img.u32(cur)
+                if v is None:
+                    break
+                if lo <= v - ib < hi and ((v - ib) & 3) == 0:
+                    entries.append(v)
+                    cur += 4
+                    if len(entries) >= 1024:
                         break
-                    if lo <= v - ib < hi and ((v - ib) & 3) == 0:
-                        entries.append(v)
-                        cur += 4
-                        if len(entries) >= 512:
-                            break
-                    else:
-                        break
-                if not entries:
-                    continue
-                self.vtables[vt_rva] = {
+                else:
+                    break
+            if not entries:
+                continue
+            info = starts[vt_rva]
+            self.vtables[vt_rva] = {
                     "rva": vt_rva,
                     "va": ib + vt_rva,
                     "coll": info,
