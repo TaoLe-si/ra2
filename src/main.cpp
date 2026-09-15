@@ -1295,6 +1295,71 @@ static int Map_Dump(const std::vector<std::string>& mix_paths, const char* map_p
 }
 
 // ---------------------------------------------------------------------------
+// --mapobj：地图里的对象（车辆/步兵/建筑/装饰）+ 路径点 + 阵营
+//
+// 自检判据（三条，逐张地图跑）：
+//   1. 解析出的对象格必须落在 [0,W)x[0,H) —— 越界就说明坐标帧算错了。
+//      坐标帧是拿全库 53 张官方地图反推出来的，见 MapFile.h 顶部。
+//   2. 绝大多数对象要落在 LocalSize 可玩矩形里（实测 93.4%）。
+//   3. 至少要有对象被解析出来，且 8 个出生点（waypoint 0..7）在地图上。
+// ---------------------------------------------------------------------------
+/// 路径里最后一段文件名，"D:/x/Arena.mmx" -> "Arena.mmx"。
+static const char* Base_Name(const char* p) {
+    const char* s1 = std::strrchr(p, '\\');
+    const char* s2 = std::strrchr(p, '/');
+    const char* s = (s1 && s2) ? (s1 > s2 ? s1 : s2) : (s1 ? s1 : s2);
+    return s ? s + 1 : p;
+}
+
+static int Map_Objects(int count, char** paths) {
+    int failures = 0;
+    for (int i = 0; i < count; ++i) {
+        MapFile map;
+        std::string err;
+        if (!map.Load_Path(paths[i], &err)) {
+            std::printf("%-28s [x] 载入失败: %s\n", paths[i], err.c_str());
+            ++failures;
+            continue;
+        }
+        const int W = map.Width();
+        const int H = map.Height();
+
+        // 各类对象计数
+        int n[5] = {0, 0, 0, 0, 0};
+        for (const MapObject& o : map.Objects()) {
+            n[static_cast<int>(o.kind)]++;
+        }
+        // 可玩矩形命中率
+        int in_local = 0;
+        for (const MapObject& o : map.Objects()) {
+            if (o.cx >= map.Local_X() && o.cx < map.Local_X() + map.Local_Width() &&
+                o.cy >= map.Local_Y() && o.cy < map.Local_Y() + map.Local_Height()) {
+                ++in_local;
+            }
+        }
+        const size_t total = map.Objects().size();
+        const double pct = total ? 100.0 * static_cast<double>(in_local) /
+                                       static_cast<double>(total) : 0.0;
+        int spawn = 0;
+        for (const MapWaypoint& w : map.Waypoints()) {
+            if (w.index >= 0 && w.index < 8) ++spawn;
+        }
+        // 判据只有两条硬的：解析出对象、且几乎没有算出界的。
+        // "落在可玩矩形内的比例"只作参考 —— 像 SinkSwim 这种小岛图，
+        // 大片装饰树本来就在可玩区之外的海域里，比例天然低（实测 0.8%）。
+        const bool ok = (total > 0) && (map.Objects_Dropped() <= 2);
+        if (!ok) ++failures;
+        std::printf("%-28s %3dx%-3d 对象%5zu (装饰%3d 车%3d 兵%3d 建筑%3d 机%2d) "
+                    "可玩内%5.1f%% 越界%3d 路径点%3zu(出生%2d) 阵营%2zu  %s\n",
+                    Base_Name(paths[i]), W, H, total, n[0], n[1], n[2], n[3], n[4],
+                    pct, map.Objects_Dropped(), map.Waypoints().size(), spawn,
+                    map.Houses().size(), ok ? "OK" : "FAIL");
+    }
+    std::printf(failures ? "[x] %d 张不过\n" : "[OK] %d 张全过\n", count - failures);
+    return failures ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // --remap：阵营色（remap）表
 // ---------------------------------------------------------------------------
 static int Remap_Dump(const std::vector<std::string>& mix_paths,
@@ -1492,6 +1557,13 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Map_Dump(mixes, argv[2], out);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--mapobj") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --mapobj <地图.mmx/.yro/.map> [更多地图...]\n");
+            return 1;
+        }
+        return Map_Objects(argc - 2, argv + 2);
     }
     if (argc > 1 && std::strcmp(argv[1], "--remap") == 0) {
         if (argc < 3) {

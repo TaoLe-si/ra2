@@ -272,6 +272,8 @@ bool MapFile::Load_Data(const uint8_t* data, size_t size, std::string* err) {
         Lzo1x_Decompress_Chunks(raw.data(), raw.size(), &overlay_data_, &e);
     }
 
+    Parse_Objects();
+
     return !cells_.empty();
 }
 
@@ -322,8 +324,9 @@ bool MapFile::Decode_Iso_Pack(const std::string& b64, std::string* err) {
         }
         const int w = rect_[2];
         IsoCell c;
-        c.cx = (x + y - 1 - w) / 2;
-        c.cy = (y - 1 - (x - w)) / 2;
+        // 见 MapFile.h 顶部：cx/cy 的指派靠对象段定下来的，别随手对调。
+        c.cx = (y - 1 - (x - w)) / 2;
+        c.cy = (x + y - 1 - w) / 2;
         c.tile = (tile == 0xFFFF || tile < 0) ? -1 : tile;
         c.sub = p[8];
         c.level = p[9];
@@ -338,6 +341,172 @@ bool MapFile::Decode_Iso_Pack(const std::string& b64, std::string* err) {
         }
     }
     return true;
+}
+
+// ---------------------------------------------------------------- 对象段
+namespace {
+
+/// 取逗号分隔的第 i 个字段（0 基）。越界返回空串。
+std::string Field(const std::string& s, int i) {
+    size_t pos = 0;
+    for (int k = 0; k < i; ++k) {
+        const size_t c = s.find(',', pos);
+        if (c == std::string::npos) {
+            return std::string();
+        }
+        pos = c + 1;
+    }
+    const size_t c = s.find(',', pos);
+    return (c == std::string::npos) ? s.substr(pos) : s.substr(pos, c - pos);
+}
+
+/// 按行切开，去掉空行和注释行（`;` / `//` 开头）。
+/// INI 的行尾可能是 CRLF，尾部的 '\r' 要吃掉，否则字段名会粘上回车。
+std::vector<std::string> Split_Lines(const std::string& text) {
+    std::vector<std::string> out;
+    size_t pos = 0;
+    while (pos <= text.size()) {
+        size_t nl = text.find('\n', pos);
+        if (nl == std::string::npos) {
+            nl = text.size();
+        }
+        std::string line = text.substr(pos, nl - pos);
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        const std::string t = Trim(line);
+        if (!t.empty() && t[0] != ';' && !(t.size() >= 2 && t[0] == '/' && t[1] == '/')) {
+            out.push_back(t);
+        }
+        if (nl >= text.size()) {
+            break;
+        }
+        pos = nl + 1;
+    }
+    return out;
+}
+
+}  // namespace
+
+void MapFile::Parse_Objects() {
+    objects_.clear();
+    objects_dropped_ = 0;
+    waypoints_.clear();
+    houses_.clear();
+
+    const int W = rect_[2];
+    const int H = rect_[3];
+
+    // [Houses]：编号 -> 阵营名
+    for (const auto& kv : raw_sections_) {
+        if (_stricmp(kv.first.c_str(), "Houses") != 0) {
+            continue;
+        }
+        for (const std::string& line : Split_Lines(kv.second)) {
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            // 编号是纯数字键，且**不保证连续**（实测有的地图从 1 开始）
+            const int idx = std::atoi(line.substr(0, eq).c_str());
+            const std::string name = Trim(line.substr(eq + 1));
+            if (name.empty()) {
+                continue;
+            }
+            if (idx >= static_cast<int>(houses_.size())) {
+                houses_.resize(static_cast<size_t>(idx) + 1);
+            }
+            houses_[static_cast<size_t>(idx)] = name;
+        }
+        break;
+    }
+
+    // [Waypoints]：值是 X*1000+Y 的打包坐标（键是编号）
+    for (const auto& kv : raw_sections_) {
+        if (_stricmp(kv.first.c_str(), "Waypoints") != 0) {
+            continue;
+        }
+        for (const std::string& line : Split_Lines(kv.second)) {
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            const int packed = std::atoi(line.substr(eq + 1).c_str());
+            const int x = packed / 1000;
+            const int y = packed % 1000;
+            MapWaypoint wp;
+            wp.index = std::atoi(line.substr(0, eq).c_str());
+            wp.cx = (y - 1 - (x - W)) / 2;
+            wp.cy = (x + y - 1 - W) / 2;
+            waypoints_.push_back(wp);
+        }
+        break;
+    }
+
+    // 四个对象段。字段位置见 MapObject 的注释（实测 14 字段 / Structures 17 字段）。
+    static const struct { const char* section; MapObjectKind kind; } kSections[] = {
+        {"Terrain",    MapObjectKind::Terrain},
+        {"Units",      MapObjectKind::Unit},
+        {"Infantry",   MapObjectKind::Infantry},
+        {"Structures", MapObjectKind::Building},
+        {"Aircraft",   MapObjectKind::Aircraft},
+    };
+
+    for (const auto& def : kSections) {
+        // 同名段只认第一个（Split_Sections 不合并，实测地图里也不重复）
+        const std::string* body = nullptr;
+        for (const auto& kv : raw_sections_) {
+            if (_stricmp(kv.first.c_str(), def.section) == 0) {
+                body = &kv.second;
+                break;
+            }
+        }
+        if (body == nullptr) {
+            continue;
+        }
+        for (const std::string& line : Split_Lines(*body)) {
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            MapObject o;
+            o.kind = def.kind;
+            int x = 0, y = 0;
+            if (def.kind == MapObjectKind::Terrain) {
+                // 键就是打包坐标，值只有名字
+                const int packed = std::atoi(line.substr(0, eq).c_str());
+                x = packed / 1000;
+                y = packed % 1000;
+                o.type = Trim(line.substr(eq + 1));
+                o.owner = "Neutral";
+                o.hp = 256;
+            } else {
+                const std::string v = line.substr(eq + 1);
+                o.owner = Trim(Field(v, 0));
+                o.type = Trim(Field(v, 1));
+                o.hp = std::atoi(Field(v, 2).c_str());
+                x = std::atoi(Field(v, 3).c_str());
+                y = std::atoi(Field(v, 4).c_str());
+                if (def.kind == MapObjectKind::Infantry) {
+                    o.subcell = std::atoi(Field(v, 5).c_str());
+                    o.mission = Trim(Field(v, 6));
+                    o.facing = std::atoi(Field(v, 7).c_str());
+                    o.group = std::atoi(Field(v, 10).c_str());
+                } else {
+                    o.facing = std::atoi(Field(v, 5).c_str());
+                    o.mission = Trim(Field(v, 6));
+                    o.group = std::atoi(Field(v, 9).c_str());
+                }
+            }
+            o.cx = (y - 1 - (x - W)) / 2;
+            o.cy = (x + y - 1 - W) / 2;
+            if (o.cx < 0 || o.cx >= W || o.cy < 0 || o.cy >= H) {
+                ++objects_dropped_;    // 地图自带的越界摆件，丢掉（官方图里也有）
+                continue;
+            }
+            objects_.push_back(std::move(o));
+        }
+    }
 }
 
 std::string MapFile::Raw_Section(const char* name) const {

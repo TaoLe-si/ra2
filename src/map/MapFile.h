@@ -13,9 +13,24 @@
 //   X/Y 取值范围都是 1..(W+H-1)，但**只有 X+Y 为奇数的才是真单元**：
 //     ARENA.map 80x80 -> 记录 12720 条，其中 X+Y 奇数恰好 6400 = 80*80 ✓
 //   真单元 (X,Y) 与逻辑格 (cx,cy) 的换算（实测第一格是 (80,1) -> (0,0)）：
-//     X = W + cx - cy
+//     X = W + cy - cx
 //     Y = cx + cy + 1
-//   反解：cx = (X + Y - 1 - W) / 2，cy = (Y - 1 - (X - W)) / 2
+//   反解：cx = (Y - 1 - (X - W)) / 2，cy = (X + Y - 1 - W) / 2
+//
+// 【哪个是 cx 哪个是 cy —— 别再翻案】IsoMapPack5 自己分不出来：
+// 两种指派都给出 [0,W)x[0,H) 内的合法格，只是整张图左右镜像。
+// 真正的判据是**对象段**（[Units]/[Structures]/[Terrain]）用的是同一个 (X,Y) 帧：
+//   * 按 cx=(X+Y-1-W)/2 算：53 张官方地图有 30 张出现对象越界，共 2141 个，
+//     且只有 82.6% 落在 LocalSize 可玩矩形内。
+//   * 按 cx=(Y-1-(X-W))/2 算：只有 3 张地图共 24 个越界，
+//     落在可玩矩形内的比例 93.4%。
+// 差了整整两个数量级，所以取后者。
+// 另一个独立印证：Arena 一个路口的 4 个红绿灯 (81,47)(81,50)(85,50)(85,47)
+// 在本帧下算出 (22,23)(24,25)(22,27)(20,25)，是以 (22,25) 为中心的**正菱形**；
+// 反过来算会得到不对称的四点。
+//
+// 【取整用下取整】对象里 X+Y 的奇偶各占一半（只有奇数才是整格，
+// 偶数是半格偏移）。下取整才对：见上面红绿灯那组，四舍五入会把菱形压歪。
 //
 // 【屏幕落点】等距菱形 60x30，相邻格错半格：
 //   sx = 30 * (cx - cy)
@@ -31,6 +46,42 @@
 #include <vector>
 
 namespace ra2 {
+
+/// 地图里的一个"摆件"：车辆 / 步兵 / 建筑 / 飞机 / 地形装饰。
+///
+/// 字段是**照抄真实地图**来的，不是照抄文档（tools/mapobjects.py 拿的事实）：
+///   [Units]      Owner,Type,HP,X,Y,Facing,Mission,Tag,Veterancy,Group,OnBridge,Follows,?,?
+///   [Infantry]   Owner,Type,HP,X,Y,SubCell,Mission,Facing,Tag,Veterancy,Group,OnBridge,?,?
+///   [Structures] Owner,Type,HP,X,Y,Rotation,Tag,?,?,?,?,?,?,?,?,?,?
+///   [Aircraft]   同 [Units]
+///   [Terrain]    键就是坐标（X*1000+Y），值只有一个名字
+/// 四个段**都是 14 个字段**（逗号 13 个），只有 Structures 是 17 个（逗号 16 个）。
+/// 玩家自己的建筑在 [Structures]，中立的树/灯在 [Terrain]。
+enum class MapObjectKind {
+    Terrain,     ///< [Terrain]：树、路灯、交通灯这类不可交互装饰
+    Unit,        ///< [Units]：车辆
+    Infantry,    ///< [Infantry]：步兵（多一个 SubCell）
+    Building,    ///< [Structures]：建筑
+    Aircraft,    ///< [Aircraft]：飞机
+};
+
+struct MapObject {
+    MapObjectKind kind = MapObjectKind::Terrain;
+    std::string owner;    ///< [Houses] 里的阵营名，如 Russians / Neutral
+    std::string type;     ///< rules.ini 里的对象名，如 MTNK / CABUNK01
+    int hp = 256;         ///< 出场血量，256 = 满血
+    int cx = 0, cy = 0;   ///< 逻辑格（已换算过，不是文件里的 X,Y）
+    int facing = 0;       ///< 朝向 0..255，256 分度
+    int subcell = 0;      ///< 步兵在格内的子位（0..4），其它恒 0
+    std::string mission;  ///< Sleep / Sticky / Guard / Area Guard ...
+    int group = -1;       ///< 编队号，-1 = 无
+};
+
+/// 路径点。`0..7` 是 8 个出生点，其余是触发器和脚本用的。
+struct MapWaypoint {
+    int index = 0;
+    int cx = 0, cy = 0;
+};
 
 /// 一格地形。
 struct IsoCell {
@@ -77,6 +128,17 @@ public:
     const std::vector<uint8_t>& Overlay() const noexcept { return overlay_; }
     const std::vector<uint8_t>& Overlay_Data() const noexcept { return overlay_data_; }
 
+    /// 地图里摆好的对象（车辆/步兵/建筑/飞机/装饰）。Load 时一并解析好。
+    const std::vector<MapObject>& Objects() const noexcept { return objects_; }
+    /// 因为算出界而被丢掉的对象条数。**坐标帧对不对就看这个** ——
+    /// 正确帧下全库 53 张官方地图只有 3 张有零星几个（24 个 / 23366 个），
+    /// 帧反了会变成 30 张共 2141 个。
+    int Objects_Dropped() const noexcept { return objects_dropped_; }
+    /// 路径点，按 [Waypoints] 里的编号升序。
+    const std::vector<MapWaypoint>& Waypoints() const noexcept { return waypoints_; }
+    /// [Houses] 的编号 -> 阵营名。编号就是对象段里 Owner 出现之前那个东西的索引。
+    const std::vector<std::string>& Houses() const noexcept { return houses_; }
+
     /// 原始文本段（[Terrain] / [Units] / [Infantry] / [Structures] 等）。
     /// 目前只原样留着，等对象系统接进来再解析。
     std::string Raw_Section(const char* name) const;
@@ -91,12 +153,18 @@ public:
 
 private:
     bool Decode_Iso_Pack(const std::string& b64, std::string* err);
+    /// 解析 [Terrain]/[Units]/[Infantry]/[Structures]/[Aircraft]/[Waypoints]/[Houses]。
+    void Parse_Objects();
 
     std::string name_;
     std::string theater_;
     int rect_[4] = {0, 0, 0, 0};
     int local_[4] = {0, 0, 0, 0};
     std::vector<IsoCell> cells_;
+    std::vector<MapObject> objects_;
+    int objects_dropped_ = 0;
+    std::vector<MapWaypoint> waypoints_;
+    std::vector<std::string> houses_;
     int max_tile_ = -1;
     std::vector<uint8_t> overlay_;
     std::vector<uint8_t> overlay_data_;
