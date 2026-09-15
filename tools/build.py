@@ -30,6 +30,7 @@ SOURCES = [
     "src/engine/GameLoop.cpp",
     "src/threading/TaskSystem.cpp",
     "src/io/FileSystem.cpp",
+    "src/io/MixCrypto.cpp",
     "src/core/Subsystems.cpp",
 ]
 

@@ -9,6 +9,8 @@
 
 #include "io/FileSystem.h"
 
+#include "io/MixCrypto.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -24,44 +26,8 @@
 #endif
 
 namespace ra2 {
-namespace {
-
-// 大端读取助手
-uint16_t ReadBE16(const uint8_t* p) {
-    return static_cast<uint16_t>((p[0] << 8) | p[1]);
-}
-uint32_t ReadBE32(const uint8_t* p) {
-    return (static_cast<uint32_t>(p[0]) << 24) |
-           (static_cast<uint32_t>(p[1]) << 16) |
-           (static_cast<uint32_t>(p[2]) << 8) |
-           static_cast<uint32_t>(p[3]);
-}
-
-// ---- Westwood CRC-32 ----
-// 多项式 0x04C11DB7（非反射），初值 0，输入字符转大写。
-// 这是 MIX 里把文件名映射成 32 位 ID 的算法，公开资料里有记载。
-uint32_t CrcTable[256];
-bool CrcTableReady = false;
-
-void Init_Crc_Table() {
-    if (CrcTableReady) {
-        return;
-    }
-    for (int i = 0; i < 256; ++i) {
-        uint32_t c = static_cast<uint32_t>(i) << 24;
-        for (int j = 0; j < 8; ++j) {
-            if (c & 0x80000000u) {
-                c = (c << 1) ^ 0x04C11DB7u;
-            } else {
-                c <<= 1;
-            }
-        }
-        CrcTable[i] = c;
-    }
-    CrcTableReady = true;
-}
-
-}  // namespace
+// 注：这里原先有一份"非反射 CRC32 / 多项式 0x04C11DB7"的实现，是照抄资料抄错的。
+// 实测证明 MIX 用的是反射 CRC32 + 末组填充（见 MixCrypto.cpp），旧实现已删除。
 
 // ---------------------------------------------------------------------------
 // RawFileClass
@@ -214,16 +180,93 @@ std::string MixFileClass::Describe_Flags(uint32_t flags) {
 }
 
 uint32_t MixFileClass::CRC_Of(const char* name) {
-    Init_Crc_Table();
-    uint32_t crc = 0;
-    for (const char* p = name; *p; ++p) {
-        unsigned char c = static_cast<unsigned char>(*p);
-        if (c >= 'a' && c <= 'z') {
-            c = static_cast<unsigned char>(c - 'a' + 'A');  // 转大写
-        }
-        crc = (crc << 8) ^ CrcTable[((crc >> 24) ^ c) & 0xFFu];
+    // 旧实现用的是"非反射 CRC32、多项式 0x04C11DB7"——那份资料是错的。
+    // 实际是反射 CRC32 + 末组填充，见 MixCrypto.cpp 里的说明与实测依据。
+    return Westwood_CRC(name);
+}
+
+// 加密 MIX 的头部与索引布局（详见 MixCrypto.h）
+namespace {
+constexpr uint64_t kMixKeySource = 80;   // 头部里 RSA 加密的密钥源长度
+constexpr uint64_t kMixBody = 4 + kMixKeySource;   // 84：索引起点
+}  // namespace
+
+bool MixFileClass::Parse_Header() {
+    // 先读 flags + 8 字节密文索引头（够解出文件数）。
+    uint8_t head[kMixBody + 8];
+    if (!Read_At(0, head, sizeof(head))) {
+        return false;
     }
-    return crc;
+    flags_ = static_cast<uint32_t>(head[0]) | (static_cast<uint32_t>(head[1]) << 8) |
+             (static_cast<uint32_t>(head[2]) << 16) | (static_cast<uint32_t>(head[3]) << 24);
+
+    std::vector<uint8_t> key;
+    if (flags_ & kEncrypted) {
+        key = Derive_Mix_Key(head);
+        if (key.empty()) {
+            return false;   // 密钥源解不开：不是真的加密 MIX
+        }
+    } else {
+        // 未加密（含"只有校验和"）的样本目前没有，先不支持，别猜。
+        return false;
+    }
+
+    Blowfish bf(key.data(), key.size());
+    uint8_t plain[8];
+    bf.Decrypt(head + kMixBody, plain, 8);
+    const uint32_t count = static_cast<uint32_t>(plain[0]) | (static_cast<uint32_t>(plain[1]) << 8);
+    data_size_ = static_cast<uint32_t>(plain[2]) | (static_cast<uint32_t>(plain[3]) << 8) |
+                 (static_cast<uint32_t>(plain[4]) << 16) | (static_cast<uint32_t>(plain[5]) << 24);
+    if (count == 0 || count > 200000u) {
+        return false;       // 解出来是噪声
+    }
+
+    const uint64_t need = 6 + static_cast<uint64_t>(count) * 12;
+    const uint64_t enc_len = (need + 7) / 8 * 8;
+    std::vector<uint8_t> raw(static_cast<size_t>(enc_len));
+    if (!Read_At(kMixBody, raw.data(), static_cast<size_t>(enc_len))) {
+        return false;
+    }
+    bf.Decrypt_In_Place(raw.data(), raw.size());
+
+    data_start_ = kMixBody + enc_len;
+    entries_.clear();
+    entries_.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint8_t* e = raw.data() + 6 + i * 12;
+        MixEntry m;
+        m.id = static_cast<uint32_t>(e[0]) | (static_cast<uint32_t>(e[1]) << 8) |
+               (static_cast<uint32_t>(e[2]) << 16) | (static_cast<uint32_t>(e[3]) << 24);
+        m.offset = static_cast<uint32_t>(e[4]) | (static_cast<uint32_t>(e[5]) << 8) |
+                   (static_cast<uint32_t>(e[6]) << 16) | (static_cast<uint32_t>(e[7]) << 24);
+        m.size = static_cast<uint32_t>(e[8]) | (static_cast<uint32_t>(e[9]) << 8) |
+                 (static_cast<uint32_t>(e[10]) << 16) | (static_cast<uint32_t>(e[11]) << 24);
+        entries_.push_back(m);
+    }
+    return !entries_.empty();
+}
+
+bool MixFileClass::Read_At(uint64_t offset, void* dst, size_t n) const {
+    if (n == 0) {
+        return true;
+    }
+    if (parent_ != nullptr) {
+        // 嵌套：把本归档的坐标换算回父归档的数据区坐标。
+        return parent_->Read_At(parent_->data_start_ + parent_off_ + offset, dst, n);
+    }
+    if (!file_.Is_Open()) {
+        // 内存镜像模式
+        if (offset + n > mem_.size()) {
+            return false;
+        }
+        std::memcpy(dst, mem_.data() + offset, n);
+        return true;
+    }
+    RawFileClass* f = const_cast<RawFileClass*>(&file_);
+    if (f->Seek(static_cast<int>(offset), SEEK_SET) != 0) {
+        return false;
+    }
+    return f->Read(dst, static_cast<int>(n)) == static_cast<int>(n);
 }
 
 bool MixFileClass::Open(const char* path) {
@@ -232,65 +275,46 @@ bool MixFileClass::Open(const char* path) {
         return false;
     }
     path_ = path;
-
-    uint8_t hdr[12];
-    if (file_.Read(hdr, sizeof(hdr)) != static_cast<int>(sizeof(hdr))) {
+    file_size_ = static_cast<uint64_t>(file_.Size());
+    if (!Parse_Header()) {
         Close();
         return false;
     }
+    return true;
+}
 
-    // 标志是小端 DWORD（实测 ra2md.mix / MULTIMD.MIX 均为 00 00 03/02 00）。
-    const uint32_t flags = static_cast<uint32_t>(hdr[0]) |
-                           (static_cast<uint32_t>(hdr[1]) << 8) |
-                           (static_cast<uint32_t>(hdr[2]) << 16) |
-                           (static_cast<uint32_t>(hdr[3]) << 24);
-    has_names_ = (flags != 0);
-    flags_ = flags;
-
-    if (flags & kEncrypted) {
-        // 头部与索引都是 Blowfish 密文，必须先解出会话密钥才能读。
-        Close();
+bool MixFileClass::Open_Nested(const MixFileClass& parent, const MixEntry& e) {
+    Close();
+    parent_ = &parent;
+    parent_off_ = e.offset;
+    file_size_ = e.size;
+    path_ = parent.path_ + " > #" + std::to_string(e.id);
+    if (!Parse_Header()) {
+        parent_ = nullptr;
+        parent_off_ = 0;
         return false;
     }
+    return true;
+}
 
-    uint32_t file_count = 0;
-    uint32_t body_size = 0;
-    uint64_t index_start = 4;
-
-    if (flags == kPlain) {
-        // 经典形态：[0]DWORD 0 | [4]WORD 文件数 | [6]DWORD 数据区长度（均大端）
-        file_count = ReadBE16(hdr + 4);
-        body_size = ReadBE32(hdr + 6);
-        index_start = 10;
-    } else {
-        // 只有校验和、未加密：头部多一段校验数据，长度待确认。
-        // 目前没有这种样本，先识别出来而不猜测。
-        Close();
+bool MixFileClass::Open_Memory(const uint8_t* data, size_t size) {
+    Close();
+    mem_.assign(data, data + size);
+    file_size_ = size;
+    path_ = "<memory>";
+    if (!Parse_Header()) {
+        mem_.clear();
         return false;
     }
+    return true;
+}
 
-    const uint64_t file_size = static_cast<uint64_t>(file_.Size());
-    data_start_ = index_start + static_cast<uint64_t>(file_count) * 12u;
-    if (data_start_ + body_size > file_size + 64) {
-        // 索引明显越界 —— 多半不是无文件名段的经典形态。
-        Close();
-        return false;
+std::unique_ptr<MixFileClass> MixFileClass::Open_Sub(const MixEntry& e) const {
+    auto sub = std::make_unique<MixFileClass>();
+    if (!sub->Open_Nested(*this, e)) {
+        return nullptr;
     }
-
-    entries_.clear();
-    entries_.reserve(file_count);
-    for (uint32_t i = 0; i < file_count; ++i) {
-        uint8_t e[12];
-        if (file_.Read(e, 12) != 12) {
-            break;
-        }
-        MixEntry m;
-        m.id = ReadBE32(e);
-        m.offset = ReadBE32(e + 4);
-        m.size = ReadBE32(e + 8);
-        entries_.push_back(m);
-    }
-    return !entries_.empty();
+    return sub;
 }
 
 void MixFileClass::Close() {
@@ -298,31 +322,60 @@ void MixFileClass::Close() {
     entries_.clear();
     path_.clear();
     data_start_ = 0;
+    file_size_ = 0;
+    data_size_ = 0;
+    flags_ = 0;
+    parent_ = nullptr;
+    parent_off_ = 0;
 }
 
 const MixEntry* MixFileClass::Find(const char* filename) const {
-    const uint32_t target = CRC_Of(filename);
+    return Find_By_ID(CRC_Of(filename));
+}
+
+const MixEntry* MixFileClass::Find_By_ID(uint32_t id) const {
     for (const auto& e : entries_) {
-        if (e.id == target) {
+        if (e.id == id) {
             return &e;
         }
     }
     return nullptr;
 }
 
+std::vector<uint8_t> MixFileClass::Read_Deep_By_ID(uint32_t id, int max_depth) const {
+    if (const MixEntry* e = Find_By_ID(id)) {
+        return Read_Entry(*e);
+    }
+    if (max_depth <= 0) {
+        return {};
+    }
+    // 逐个把条目当子 MIX 试开。判据就是"能不能解出索引"——打不开就是普通文件，
+    // 代价仅一次头部解密。ra2md.mix 有 25 个顶层条目，全部试一遍也就几十微秒。
+    for (const auto& e : entries_) {
+        auto sub = Open_Sub(e);
+        if (!sub) {
+            continue;
+        }
+        std::vector<uint8_t> data = sub->Read_Deep_By_ID(id, max_depth - 1);
+        if (!data.empty()) {
+            return data;
+        }
+    }
+    return {};
+}
+
+std::vector<uint8_t> MixFileClass::Read_Deep(const char* filename, int max_depth) const {
+    return Read_Deep_By_ID(CRC_Of(filename), max_depth);
+}
+
 std::vector<uint8_t> MixFileClass::Read_Entry(const MixEntry& e) const {
     std::vector<uint8_t> out;
-    if (!file_.Is_Open()) {
-        return out;
-    }
-    RawFileClass* f = const_cast<RawFileClass*>(&file_);
-    if (f->Seek(static_cast<int>(data_start_ + e.offset), SEEK_SET) != 0) {
+    if (e.size == 0) {
         return out;
     }
     out.resize(e.size);
-    const int got = f->Read(out.data(), static_cast<int>(e.size));
-    if (got != static_cast<int>(e.size)) {
-        out.resize(static_cast<size_t>(got < 0 ? 0 : got));
+    if (!Read_At(data_start_ + e.offset, out.data(), e.size)) {
+        out.clear();
     }
     return out;
 }
@@ -351,12 +404,14 @@ bool MixFileClass::Validate_Index(int* out_bad_count) const {
         }
         return false;
     }
-    const uint64_t limit = static_cast<uint64_t>(const_cast<RawFileClass&>(file_).Size());
+    // 判据：每个条目都必须落在数据区之内。data_size_ 是解密索引里读出来的
+    // 数据区长度，与文件大小对不上就说明头部/索引解析有错。
+    const uint64_t limit = data_size_ > 0 ? data_size_ : file_size_;
     int bad = 0;
     for (const auto& e : entries_) {
-        const uint64_t begin = data_start_ + e.offset;
+        const uint64_t begin = e.offset;
         const uint64_t end = begin + e.size;
-        if (begin < data_start_ || end > limit) {
+        if (begin > limit || end > limit) {
             ++bad;
         }
     }
@@ -388,6 +443,16 @@ std::vector<uint8_t> MixFileSystem::Read(const char* filename) const {
             if (!data.empty()) {
                 return data;
             }
+        }
+    }
+    return {};
+}
+
+std::vector<uint8_t> MixFileSystem::Read_Deep(const char* filename) const {
+    for (auto it = archives_.rbegin(); it != archives_.rend(); ++it) {
+        std::vector<uint8_t> data = (*it)->Read_Deep(filename);
+        if (!data.empty()) {
+            return data;
         }
     }
     return {};

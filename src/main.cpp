@@ -15,6 +15,7 @@
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "io/FileSystem.h"
+#include "io/MixCrypto.h"
 #include "map/Map.h"
 #include "threading/TaskSystem.h"
 
@@ -39,23 +40,83 @@ bool SameResult(const PathResult& a, const PathResult& b) {
 
 }  // namespace
 
-// 可选：传入真实 MIX 文件路径，就顺带验证一下 MIX 格式解析是否正确。
+// 传入真实 MIX 文件路径，验证加密 MIX 的解密链路是否完好。
 // 例：  ra2core.exe D:\westwood\RA2YR\ra2md.mix
-// 判据：条目数 > 0，且每个条目的 [offset, offset+size) 都落在数据区内。
-// 索引若不自洽，十有八九是大端/CRC/头部长度三处有地方理解错了。
+//
+// 这是整个工程最有价值的一条回归测试：它同时验证了
+//   RSA 密钥派生、Blowfish 解密、索引布局、Westwood CRC、嵌套 MIX
+// 五处实现。任何一处错了，(条目数, 数据区长度) 就对不上，或者 CRC 反查失败。
 static int Verify_Mix(const char* path) {
+    // CRC 算法的实测锚点：这两个名字的 CRC 是从真实 ra2md.mix 里撞出来的。
+    struct Anchor { const char* name; uint32_t crc; };
+    const Anchor anchors[] = {
+        {"LOCALMD.MIX", 0xFBE0D09D},
+        {"CACHEMD.MIX", 0x68EEC99A},
+        {"AIMD.INI", 0x116F3F76},
+        {"MNBTTN.SHP", 0x1BB65278},
+    };
+    for (const Anchor& a : anchors) {
+        const uint32_t got = Westwood_CRC(a.name);
+        if (got != a.crc) {
+            std::printf("FAIL Westwood CRC：%s 算出 0x%08X，应为 0x%08X\n",
+                        a.name, got, a.crc);
+            return 1;
+        }
+    }
+    std::printf("OK   Westwood CRC 通过 %d 个实测锚点\n",
+                static_cast<int>(sizeof(anchors) / sizeof(anchors[0])));
+
     MixFileClass mix;
     if (!mix.Open(path)) {
-        std::printf("MIX  %s：头部标志 = %s —— 索引为密文，需先还原 Blowfish 会话密钥\n",
-                    path, MixFileClass::Describe_Flags(mix.Flags()).c_str());
-        return 0;
+        std::printf("FAIL MIX 打不开 %s（flags=%s）\n", path,
+                    MixFileClass::Describe_Flags(mix.Flags()).c_str());
+        return 1;
     }
+
     int bad = 0;
     const bool ok = mix.Validate_Index(&bad);
-    std::printf("MIX  %s：条目 %d，索引 CRC = 0x%08X，%s（越界条目 %d）\n",
-                path, mix.Count(), mix.Compute_CRC(),
+    std::printf("MIX  %s\n     flags=%s 条目=%d 数据区=%llu 起=%llu %s（越界 %d）\n",
+                path, MixFileClass::Describe_Flags(mix.Flags()).c_str(),
+                mix.Count(), (unsigned long long)mix.Data_Size(),
+                (unsigned long long)mix.Data_Start(),
                 ok ? "索引自洽" : "索引不自洽", bad);
-    return ok ? 0 : 1;
+    if (!ok) {
+        return 1;
+    }
+
+    // 按名字取条目（CRC 反查 + 索引都对了才会命中）
+    if (const MixEntry* e = mix.Find("LOCALMD.MIX")) {
+        std::printf("OK   按名找到 LOCALMD.MIX：off=%u size=%u\n", e->offset, e->size);
+        auto sub = mix.Open_Sub(*e);
+        if (sub) {
+            int sub_bad = 0;
+            sub->Validate_Index(&sub_bad);
+            std::printf("OK   嵌套 MIX 打开成功：条目=%d 数据区=%llu 越界=%d\n",
+                        sub->Count(), (unsigned long long)sub->Data_Size(), sub_bad);
+        } else {
+            std::printf("FAIL LOCALMD.MIX 应当是个嵌套 MIX\n");
+            return 1;
+        }
+    } else {
+        std::printf("FAIL 没找到 LOCALMD.MIX（CRC 或索引有误）\n");
+        return 1;
+    }
+
+    // 递归取出那个每个 MIX 都带的密钥文件，内容应当以 [PublicKey] 开头。
+    // 这个文件本身就是算法正确性的铁证：里面的公钥必须与二进制里的一致。
+    std::vector<uint8_t> keyfile = mix.Read_Deep_By_ID(0x763C81DD);
+    if (keyfile.size() != 151) {
+        std::printf("FAIL 密钥文件大小 %zu，应为 151\n", keyfile.size());
+        return 1;
+    }
+    const std::string head(reinterpret_cast<const char*>(keyfile.data()), 11);
+    if (head != "[PublicKey]") {
+        std::printf("FAIL 密钥文件开头是 %s，应为 [PublicKey]\n", head.c_str());
+        return 1;
+    }
+    std::printf("OK   递归取出密钥文件（151 字节），开头 = [PublicKey]\n");
+    std::printf("     %.*s\n", 58, reinterpret_cast<const char*>(keyfile.data()) + 11);
+    return 0;
 }
 
 int main(int argc, char** argv) {

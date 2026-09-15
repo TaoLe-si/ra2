@@ -112,13 +112,21 @@ private:
 //                 id 是文件名经 CRC 计算出的 32 位标识
 //   数据区紧跟索引之后
 //
-// 带文件名段的变体（XCC 格式）在头部存了一个 Blowfish 加密的密钥块，
-// 解密后才有文件名表 —— 本实现的 TODO 之一。
+// 【已实测的形态】（2026-09-15，见 tools/mixdump.py）
+//   flags=0x00020000 / 0x00030000 的加密 MIX：
+//     [0x00] DWORD flags（小端，明文）
+//     [0x04] 80 字节 RSA 加密的密钥源
+//     [0x54] Blowfish 加密的索引：u16 文件数 + u32 数据区长度 + 文件数×12 条目
+//           索引尾部补零到 8 字节对齐
+//     数据区紧跟其后；若带 kChecksum，文件末尾另有 20 字节 SHA1
+//   解密流程在 src/io/MixCrypto.cpp（Blowfish + 320 位 RSA + Westwood CRC）。
 //
-// 注意：MIX 里的字段名全部是大端，与 x86 相反，读写时都要换序。
+// 注意：flags 是小端，但索引里的条目字段（id/offset/size）是**小端**，
+// 而"文件数/数据区长度"在解密后按 u16/u32 小端读 —— 与旧的"全大端"注释相反，
+// 那是照抄资料抄错的，实测已推翻。
 
 struct MixEntry {
-    uint32_t id = 0;    ///< 文件名 CRC
+    uint32_t id = 0;    ///< 文件名 CRC（Westwood_CRC）
     uint32_t offset = 0;
     uint32_t size = 0;
 };
@@ -132,10 +140,9 @@ struct MixEntry {
 ///   MULTIMD.MIX    0x00020000  -> kEncrypted
 /// 由此确定位含义：0x00010000 = 带校验和，0x00020000 = 加密。
 ///
-/// 带 kEncrypted 的 MIX，其头部（文件数、数据区长度）与整个索引
-/// 都是 Blowfish 加密的；实测在 MULTIMD.MIX 上枚举所有候选头部偏移，
-/// 都找不到能自洽的 (文件数, 数据区长度) 组合 —— 印证了"索引是密文"。
-/// 解密需要先用 RSA 解出 Blowfish 会话密钥，属于尚未还原的部分。
+/// 带 kEncrypted 的 MIX，其头部（文件数、数据区长度）与整个索引都是
+/// Blowfish 密文，会话密钥要先用 RSA 从头部 80 字节里解出来 ——
+/// 这一步已经还原完成（src/io/MixCrypto.cpp）。
 enum MixFlags : uint32_t {
     kPlain = 0x00000000,
     kChecksum = 0x00010000,
@@ -143,20 +150,46 @@ enum MixFlags : uint32_t {
 };
 
 /// 一个 MIX 归档。RTTI 确认：MixFileClass。
+///
+/// 支持嵌套：ra2md.mix 里装的子归档（LOCALMD.MIX、CACHEMD.MIX …）本身
+/// 也是加密 MIX。用 Open_Nested() 打开时只把索引读进内存，真正取数据时
+/// 把偏移换算回父归档，避免为了一层索引就吞进几十 MB。
 class MixFileClass {
 public:
-    /// 打开并读入索引。
+    /// 打开磁盘上的 MIX 并读入索引。
     bool Open(const char* path);
+
+    /// 把已打开 MIX 里的某个条目当成嵌套 MIX 打开。不是 MIX 则返回 false。
+    bool Open_Nested(const MixFileClass& parent, const MixEntry& e);
+
+    /// 直接从内存块打开（一般用于测试）。
+    bool Open_Memory(const uint8_t* data, size_t size);
+
     void Close();
 
     const std::string& Path() const noexcept { return path_; }
     int Count() const noexcept { return static_cast<int>(entries_.size()); }
+    bool Is_Nested() const noexcept { return parent_ != nullptr; }
+    uint64_t Data_Size() const noexcept { return data_size_; }
+    uint64_t Data_Start() const noexcept { return data_start_; }
+    const std::vector<MixEntry>& Entries() const noexcept { return entries_; }
 
     /// 按文件名查找（内部转成 CRC 比较）。
     const MixEntry* Find(const char* filename) const;
 
+    /// 按 CRC 直接找 —— 名字还没反查出来时也能拿内容。
+    const MixEntry* Find_By_ID(uint32_t id) const;
+
     /// 把某个条目读进内存。失败返回空。
     std::vector<uint8_t> Read_Entry(const MixEntry& e) const;
+
+    /// 把条目当嵌套 MIX 打开；不是就返回 nullptr。
+    std::unique_ptr<MixFileClass> Open_Sub(const MixEntry& e) const;
+
+    /// 递归进子 MIX 取文件内容（子归档是临时对象，所以直接回数据而不是指针）。
+    /// 找不到返回空。max_depth 限制递归层数。
+    std::vector<uint8_t> Read_Deep(const char* filename, int max_depth = 4) const;
+    std::vector<uint8_t> Read_Deep_By_ID(uint32_t id, int max_depth = 4) const;
 
     /// 校验：把所有条目 ID 累积成一个 CRC，用于联机一致性检查。
     /// 原引擎有大量 "*** CRCs" 日志，这里沿用同样的思路。
@@ -174,13 +207,24 @@ public:
     /// 头部标志的人类可读说明，用于诊断"为什么这个 MIX 读不了"。
     static std::string Describe_Flags(uint32_t flags);
 
+    /// 从本归档的坐标空间读（0 = 本 MIX 开头）。嵌套时换算回父归档。
+    bool Read_At(uint64_t offset, void* dst, size_t n) const;
+
 private:
+    /// 打开的核心：给定一段"至少含头部"的字节，解出索引。
+    bool Parse_Header();
+
     std::string path_;
     std::vector<MixEntry> entries_;
     uint64_t data_start_ = 0;
-    bool has_names_ = false;
+    uint64_t file_size_ = 0;
+    uint64_t data_size_ = 0;
     uint32_t flags_ = 0;
 
+    const MixFileClass* parent_ = nullptr;  ///< 嵌套时的父归档
+    uint64_t parent_off_ = 0;               ///< 本归档在父归档数据区里的偏移
+
+    std::vector<uint8_t> mem_;              ///< Open_Memory() 用的内存镜像
     mutable RawFileClass file_;
 };
 
@@ -192,8 +236,11 @@ public:
     bool Mount(const char* mix_path);
     void Unmount_All();
 
-    /// 按名字取文件内容，找不到返回空。
+    /// 按名字取文件内容，找不到返回空。只在已挂载的顶层 MIX 里找。
     std::vector<uint8_t> Read(const char* filename) const;
+
+    /// 递归进子 MIX 找。
+    std::vector<uint8_t> Read_Deep(const char* filename) const;
 
     int Archive_Count() const noexcept { return static_cast<int>(archives_.size()); }
 
