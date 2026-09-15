@@ -21,6 +21,7 @@
 #include "data/Ini.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
+#include "gfx/HvaFile.h"
 #include "gfx/Palette.h"
 #include "gfx/PcxFile.h"
 #include "gfx/TmpFile.h"
@@ -359,6 +360,97 @@ static int Hash_Tmp(const char* path, uint32_t arch_id, uint32_t pal_id, bool wi
     return 0;
 }
 
+// FNV-1a，逐字节。C++ 与 Python 两边必须喂完全相同顺序的字节才能对得上账。
+static void Fnv_Bytes(uint32_t* h, const uint8_t* p, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        *h = (*h ^ p[i]) * 16777619u;
+    }
+}
+
+// ---- HVA ----
+//
+// HVA 没有魔数（游戏是按 `名字 + ".HVA"` 拼名查的），所以这里不能像 PCX 那样
+// 先按首字节筛 —— 只能对每个叶子条目硬试一次 Load()，靠长度算术判定。
+// 判据见 HvaFile.cpp：帧数/肢数合理 + 24+16L+48FL == size + 肢体名可打印。
+
+static int Hash_Hva(const char* path, int max_depth = 4) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    std::printf("# mix=%s\n", path);
+
+    int seq = 0, ok = 0;
+    std::function<void(const MixFileClass&, int)> walk = [&](const MixFileClass& m,
+                                                             int depth) {
+        for (const MixEntry& e : m.Entries()) {
+            if (depth < max_depth) {
+                auto sub = m.Open_Sub(e);
+                if (sub) {
+                    walk(*sub, depth + 1);
+                    continue;
+                }
+            }
+            const std::vector<uint8_t> d = m.Read_Entry(e);
+            HvaFile h;
+            if (!h.Load(d.data(), d.size())) {
+                continue;
+            }
+            uint32_t hv = 2166136261u;
+            const uint32_t hdr[2] = {static_cast<uint32_t>(h.Frame_Count()),
+                                     static_cast<uint32_t>(h.Limb_Count())};
+            Fnv_Bytes(&hv, reinterpret_cast<const uint8_t*>(hdr), sizeof(hdr));
+            for (int i = 0; i < h.Limb_Count(); ++i) {
+                const std::string n = h.Limb_Name(i);
+                Fnv_Bytes(&hv, reinterpret_cast<const uint8_t*>(n.data()), n.size());
+            }
+            for (int f = 0; f < h.Frame_Count(); ++f) {
+                for (int l = 0; l < h.Limb_Count(); ++l) {
+                    const HvaMatrix mm = h.Matrix(f, l);
+                    Fnv_Bytes(&hv, reinterpret_cast<const uint8_t*>(mm.m), sizeof(mm.m));
+                }
+            }
+            std::printf("%d 0x%08X %dx%d %s 0x%08X\n", seq++, e.id, h.Frame_Count(),
+                        h.Limb_Count(), h.Limb_Name(0).c_str(), hv);
+            ++ok;
+        }
+    };
+    walk(mix, 0);
+    std::printf("# 共 %d 个 HVA\n", ok);
+    return 0;
+}
+
+static int Verify_Hva(const char* path, uint32_t id) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    const std::vector<uint8_t> d = mix.Read_Deep_By_ID(id);
+    if (d.empty()) {
+        std::printf("FAIL 递归找不到 0x%08X\n", id);
+        return 1;
+    }
+    HvaFile h;
+    if (!h.Load(d.data(), d.size())) {
+        std::printf("FAIL 0x%08X 不是自洽的 HVA（%zu 字节）\n", id, d.size());
+        return 1;
+    }
+    std::printf("OK   0x%08X 源路径=\"%s\"  %d 帧 × %d 肢体\n", id,
+                h.Source_Path().c_str(), h.Frame_Count(), h.Limb_Count());
+    for (int i = 0; i < h.Limb_Count() && i < 16; ++i) {
+        std::printf("     肢体[%2d] = %s\n", i, h.Limb_Name(i).c_str());
+    }
+    const HvaMatrix m0 = h.Matrix(0, 0);
+    std::printf("     第 0 帧矩阵 平移 = (%.4f, %.4f, %.4f)\n", m0.Tx(), m0.Ty(), m0.Tz());
+    for (int r = 0; r < 3; ++r) {
+        std::printf("       [%6.3f %6.3f %6.3f | %8.3f]\n", m0.At(r, 0), m0.At(r, 1),
+                    m0.At(r, 2), m0.At(r, 3));
+    }
+    return 0;
+}
+
 // ---- PCX ----
 //
 // 递归剥开所有嵌套 MIX，把每个 PCX 解成 RGBA 后打哈希。
@@ -366,12 +458,6 @@ static int Hash_Tmp(const char* path, uint32_t arch_id, uint32_t pal_id, bool wi
 //
 // 为什么用哈希而不是逐像素对账：ra2.mix 里 161 个 PCX 合计 500 多万像素，
 // 逐像素输出体量太大；哈希能精确到"哪一张错了"，又不用搬海量数据。
-
-static void Fnv_Bytes(uint32_t* h, const uint8_t* p, size_t n) {
-    for (size_t i = 0; i < n; ++i) {
-        *h = (*h ^ p[i]) * 16777619u;
-    }
-}
 
 static int Hash_Pcx(const char* path, int max_depth = 4) {
     MixFileClass mix;
@@ -663,6 +749,22 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Dump_Ini(argv[2]);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--hvahash") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --hvahash <顶层mix> [最大嵌套深度]\n");
+            return 1;
+        }
+        const int d = (argc > 3) ? std::atoi(argv[3]) : 4;
+        return Hash_Hva(argv[2], d);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--hva") == 0) {
+        if (argc < 4) {
+            std::printf("用法：ra2core --hva <顶层mix> <0xHVA的CRC>\n");
+            return 1;
+        }
+        return Verify_Hva(argv[2],
+                          static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
     }
     if (argc > 1 && std::strcmp(argv[1], "--pcxhash") == 0) {
         if (argc < 3) {

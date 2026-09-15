@@ -36,6 +36,7 @@ CORE_SOURCES = [
     "src/gfx/ShpFile.cpp",
     "src/gfx/TmpFile.cpp",
     "src/gfx/PcxFile.cpp",
+    "src/gfx/HvaFile.cpp",
     "src/data/Ini.cpp",
     "src/core/Subsystems.cpp",
 ]
