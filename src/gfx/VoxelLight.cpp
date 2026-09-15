@@ -67,6 +67,26 @@ void VoxelShadeTable::Build(int normals_type, const VoxelLight& light,
     }
 }
 
+void Composite_Shadow(uint8_t* rgba, int n, const uint8_t* indexed,
+                      const uint8_t* shadow, const VoxelShadow& sh) {
+    if (rgba == nullptr || shadow == nullptr || n <= 0 || sh.alpha <= 0.0f) {
+        return;
+    }
+    const float a = sh.alpha;
+    for (int i = 0; i < n; ++i) {
+        if (shadow[i] == 0) {
+            continue;
+        }
+        if (indexed != nullptr && indexed[i] != 0) {
+            continue;   // 本体盖住了，别画
+        }
+        uint8_t* p = rgba + static_cast<size_t>(i) * 4;
+        for (int c = 0; c < 3; ++c) {
+            p[c] = static_cast<uint8_t>(static_cast<float>(p[c]) * (1.0f - a));
+        }
+    }
+}
+
 void Shade_To_RGBA(const uint8_t* indexed, const uint8_t* shade, int n,
                    const uint8_t* pal768, const VoxelLight& light,
                    std::vector<uint8_t>* out_rgba) {

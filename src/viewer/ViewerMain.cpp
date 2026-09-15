@@ -105,6 +105,10 @@ struct App {
     float turret_yaw = 0.0f;       ///< 弧度，绕 Z（模型空间 X 向前、Y 横向、Z 向上）
     float barrel_pitch = 0.0f;     ///< 弧度，绕 Y（炮口抬起）
 
+    /// 地面投影阴影。方位复用 VoxelLight 的光向量（同一个太阳）。
+    VoxelShadow shadow;
+    std::vector<uint8_t> vxl_shadow;   ///< w×h 的 0/255 掩膜
+
     /// 阵营色（remap）。
     ///
     /// 素材里要显示成阵营色的像素统一用调色板 16..31 这 16 个"占位色"
@@ -572,9 +576,15 @@ void Rebuild_Vxl_Pose() {
 
     // 先按每体素 8 像素画；画布超过窗口就整体缩小重画一次。
     // 体素模型的世界尺寸差得极远（小坦克 ~30、四足机甲 ~400），固定倍数必然有一头看不全。
+    // 阴影和明暗用同一个光向量：同一个太阳，影子才不会和受光面对不上。
+    const float* shadow_light = g_app.shadow.on ? g_app.light.light : nullptr;
+    std::vector<uint8_t>* shadow_out =
+        g_app.shadow.on ? &g_app.vxl_shadow : nullptr;
+
     float sc = 8.0f;
     if (!g_app.vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, sc, pose,
-                                    att_p, att_n, light_p, &g_app.vxl_shade)) {
+                                    att_p, att_n, light_p, &g_app.vxl_shade,
+                                    shadow_light, g_app.shadow.ground_z, shadow_out)) {
         std::printf("[x] 体素光栅化失败（HVA 帧 %d）\n", g_app.hva_frame);
         return;
     }
@@ -588,7 +598,8 @@ void Rebuild_Vxl_Pose() {
             sc = 1.0f;
         }
         if (!g_app.vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, sc,
-                                        pose, att_p, att_n, light_p, &g_app.vxl_shade)) {
+                                        pose, att_p, att_n, light_p, &g_app.vxl_shade,
+                                        shadow_light, g_app.shadow.ground_z, shadow_out)) {
             std::printf("[x] 体素光栅化失败（缩放后）\n");
             return;
         }
@@ -612,6 +623,12 @@ void Rebuild_Vxl_Pose() {
         Shade_To_RGBA(g_app.vxl_idx.data(), g_app.vxl_shade.data(),
                       g_app.vxl_w * g_app.vxl_h, pal768, g_app.light,
                       &g_app.vxl_rgba);
+        if (g_app.shadow.on && g_app.vxl_shadow.size() ==
+                                   static_cast<size_t>(g_app.vxl_w) * g_app.vxl_h) {
+            Composite_Shadow(g_app.vxl_rgba.data(), g_app.vxl_w * g_app.vxl_h,
+                             g_app.vxl_idx.data(), g_app.vxl_shadow.data(),
+                             g_app.shadow);
+        }
         g_app.sprite = g_app.r.Upload_Sprite_RGBA(g_app.vxl_rgba.data(), g_app.vxl_w,
                                                   g_app.vxl_h);
     } else {
@@ -672,6 +689,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 std::printf("体素光影：%s（环境光 %.2f 漫反射 %.2f 分级 %d）\n",
                             g_app.light_on ? "开" : "关", g_app.light.ambient,
                             g_app.light.diffuse, g_app.light.levels);
+            } else if (wp == 'H') {
+                // 开/关地面投影阴影。
+                g_app.shadow.on = !g_app.shadow.on;
+                Rebuild_Vxl_Pose();
+                std::printf("地面阴影：%s（地面 z=%.1f 不透明度 %.2f）\n",
+                            g_app.shadow.on ? "开" : "关", g_app.shadow.ground_z,
+                            g_app.shadow.alpha);
+                InvalidateRect(hwnd, nullptr, FALSE);
             } else if (wp == 'R') {
                 // 循环阵营色。R 一下换一个，走完回到"不 remap"。
                 if (g_app.remap_table.Color_Count() <= 0) {
@@ -881,6 +906,29 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < kMaxArgs &&
                    args[i + 1][0]) {
             map_path = args[i + 1];
+        } else if (std::strcmp(args[i], "--light") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            // 光向量 "x,y,z"（指向光源）。明暗和阴影共用 —— 同一个太阳。
+            // 默认 normalize(1,1,2) 的来由见 gfx/VoxelLight.h。
+            float v[3] = {0, 0, 0};
+            int got = std::sscanf(args[i + 1], "%f,%f,%f", &v[0], &v[1], &v[2]);
+            if (got == 3) {
+                g_app.light.light[0] = v[0];
+                g_app.light.light[1] = v[1];
+                g_app.light.light[2] = v[2];
+                g_app.light.Normalize();
+            }
+        } else if (std::strcmp(args[i], "--shadow") == 0) {
+            // 开地面投影阴影。可以带不透明度：--shadow 0.5
+            g_app.shadow.on = true;
+            if (i + 1 < kMaxArgs && args[i + 1][0] && args[i + 1][0] != '-') {
+                g_app.shadow.alpha = static_cast<float>(std::atof(args[i + 1]));
+            }
+            if (g_app.shadow.alpha < 0.0f) g_app.shadow.alpha = 0.0f;
+            if (g_app.shadow.alpha > 1.0f) g_app.shadow.alpha = 1.0f;
+        } else if (std::strncmp(args[i], "--shadow", 8) == 0 && args[i][8]) {
+            g_app.shadow.on = true;
+            g_app.shadow.alpha = static_cast<float>(std::atof(args[i] + 8));
         } else if (std::strcmp(args[i], "--remap") == 0 && i + 1 < kMaxArgs &&
                    args[i + 1][0]) {
             // 阵营色：[Colors] 的下标，或颜色名（DarkRed / Gold …）。
@@ -1171,6 +1219,28 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             return 1;
         }
         Upload_Current_Frame();
+        // 光栅化结果的自检信息。无窗口时这是唯一的判据来源：
+        // 开阴影后画布必然变大（bbox 纳入了地面落点），阴影像素数 > 0。
+        if (g_app.vxl.Limb_Count() > 0) {
+            long opaque = 0;
+            for (uint8_t v : g_app.vxl_idx) {
+                if (v != 0) ++opaque;
+            }
+            std::printf("     体素画布 %dx%d 本体像素 %ld", g_app.vxl_w, g_app.vxl_h,
+                        opaque);
+            if (g_app.shadow.on && !g_app.vxl_shadow.empty()) {
+                long sh = 0;
+                long visible = 0;
+                for (size_t i = 0; i < g_app.vxl_shadow.size(); ++i) {
+                    if (g_app.vxl_shadow[i] == 0) continue;
+                    ++sh;
+                    if (g_app.vxl_idx[i] == 0) ++visible;   // 没被本体盖住的
+                }
+                std::printf("，阴影 %ld（露出 %ld，%.0f%% 被本体盖住）", sh, visible,
+                            sh ? 100.0 * (sh - visible) / sh : 0.0);
+            }
+            std::printf("\n");
+        }
         const float clear[4] = {0.05f, 0.05f, 0.08f, 1.0f};
         g_app.r.Request_Capture();
         g_app.r.Begin_Frame(clear);

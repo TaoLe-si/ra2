@@ -277,8 +277,10 @@ void Mat34_Mul(const float* a, const float* b, float* c) {
 
 bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
                                float scale, const float* pose, const VxlAttach* attach,
-                               int attach_count, const VoxelLight* light,
-                               std::vector<uint8_t>* shade_out) const {
+                                int attach_count, const VoxelLight* light,
+                                std::vector<uint8_t>* shade_out,
+                                const float* shadow_light, float ground_z,
+                                std::vector<uint8_t>* shadow_out) const {
     if (indexed == nullptr || out_w == nullptr || out_h == nullptr || scale <= 0.0f) {
         return false;
     }
@@ -287,6 +289,7 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
     }
     struct Pt {
         float sx, sy, depth;
+        float gx = 0.0f, gy = 0.0f;   ///< 地面投影落点（只有算阴影时才有效）
         uint8_t c;
         uint8_t shade;
     };
@@ -372,6 +375,19 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
                 p.depth = px + py + pz;
                 p.c = v.colour;
                 p.shade = shade.Level(v.normal);
+                if (shadow_light != nullptr) {
+                    // 沿 -L 投到地面：t = (pz - ground_z) / Lz。
+                    // Lz <= 0（光从下面来）时退化成垂直投影，免得除零或投到天上。
+                    const float lz = shadow_light[2];
+                    float qx = px, qy = py;
+                    if (lz > 1e-4f) {
+                        const float t = (pz - ground_z) / lz;
+                        qx = px - shadow_light[0] * t;
+                        qy = py - shadow_light[1] * t;
+                    }
+                    p.gx = (qx - qy) * k;
+                    p.gy = (qx + qy) * k * 0.5f - ground_z;
+                }
                 pts.push_back(p);
             }
         }
@@ -400,6 +416,13 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
         if (p.sx > x1) x1 = p.sx;
         if (p.sy < y0) y0 = p.sy;
         if (p.sy > y1) y1 = p.sy;
+        // 阴影落点在模型之外，不一起算进 bbox 就会被裁掉
+        if (shadow_light != nullptr) {
+            if (p.gx < x0) x0 = p.gx;
+            if (p.gx > x1) x1 = p.gx;
+            if (p.gy < y0) y0 = p.gy;
+            if (p.gy > y1) y1 = p.gy;
+        }
     }
     const int w = static_cast<int>((x1 - x0) * scale) + 2;
     const int h = static_cast<int>((y1 - y0) * scale) + 2;
@@ -412,6 +435,29 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
     indexed->assign(static_cast<size_t>(w) * h, 0);
     if (shade_out != nullptr) {
         shade_out->assign(static_cast<size_t>(w) * h, 0);
+    }
+
+    // 阴影掩膜：不排序（是 0/1 覆盖，谁先谁后无所谓），画在本体之前。
+    if (shadow_light != nullptr && shadow_out != nullptr) {
+        shadow_out->assign(static_cast<size_t>(w) * h, 0);
+        const int scell = (static_cast<int>(scale) < 1) ? 1 : static_cast<int>(scale);
+        for (const Pt& p : pts) {
+            const int cx = static_cast<int>((p.gx - x0) * scale);
+            const int cy = static_cast<int>((p.gy - y0) * scale);
+            for (int dy = 0; dy < scell; ++dy) {
+                const int yy = cy + dy;
+                if (yy < 0 || yy >= h) {
+                    continue;
+                }
+                for (int dx = 0; dx < scell; ++dx) {
+                    const int xx = cx + dx;
+                    if (xx < 0 || xx >= w) {
+                        continue;
+                    }
+                    (*shadow_out)[static_cast<size_t>(yy) * w + xx] = 255;
+                }
+            }
+        }
     }
     const int cell = static_cast<int>(scale);
     for (const Pt& p : pts) {

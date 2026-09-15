@@ -185,12 +185,27 @@ public:
     /// gamemd.exe（见 gfx/VoxelLight.h）。light 为空而 shade_out 非空时，
     /// 整张图填"最亮级"，等于不打光但结构对齐。
     /// 最终颜色由调用方算：`palette[colour] × Shade_Factor(light, level)`。
+    /// shadow_light / shadow_out：地面投影阴影。
+    ///
+    /// shadow_light 非空时，每个体素会额外沿 **-L** 方向投到 z = ground_z 的
+    /// 地面平面上，落点写进 shadow_out（w×h 的 0/255 掩膜，255 = 有阴影）。
+    /// 合成本体时"本体不透明处不画阴影"就行 —— 体素是画家算法从远到近画的，
+    /// 本体最后落格，自然盖住自己脚下的阴影。
+    ///
+    /// 投影：t = (pz - ground_z) / Lz，落点 = (px - Lx·t, py - Ly·t)。
+    /// Lz 必须 > 0（光得从上面来），否则退化成垂直投影。
+    ///
+    /// 【画布会变大】阴影落点在模型之外，所以 bbox 要把地面投影一起纳入，
+    /// 不然阴影会被裁掉一截（画布按本体的范围算是不够的）。
     bool Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
                           float scale = 8.0f, const float* pose = nullptr,
                           const VxlAttach* attach = nullptr,
                           int attach_count = 0,
                           const VoxelLight* light = nullptr,
-                          std::vector<uint8_t>* shade_out = nullptr) const;
+                          std::vector<uint8_t>* shade_out = nullptr,
+                          const float* shadow_light = nullptr,
+                          float ground_z = 0.0f,
+                          std::vector<uint8_t>* shadow_out = nullptr) const;
 
     void Reset();
 

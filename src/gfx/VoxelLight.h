@@ -92,6 +92,33 @@ inline float Shade_Factor(const VoxelLight& light, int level) {
                                             static_cast<float>(light.levels));
 }
 
+/// 地面投影阴影的参数。
+///
+/// 原版 RA2 的载具/建筑阴影是**把体素沿光线方向压到地面**，不是贴图。
+/// 方位直接复用光照那套光向量（同一个太阳），所以这里只额外给出
+/// 地面高度和不透明度。
+///
+/// 不透明度没有从 exe 里读出来（阴影混合那段还没逆到），默认 0.45 ——
+/// 判据是"阴影区域要能看出比地面暗，但下面地形的纹理还得透出来"。
+/// 后面逆出真值再改这一个数字。
+struct VoxelShadow {
+    bool on = false;
+    float ground_z = 0.0f;   ///< 地面高度（体素坐标），平地就是 0
+    float alpha = 0.45f;     ///< 0..1，1 = 全黑
+};
+
+/// 把阴影掩膜合进已经烘好的 RGBA。
+///
+/// 规则是"本体盖住的格子不画阴影"：体素是画家算法从远到近落的格，
+/// 本体压掉自己脚下的影子，剩下的才是看得见的。
+///
+/// 【判据为什么用 indexed 而不是 alpha】离屏画布的背景是**不透明**的
+/// （实测 1024×768 全部 786432 个像素 alpha 都是 255），按 alpha 挑会一个
+/// 都选不中。所以用本体索引图：indexed[i] == 0 才是"这里没有本体"。
+/// shadow 为 nullptr 或 n <= 0 时什么都不做。
+void Composite_Shadow(uint8_t* rgba, int n, const uint8_t* indexed,
+                      const uint8_t* shadow, const VoxelShadow& sh);
+
 /// 把"索引图 + 明暗图"烘成 RGBA8（每像素 4 字节）。
 ///
 /// 原引擎的做法是 `色 × 系数` 之后**回查调色板找最近色**（8 位色深下必须这么干）。
