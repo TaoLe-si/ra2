@@ -73,6 +73,9 @@ struct UnitModel {
     int strength = 0;        ///< Strength=（血量上限）
     int speed = 0;           ///< Speed=：0..10，越大越快
     int build_time = 1;      ///< BuildTime= 倍率（缺省 1）
+    /// 占地格数（建筑的 Width=/Height=）。锚点要用它把大建筑挪到足迹中心，
+    /// 不然 2x2、3x3 的楼全偏一格，整个城市看起来就是乱的。
+    int width = 1, height = 1;
     bool has_weapon = false; ///< Primary= 非空 —— 用来把建筑分成"结构/防御"
     bool wall = false;       ///< Wall=yes（围墙也算防御类）
     std::vector<std::string> owners;  ///< Owner=，决定哪个阵营能建

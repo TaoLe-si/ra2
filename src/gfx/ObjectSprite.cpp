@@ -393,7 +393,8 @@ const uint8_t* SpriteCache::Theater_Palette_Data() {
     return theater_pal_.data();
 }
 
-bool SpriteCache::Build_Shp(const char* image, int house_color, ObjectSprite* out) {
+bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_frames,
+                            int facing, int foot_w, int foot_h, ObjectSprite* out) {
     std::string file = std::string(image) + ".SHP";
     std::vector<uint8_t> data;
     for (MixFileClass* m : roots_) {
@@ -409,7 +410,17 @@ bool SpriteCache::Build_Shp(const char* image, int house_color, ObjectSprite* ou
     if (!shp.Load(data.data(), data.size()) || shp.Frame_Count() <= 0) {
         return false;
     }
-    const int frame = 0;
+    // 【帧不是随便挑的】SHP 有两类多帧：
+    //   * 步兵：帧 = 朝向（8 向），要按 facing 选 —— 不选就是"所有兵都朝一个方向"
+    //   * 建筑/装饰：帧 = 正常态/损毁态，按 facing 选会随机抽到损毁帧
+    // 所以由调用方（拿着 rules 里的类别）决定要不要按朝向选帧。
+    int frame = 0;
+    if (facing_frames && shp.Frame_Count() > 1) {
+        frame = (facing * shp.Frame_Count()) / 256;
+        if (frame >= shp.Frame_Count()) {
+            frame = shp.Frame_Count() - 1;
+        }
+    }
     const std::vector<uint8_t>& px = shp.Frame_Pixels(frame);
     const ShpFrameInfo& fi = shp.Frame_Info(frame);
     if (fi.w <= 0 || fi.h <= 0 || px.size() < static_cast<size_t>(fi.w) * fi.h) {
@@ -438,6 +449,14 @@ bool SpriteCache::Build_Shp(const char* image, int house_color, ObjectSprite* ou
     out->h = fi.h;
     out->off_x = -fi.w / 2;
     out->off_y = -fi.h / 2;
+    // 建筑的 (x,y) 是**左上格**：把锚点挪到足迹中心。
+    // +1 格 x 在屏幕上是 (+30,+15)，+1 格 y 是 (-30,+15)。
+    if (foot_w > 1 || foot_h > 1) {
+        const float cx = static_cast<float>(foot_w - 1) * 0.5f;
+        const float cy = static_cast<float>(foot_h - 1) * 0.5f;
+        out->off_x += static_cast<int>((cx - cy) * 30.0f);
+        out->off_y += static_cast<int>((cx + cy) * 15.0f);
+    }
     out->ok = true;
     return true;
 }
@@ -477,11 +496,15 @@ const ObjectSprite* SpriteCache::Get(const char* type, int facing,
         // 不是体素（步兵/建筑/装饰），或者体素没渲出来，退到 SHP
         const char* image = (um != nullptr && !um->image.empty()) ? um->image.c_str()
                                                                   : type;
-        ok = Build_Shp(image, house_color, sp.get());
+        // 步兵的 SHP 帧是朝向，要按 facing 选；建筑/装饰的帧是正常/损毁态，不能选。
+        const bool face_frames = (um != nullptr && um->category == 2);
+        ok = Build_Shp(image, house_color, face_frames, key.step * (256 / kFacingSteps),
+                       (um != nullptr) ? um->width : 1,
+                       (um != nullptr) ? um->height : 1, sp.get());
     }
     if (!ok) {
         // 同名 SHP 再试一次（有些单位的 Image= 和原名都不带 .SHP 后缀命中）
-        ok = Build_Shp(type, house_color, sp.get());
+        ok = Build_Shp(type, house_color, false, 0, 1, 1, sp.get());
     }
 
     ++built_;

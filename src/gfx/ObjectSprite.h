@@ -170,7 +170,12 @@ private:
 
     bool Build_Voxel_Gpu(const char* type, const UnitModel& um, float yaw,
                          int house_color, ObjectSprite* out);
-    bool Build_Shp(const char* image, int house_color, ObjectSprite* out);
+    /// facing_frames 为真时按朝向选帧（步兵的 SHP 帧就是 8 个朝向）；
+    /// 建筑/装饰为假（帧是"正常/损毁"，不是朝向，按朝向选会抽到损毁帧）。
+    /// foot_w/foot_h 是占地格数：地图里建筑的 (x,y) 是**左上格**，
+    /// 大建筑要把锚点挪到足迹中心，否则整座城都偏一格。
+    bool Build_Shp(const char* image, int house_color, bool facing_frames,
+                   int facing, int foot_w, int foot_h, ObjectSprite* out);
 
     /// 剧场单位调色板（768 字节，8 位，**还没做 remap**）。
     ///

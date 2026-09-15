@@ -277,6 +277,10 @@ const UnitModel* UnitModelDB::Resolve(const char* unit) {
     m.strength = rules_.Get_Int(k, "Strength", 0);
     m.speed = rules_.Get_Int(k, "Speed", 0);
     m.build_time = rules_.Get_Int(k, "BuildTime", 1);
+    m.width = rules_.Get_Int(k, "Width", 1);
+    m.height = rules_.Get_Int(k, "Height", 1);
+    if (m.width < 1) m.width = 1;
+    if (m.height < 1) m.height = 1;
     m.has_weapon = !Trim(rules_.Get_String(k, "Primary", "")).empty();
     m.wall = rules_.Get_Bool(k, "Wall", false);
     rules_.Get_String_List(k, "Owner", &m.owners);
