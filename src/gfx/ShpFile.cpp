@@ -20,36 +20,47 @@ inline uint32_t RdU32(const uint8_t* p) {
 std::vector<uint8_t> ShpFile::Decode_Rle_Zero(const uint8_t* src, size_t len,
                                               int w, int h) {
     // Westwood RLE-Zero（TS 变体）：
-    //   每行 u16 行长（含这 2 字节）；行内 0x00 后跟"重复几个透明像素"。
-    std::vector<uint8_t> out;
-    out.reserve(static_cast<size_t>(w) * h);
+    //   每行开头 u16 = 该行的输入字节数（**含这 2 字节**）；
+    //   行内遇到 0x00 则紧随的一字节是"重复多少个透明像素"，其余字节是调色板索引。
+    //
+    // 关键坑（实测 276211 行真实数据得出，见 tools/shpcrack.py）：
+    //   **行尾那个透明游程的计数常常比实际多 1**，83% 的行会溢出 1 个像素，
+    //   其余 17% 正好等于行宽；偏差既不会 >1，也不会 <0。
+    //   所以解码必须"逐行写、写满 w 个就丢掉余量"，绝不能像无行结构的流那样
+    //   一路 append —— 那会让后面每一行整体错位，整张图糊掉。
+    //   判据：逐行裁剪后 3964 个 flags=0x3 的帧 100% 精确产出 宽*高 像素。
+    std::vector<uint8_t> out(static_cast<size_t>(w) * h, 0);   // 索引 0 = 透明
     size_t p = 0;
     for (int line = 0; line < h && p + 2 <= len; ++line) {
         const size_t line_len = RdU16(src + p);
         p += 2;
-        const size_t end = (p + line_len - 2 < len) ? (p + line_len - 2) : len;
         if (line_len < 2) {
             continue;
         }
+        size_t end = p + line_len - 2;
+        if (end > len) {
+            end = len;
+        }
+        uint8_t* dst = out.data() + static_cast<size_t>(line) * static_cast<size_t>(w);
+        int x = 0;
         while (p < end) {
             const uint8_t v = src[p++];
             if (v == 0) {
                 if (p >= end) {
                     break;
                 }
-                const uint8_t count = src[p++];
-                out.insert(out.end(), count, 0);
+                int c = src[p++];
+                if (x + c > w) {
+                    c = w - x;      // 行尾溢出，截断到行宽
+                }
+                x += c;             // dst 已清零，透明像素不用写
             } else {
-                out.push_back(v);
+                if (x < w) {
+                    dst[x] = v;
+                }
+                ++x;
             }
         }
-    }
-    // 不足一帧补透明，调用方就不必处理半帧。
-    const size_t want = static_cast<size_t>(w) * h;
-    if (out.size() < want) {
-        out.resize(want, 0);
-    } else if (out.size() > want) {
-        out.resize(want);
     }
     return out;
 }

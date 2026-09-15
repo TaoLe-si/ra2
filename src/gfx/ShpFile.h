@@ -9,16 +9,21 @@
 //     +16 u32 Reserved（0）
 //     +20 u32 DataOffset
 //
-// 帧数据：
-//   flags bit1 置位 -> Westwood RLE-Zero：每行开头 u16 = 该行输入字节数（含这 2 字节），
-//                      行内遇到 0x00 则紧随的一字节是"重复多少个透明像素"。
-//   否则           -> 未压缩，宽*高 字节。
+// 帧数据（flags bit1 = UsesRle 决定走哪条）：
+//   UsesRle  -> Westwood RLE-Zero：每行开头 u16 = 该行输入字节数（含这 2 字节），
+//               行内遇到 0x00 则紧随的一字节是"重复多少个透明像素"。
+//               **行尾游程计数常比实际多 1，必须逐行裁剪到行宽**，见 .cpp 注释。
+//   否则     -> 未压缩，宽*高 字节。
 //
-// 已验证：AutoLoginQuery.shp（632x568, flags=0x2）精确解出 358976 像素，
-// 且用帧表里的 FrameColor 自动匹配调色板，命中了同名的 AutoLoginQuery.PAL（色差 0.6）。
+// 注意 bit0（HasTransparency）和 bit1（UsesRle）共用同一个解码器：
+// 0x0/0x1 未压缩、0x2/0x3 RLE-Zero。这两个位只是告诉 blitter 怎么画，
+// 不是两套压缩算法。实测 6373 帧：未压缩 2289 帧、RLE 4084 帧，各 100% 命中。
 //
-// 待办：flags=0x3（同时带 HasTransparency）的帧不是 RLE-Zero，
-// 首 u16 对不上"宽+2"。下一步反汇编 gamemd.exe 的 blitter 照抄，不猜。
+// 已验证：
+//   - AutoLoginQuery.shp（632x568, flags=0x2）精确解出 358976 像素，并用帧表里的
+//     FrameColor 自动匹配调色板，命中了同名的 AutoLoginQuery.PAL（色差 0.6）。
+//   - COMPASS.SHP / FULLFNT3.SHP（flags=0x3，占了全部帧的 62%）逐行裁剪后
+//     3964/3964 帧精确解出，字形肉眼可辨。
 
 #pragma once
 

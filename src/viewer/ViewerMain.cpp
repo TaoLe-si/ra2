@@ -210,20 +210,32 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // 那样就分不清是"卡在 DX12 初始化"还是"卡在消息循环"。
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
-    // 命令行（宽字符 -> 多字节，够用）
-    char args[4][MAX_PATH] = {};
+    // 命令行（宽字符 -> UTF-8 多字节）
+    // 不能用 std::string(w.begin(), w.end())：那是按 wchar_t 逐位截断成 char，
+    // 中文/日文路径会直接变成乱码。必须走 WideCharToMultiByte。
+    constexpr int kMaxArgs = 8;
+    char args[kMaxArgs][MAX_PATH] = {};
     {
-        std::wstring w(cmdline ? cmdline : L"");
-        std::string a(w.begin(), w.end());
+        std::string a;
+        if (cmdline && *cmdline) {
+            const int need = WideCharToMultiByte(CP_UTF8, 0, cmdline, -1, nullptr, 0,
+                                                 nullptr, nullptr);
+            if (need > 1) {
+                a.resize(static_cast<size_t>(need));
+                WideCharToMultiByte(CP_UTF8, 0, cmdline, -1, a.data(), need,
+                                    nullptr, nullptr);
+                a.resize(static_cast<size_t>(need) - 1);   // 去掉结尾的 '\0'
+            }
+        }
         // 简单按空格切，路径带引号就去掉引号
-        int n = 0, k = 0;
+        int n = 0;
         std::string cur;
         bool q = false;
         for (char c : a) {
             if (c == '"') {
                 q = !q;
             } else if ((c == ' ' || c == '\t') && !q) {
-                if (!cur.empty() && n < 4) {
+                if (!cur.empty() && n < kMaxArgs) {
                     std::snprintf(args[n++], MAX_PATH, "%s", cur.c_str());
                 }
                 cur.clear();
@@ -231,18 +243,23 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
                 cur += c;
             }
         }
-        if (!cur.empty() && n < 4) {
+        if (!cur.empty() && n < kMaxArgs) {
             std::snprintf(args[n++], MAX_PATH, "%s", cur.c_str());
         }
     }
     const char* mix_path = args[0][0] ? args[0] : "D:\\westwood\\RA2YR\\ra2md.mix";
     const char* shp_name = args[1];
     const char* pal_name = args[2];
-    // 剩下的参数里找开关（--offscreen / --framesN）
+    // 剩下的参数里找开关（--offscreen / --framesN / --frameN）
     bool offscreen = false;
-    for (int i = 0; i < 4; ++i) {
+    int want_frame = 0;
+    for (int i = 0; i < kMaxArgs; ++i) {
         if (std::strncmp(args[i], "--offscreen", 11) == 0) {
             offscreen = true;
+        } else if (std::strncmp(args[i], "--frame", 7) == 0 && args[i][7] != 's') {
+            // --frameN：指定渲第几帧。回归 flags=0x03 要靠它，因为离线路径
+            // 只渲一帧，而 flags 各异的帧常常不在 0 号位。
+            want_frame = std::atoi(args[i] + 7);
         }
     }
 
@@ -262,6 +279,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     std::printf("SHP  %dx%d 帧=%d  帧0 flags=0x%X 调色板=%s\n",
                 g_app.shp.Width(), g_app.shp.Height(), g_app.shp.Frame_Count(),
                 f0.flags, g_app.pal_name.c_str());
+    if (want_frame > 0 && want_frame < g_app.shp.Frame_Count()) {
+        g_app.frame = want_frame;
+    }
+    {
+        const ShpFrameInfo& f = g_app.shp.Frame_Info(g_app.frame);
+        std::printf("渲染帧=%d  %dx%d flags=0x%X\n", g_app.frame, f.w, f.h, f.flags);
+    }
 
     // ---- 离屏模式：不开窗口，渲一帧回读就退出 ----
     if (offscreen) {
@@ -330,7 +354,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // 平时不开窗口盯着。
     int max_frames = 0;
     {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < kMaxArgs; ++i) {
             if (std::strncmp(args[i], "--frames", 8) == 0) {
                 max_frames = std::atoi(args[i] + 8);
             }

@@ -86,29 +86,40 @@ class ShpFile:
     def _rle_zero(src: bytes, w: int, h: int) -> bytearray:
         """Westwood RLE-Zero（TS 变体）：
            每行开头 u16 = 该行输入字节数（含这 2 字节）；
-           行内遇到 0x00 则后一字节是"重复多少个透明像素"。"""
-        out = bytearray()
+           行内遇到 0x00 则后一字节是"重复多少个透明像素"。
+
+        关键坑：**行尾游程的计数常常比实际多 1**（实测 276211 行里 83% 溢出 1 个
+        像素，其余正好等于行宽，没有 >1 也没有 <0 的）。所以必须逐行写、写满 w
+        个就丢掉余量 —— 一路 append 会让后续每一行整体错位，整张图糊掉。
+        判据：逐行裁剪后 3964 个 flags=0x3 的帧 100% 精确产出 宽*高 像素。"""
+        out = bytearray(w * h)             # 索引 0 = 透明，天然补了尾部
         p = 0
-        for _ in range(h):
+        for row in range(h):
             if p + 2 > len(src):
                 break
             line = src[p] | (src[p + 1] << 8)
             p += 2
-            end = min(p + max(0, line - 2), len(src))
+            if line < 2:
+                continue
+            end = min(p + line - 2, len(src))
+            dst = row * w
+            x = 0
             while p < end:
                 v = src[p]
                 p += 1
                 if v == 0:
                     if p >= end:
                         break
-                    out += bytes(src[p])   # 透明像素
+                    c = src[p]
                     p += 1
+                    if x + c > w:
+                        c = w - x          # 行尾溢出，截断
+                    x += c
                 else:
-                    out.append(v)
-        # 不足一帧就补透明，方便 caller 不用处理半帧
-        if len(out) < w * h:
-            out += bytes(w * h - len(out))
-        return out[:w * h]
+                    if x < w:
+                        out[dst + x] = v
+                    x += 1
+        return out
 
 
 # ---------------------------------------------------------------- BMP 输出
