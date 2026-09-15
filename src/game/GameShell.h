@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "data/Ini.h"
+#include "game/World.h"
 #include "gfx/RemapTable.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
@@ -98,6 +99,9 @@ public:
 
     // ---- 输入。由窗口过程转发进来 ----
     void On_Key_Down(int vk, bool ctrl, bool shift);
+    void On_Key_Up(int vk);
+    /// M/N 循环选下一个/上一个单位。
+    void Cycle_Selection(int dir);
     void On_Mouse_Move(int x, int y);
     void On_Mouse_Down(int button, int x, int y, bool shift);
     void On_Mouse_Up(int button, int x, int y);
@@ -112,9 +116,25 @@ public:
     void* Renderer() { return &renderer_; }
     bool Offscreen_Frame(std::vector<uint8_t>* rgba, int* w, int* h);
 
+    int Object_Count() const noexcept { return world_.Count(); }
+    int Selected_Count() const noexcept { return world_.Selected_Count(); }
+    const World& World_() const noexcept { return world_; }
+    World& Mutable_World() noexcept { return world_; }
+
+    /// 不开窗口也能验证"操作"对不对：选中 / 下令 / 推进逻辑帧 / 编队 / 热键。
+    /// 返回 false 表示有不通过的判据。
+    bool Self_Test();
+
+    /// 建造页签：0=建筑 1=防御 2=步兵 3=车辆（对应热键 Q/W/E/R）。
+    int Sidebar_Tab() const noexcept { return sidebar_tab_; }
+    /// 当前挂起的光标命令（K 修理 / L 变卖）。
+    int Cursor_Mode() const noexcept { return cursor_mode_; }
+    int Objects_Drawn() const noexcept { return objects_drawn_; }
+
 private:
     void Update_Camera(float dt);
     void Draw_Battlefield();
+    void Draw_Objects();
     void Draw_Top_Bar();
     void Draw_Sidebar();
     void Draw_Radar();
@@ -122,6 +142,14 @@ private:
 
     /// 屏幕坐标 -> 地图格子。落在视口外或地图外返回 false。
     bool Pick_Cell(int sx, int sy, int* cx, int* cy) const;
+    /// 屏幕坐标 -> 连续的格坐标（浮点，用于下移动命令）。
+    bool Pick_Cell_F(int sx, int sy, float* fx, float* fy) const;
+    /// 格子 -> 屏幕（已考虑相机）。超出视口也返回 true，调用方自己裁。
+    void Cell_To_Screen(float cx, float cy, float* sx, float* sy) const;
+    /// 某格的高度级。越界返回 0。
+    int Cell_Level(int cx, int cy) const;
+    /// 把相机中心挪到某个格（H / 空格 / F1-F4 / 跟随都走这条）。
+    void Center_On_Cell(float cx, float cy);
 
     GameScreen screen_ = GameScreen::Battle;
 
@@ -136,6 +164,13 @@ private:
     RemapTable remap_;
     int player_color_ = 5;   ///< [Colors] 下标，5 = DarkRed（苏军红）
 
+    // 逻辑层
+    World world_;
+    int sidebar_tab_ = 0;    ///< Q/W/E/R
+    int cursor_mode_ = 0;    ///< 0=普通 1=修理 2=变卖
+    bool follow_ = false;    ///< F：镜头跟随选中的单位
+    int objects_drawn_ = 0;  ///< 自检用：这一帧画了几个对象
+
     // 状态
     Camera camera_;
     int win_w_ = 800, win_h_ = 600;
@@ -146,9 +181,12 @@ private:
     // 输入状态
     int mouse_x_ = 0, mouse_y_ = 0;
     bool dragging_ = false;
+    bool drag_shift_ = false;
     int drag_x0_ = 0, drag_y0_ = 0;
     bool edge_scroll_ = true;
     bool keys_down_[256] = {};
+    float bookmarks_[4][2] = {};      ///< Ctrl+F1..F4 设的书签
+    bool bookmark_set_[4] = {};
 
     Dx12Renderer renderer_;
     bool ready_ = false;

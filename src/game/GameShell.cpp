@@ -19,6 +19,24 @@ constexpr float kUiGold[4] = {1.0f, 0.84f, 0.0f, 1.0f};         // 资金文字�
 constexpr float kUiSelect[4] = {0.0f, 1.0f, 0.0f, 1.0f};        // 框选绿
 constexpr float kUiRadarFog[4] = {0.05f, 0.05f, 0.06f, 1.0f};   // 未探索
 constexpr float kUiRadarView[4] = {1.0f, 1.0f, 1.0f, 1.0f};     // 视野框
+constexpr float kUiRadarDot[4] = {1.0f, 0.9f, 0.2f, 1.0f};      // 小地图上的单位
+
+/// 单位标记色：按 kind 区分。等真精灵接进来这些就被贴图取代。
+constexpr float kObjVehicle[4] = {0.95f, 0.75f, 0.15f, 1.0f};
+constexpr float kObjInfantry[4] = {0.35f, 0.85f, 0.35f, 1.0f};
+constexpr float kObjBuilding[4] = {0.55f, 0.65f, 0.95f, 1.0f};
+constexpr float kObjAircraft[4] = {0.85f, 0.45f, 0.95f, 1.0f};
+constexpr float kObjTerrain[4] = {0.30f, 0.36f, 0.26f, 1.0f};
+
+const float* Object_Color(MapObjectKind kind) {
+    switch (kind) {
+        case MapObjectKind::Unit:     return kObjVehicle;
+        case MapObjectKind::Infantry: return kObjInfantry;
+        case MapObjectKind::Building: return kObjBuilding;
+        case MapObjectKind::Aircraft: return kObjAircraft;
+        default:                      return kObjTerrain;
+    }
+}
 
 }  // namespace
 
@@ -152,6 +170,11 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
         return false;
     }
 
+    if (!world_.Build(map_)) {
+        // 没有对象也让它进战场（有些图真是空的），但记一笔
+        std::printf("[!] 地图里没有对象\n");
+    }
+
     camera_.Set_World_Size(terrain_w_, terrain_h_);
     // 开局镜头对准地图中心 —— 原版是对准你的基地，等有基地/起始点解析了再改。
     // "中心"是让视口中心对上世界中心，所以要减掉半个视口（按当前缩放换算成世界单位）。
@@ -199,8 +222,44 @@ void GameShell::Update(float dt) {
     int steps = 0;
     while (logic_accum_ >= kLogicDt && steps < 5) {
         ++logic_frame_;
+        world_.Update(kLogicDt);
         logic_accum_ -= kLogicDt;
         ++steps;
+    }
+
+    // 键盘持续按住的方向键滚动（原版是按住就一直卷）
+    if (screen_ == GameScreen::Battle) {
+        const float step = 600.0f * dt;
+        int dx = 0, dy = 0;
+        if (keys_down_[VK_LEFT])  dx -= 1;
+        if (keys_down_[VK_RIGHT]) dx += 1;
+        if (keys_down_[VK_UP])    dy -= 1;
+        if (keys_down_[VK_DOWN])  dy += 1;
+        if (dx || dy) {
+            camera_.Scroll(dx * step, dy * step);
+        }
+    }
+
+    // 相机命令（H 回基地 / 空格去事件 / F1-F4 书签）
+    float order_x = 0.0f, order_y = 0.0f;
+    if (world_.Consume_Camera_Order(&order_x, &order_y)) {
+        Center_On_Cell(order_x, order_y);
+    }
+
+    // F：镜头跟随选中的单位
+    if (follow_) {
+        float fx = 0.0f, fy = 0.0f;
+        int n = 0;
+        for (const Object& o : world_.Objects()) {
+            if (o.selected) {
+                fx += o.x;
+                fy += o.y;
+                ++n;
+            }
+        }
+        if (n > 0) {
+            Center_On_Cell(fx / n, fy / n);
+        }
     }
 }
 
@@ -212,12 +271,98 @@ void GameShell::Render() {
     renderer_.Begin_Frame(clear);
     if (screen_ == GameScreen::Battle) {
         Draw_Battlefield();
+        Draw_Objects();
         Draw_Top_Bar();
         Draw_Sidebar();
         Draw_Radar();
         Draw_Selection();
     }
     renderer_.End_Frame();
+}
+
+// ---------------------------------------------------------------------------
+// 坐标换算
+// ---------------------------------------------------------------------------
+
+int GameShell::Cell_Level(int cx, int cy) const {
+    if (cx < 0 || cy < 0 || cx >= map_.Width() || cy >= map_.Height()) {
+        return 0;
+    }
+    const std::vector<IsoCell>& cells = map_.Cells();
+    const size_t idx = static_cast<size_t>(cy) * map_.Width() + cx;
+    if (idx >= cells.size()) {
+        return 0;
+    }
+    return cells[idx].level;
+}
+
+void GameShell::Cell_To_Screen(float cx, float cy, float* sx, float* sy) const {
+    // 先算格子的画布坐标（含高度抬升），再过相机
+    const int lx = Cell_Level(static_cast<int>(cx), static_cast<int>(cy));
+    int px = 0, py = 0;
+    MapRenderer::Cell_To_Canvas(map_renderer_.Origin_X(), map_renderer_.Origin_Y(),
+                                static_cast<int>(cx), static_cast<int>(cy), lx,
+                                &px, &py);
+    // 加上格内的小数偏移（单位在格之间时）
+    const float fx = cx - std::floor(cx);
+    const float fy = cy - std::floor(cy);
+    const float wx = px + kCellHalfW * (fx - fy);
+    const float wy = py + kCellHalfH * (fx + fy);
+    camera_.World_To_Screen(wx + kCellHalfW,
+                            wy + kCellHalfH, sx, sy);
+}
+
+/// 相机对准某个格。
+void GameShell::Center_On_Cell(float cx, float cy) {
+    int px = 0, py = 0;
+    MapRenderer::Cell_To_Canvas(map_renderer_.Origin_X(), map_renderer_.Origin_Y(),
+                                static_cast<int>(cx), static_cast<int>(cy),
+                                Cell_Level(static_cast<int>(cx), static_cast<int>(cy)),
+                                &px, &py);
+    const float half_vw = static_cast<float>(win_w_ - kSidebarW) * 0.5f / camera_.Scale();
+    const float half_vh = static_cast<float>(win_h_ - kTopBarH) * 0.5f / camera_.Scale();
+    camera_.Set(px + kCellHalfW - half_vw,
+                py + kCellHalfH - half_vh);
+}
+
+void GameShell::Draw_Objects() {
+    objects_drawn_ = 0;
+    const int view_w = win_w_ - kSidebarW;
+    for (const Object& o : world_.Objects()) {
+        float sx = 0.0f, sy = 0.0f;
+        Cell_To_Screen(o.x, o.y, &sx, &sy);
+        // 视口裁剪（留一格余量，免得贴边的突然消失）
+        if (sx < -kCellW || sx > view_w + kCellW ||
+            sy < kTopBarH - kCellH || sy > win_h_ + kCellH) {
+            continue;
+        }
+        const float scale = camera_.Scale();
+        const int w = static_cast<int>(kCellW * scale);
+        const int h = static_cast<int>(kCellH * scale);
+        const int x = static_cast<int>(sx) - w / 2;
+        const int y = static_cast<int>(sy) - h / 2;
+        const int h2 = (h > 8) ? h / 2 : 4;
+        // 用上下两个横条勾一个菱形块，比实心方块更像"站在格子上"
+        renderer_.Draw_Rect(x + w / 4, y + h / 2 - h2 / 2, w / 2, h2,
+                            Object_Color(o.kind));
+        if (o.Is_Techno()) {
+            renderer_.Draw_Rect_Outline(x + w / 4, y + h / 2 - h2 / 2, w / 2, h2,
+                                        kUiEdge, 1);
+        }
+        if (o.selected) {
+            // 选中框：比本体大一圈的绿框
+            renderer_.Draw_Rect_Outline(x, y, w, h, kUiSelect, 1);
+            // 血条
+            const int hp_w = (o.hp_max > 0) ? (w * o.hp / o.hp_max) : 0;
+            const float green[4] = {0.2f, 0.9f, 0.2f, 1.0f};
+            const float red[4] = {0.9f, 0.2f, 0.2f, 1.0f};
+            renderer_.Draw_Rect(x, y - 4, w, 2, red);
+            if (hp_w > 0) {
+                renderer_.Draw_Rect(x, y - 4, hp_w, 2, green);
+            }
+        }
+        ++objects_drawn_;
+    }
 }
 
 void GameShell::Draw_Battlefield() {
@@ -244,13 +389,25 @@ void GameShell::Draw_Sidebar() {
     renderer_.Draw_Rect(x, kTopBarH, kSidebarW, win_h_ - kTopBarH, kUiBackdrop);
     renderer_.Draw_Rect(x, kTopBarH, 1, win_h_ - kTopBarH, kUiEdge);
 
+    // 四个页签（Q/W/E/R）。原版是 PCX 贴图，这里先画色块 + 高亮当前页。
+    static const float* kTabColor[4] = {kObjBuilding, kObjBuilding,
+                                        kObjInfantry, kObjVehicle};
+    const int pad = 8;
+    const int tab_w = (kSidebarW - pad * 2 - 6) / 4;
+    for (int i = 0; i < 4; ++i) {
+        const int bx = x + pad + i * (tab_w + 2);
+        const int by = kTopBarH + pad;
+        renderer_.Draw_Rect(bx, by, tab_w, 14,
+                            (i == sidebar_tab_) ? kTabColor[i] : kUiSlot);
+        renderer_.Draw_Rect_Outline(bx, by, tab_w, 14, kUiEdge, 1);
+    }
+
     // 建造按钮：4 列 × 4 行的网格，每格 32×32，间距 4。
     // 真实按钮列表要从 rules 读可建造项，这里先把骨架和命中区域定下来。
-    const int pad = 8;
     const int slot = 32;
     const int gap = 4;
     const int cols = 4;
-    const int grid_y = kTopBarH + pad;
+    const int grid_y = kTopBarH + pad + 14 + gap;
     for (int i = 0; i < cols * 4; ++i) {
         const int col = i % cols;
         const int row = i / cols;
@@ -258,6 +415,13 @@ void GameShell::Draw_Sidebar() {
         const int by = grid_y + row * (slot + gap);
         renderer_.Draw_Rect(bx, by, slot, slot, kUiSlot);
         renderer_.Draw_Rect_Outline(bx, by, slot, slot, kUiEdge, 1);
+    }
+
+    // 光标命令提示（K 修理 / L 变卖）
+    if (cursor_mode_ != 0) {
+        const float c[4] = {1.0f, 0.3f, 0.3f, 1.0f};
+        renderer_.Draw_Rect(x + pad, grid_y + 4 * (slot + gap) + 4, kSidebarW - pad * 2,
+                            12, c);
     }
 }
 
@@ -281,6 +445,20 @@ void GameShell::Draw_Radar() {
         const int rw = (vw * size < 4.0f) ? 4 : static_cast<int>(vw * size);
         const int rh = (vh * size < 4.0f) ? 4 : static_cast<int>(vh * size);
         renderer_.Draw_Rect_Outline(rx, ry, rw, rh, kUiRadarView, 1);
+    }
+
+    // 单位点。小地图是"整张地图等比压进 size×size"，所以格 -> 点就是线性映射。
+    if (map_.Width() > 0 && map_.Height() > 0) {
+        for (const Object& o : world_.Objects()) {
+            if (!o.Is_Techno()) {
+                continue;                      // 树和路灯不上小地图
+            }
+            const int dx = x + static_cast<int>(static_cast<float>(o.x) /
+                                                map_.Width() * size);
+            const int dy = y + static_cast<int>(static_cast<float>(o.y) /
+                                                map_.Height() * size);
+            renderer_.Draw_Rect(dx, dy, 2, 2, o.selected ? kUiSelect : kUiRadarDot);
+        }
     }
 }
 
@@ -316,18 +494,202 @@ bool GameShell::Pick_Cell(int sx, int sy, int* cx, int* cy) const {
     return true;
 }
 
-void GameShell::On_Key_Down(int vk, bool /*ctrl*/, bool /*shift*/) {
+/// 屏幕 -> 连续格坐标。先把屏幕换算成画布像素，再反解等距菱形。
+bool GameShell::Pick_Cell_F(int sx, int sy, float* fx, float* fy) const {
+    if (terrain_w_ <= 0) {
+        return false;
+    }
+    if (sx < 0 || sx >= win_w_ - kSidebarW || sy < kTopBarH || sy >= win_h_) {
+        return false;
+    }
+    float wx = 0.0f, wy = 0.0f;
+    camera_.Screen_To_World(static_cast<float>(sx), static_cast<float>(sy), &wx, &wy);
+    // 反解：cx - cy = (x-ox)/30, cx + cy = (y-oy)/15（不含高度，
+    // 高度只影响显示位置，拾取时按 level 迭代校正一次就够）
+    const float a = (wx - kCellHalfW -
+                     static_cast<float>(map_renderer_.Origin_X())) /
+                    kCellHalfW;
+    const float b = (wy - kCellHalfH -
+                     static_cast<float>(map_renderer_.Origin_Y())) /
+                    kCellHalfH;
+    float cx = (a + b) * 0.5f;
+    float cy = (b - a) * 0.5f;
+    // 高度校正：按当前格的高度把 y 往下补回来再解一次
+    const int lvl = Cell_Level(static_cast<int>(cx), static_cast<int>(cy));
+    const float b2 = (wy - kCellHalfH +
+                      static_cast<float>(lvl) * kLevelHeightPx -
+                      static_cast<float>(map_renderer_.Origin_Y())) /
+                     kCellHalfH;
+    cx = (a + b2) * 0.5f;
+    cy = (b2 - a) * 0.5f;
+    if (cx < -0.5f || cy < -0.5f || cx > map_.Width() - 0.5f ||
+        cy > map_.Height() - 0.5f) {
+        return false;
+    }
+    *fx = cx;
+    *fy = cy;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// 快捷键
+//
+// 这张表是按《红色警戒 2 / 尤里的复仇》官方手册 + 玩家实测整理的，
+// 不是我自己拍的。整理时几个容易搞混的地方：
+//   * Q/W/E/R 是侧栏四个页签（建筑 / 防御 / 步兵 / 车辆）。
+//   * M / N 的"上一个/下一个"两份资料说反了，按手册（defkey 那份）取
+//     N = 下一个部队、M = 上一个部队。
+//   * Ctrl + 数字 = 存编队，数字 = 选编队，**再按一次同一个数字 = 居中**。
+//   * Shift + 数字 = 加进编队。
+//   * Ctrl + 点击 = 强制攻击；Alt + 点击 = 强制移动；Ctrl+Shift = 移动攻击。
+// ---------------------------------------------------------------------------
+
+void GameShell::On_Key_Down(int vk, bool ctrl, bool shift) {
     if (vk >= 0 && vk < 256) {
         keys_down_[vk] = true;
     }
-    const float step = 120.0f;
+
+    // Ctrl+F1..F4 存书签 / F1..F4 去书签
+    if (vk >= VK_F1 && vk <= VK_F4) {
+        const int slot = vk - VK_F1;
+        if (ctrl) {
+            // 存当前视口中心
+            const float cxw = camera_.X() +
+                              static_cast<float>(win_w_ - kSidebarW) * 0.5f /
+                                  camera_.Scale();
+            const float cyw = camera_.Y() +
+                              static_cast<float>(win_h_ - kTopBarH) * 0.5f /
+                                  camera_.Scale();
+            bookmarks_[slot][0] = cxw;
+            bookmarks_[slot][1] = cyw;
+            bookmark_set_[slot] = true;
+            std::printf("书签 %d 已存\n", slot + 1);
+        } else if (bookmark_set_[slot]) {
+            camera_.Set(bookmarks_[slot][0] -
+                            static_cast<float>(win_w_ - kSidebarW) * 0.5f /
+                                camera_.Scale(),
+                        bookmarks_[slot][1] -
+                            static_cast<float>(win_h_ - kTopBarH) * 0.5f /
+                                camera_.Scale());
+        }
+        return;
+    }
+
+    // 数字键：编队
+    if (vk >= '0' && vk <= '9') {
+        const int slot = (vk == '0') ? 9 : (vk - '1');
+        if (ctrl) {
+            world_.Team_Set(slot);
+            std::printf("编队 %d：%d 个单位\n", slot + 1, world_.Selected_Count());
+        } else if (shift) {
+            world_.Team_Add(slot);
+        } else {
+            world_.Team_Select(slot);
+        }
+        return;
+    }
+
+    if (ctrl) {
+        return;                      // 其余 Ctrl 组合先不处理
+    }
+
     switch (vk) {
-        case VK_LEFT:  camera_.Scroll(-step, 0.0f); break;
-        case VK_RIGHT: camera_.Scroll(step, 0.0f); break;
-        case VK_UP:    camera_.Scroll(0.0f, -step); break;
-        case VK_DOWN:  camera_.Scroll(0.0f, step); break;
+        case 'Q': sidebar_tab_ = 0; break;   // 建筑页
+        case 'W': sidebar_tab_ = 1; break;   // 防御页
+        case 'E': sidebar_tab_ = 2; break;   // 步兵页
+        case 'R': sidebar_tab_ = 3; break;   // 车辆页
+
+        case 'S': world_.Order_Stop(); break;      // 停止
+        case 'G': world_.Order_Guard(); break;     // 警戒
+        case 'X': world_.Order_Scatter(); break;   // 散开
+        case 'D': world_.Order_Deploy(); break;    // 部署
+
+        case 'T': world_.Select_Same_Type(); break;    // 选同类型
+        case 'P': world_.Select_All_Combat(); break;   // 集结全部战斗部队
+        case 'U': world_.Select_By_Health(true); break;// 按生命值选（最低的）
+        case 'Y': world_.Select_By_Health(false); break;
+        case 'N': Cycle_Selection(1); break;        // 下一个部队
+        case 'M': Cycle_Selection(-1); break;       // 上一个部队
+
+        case 'H': {                                  // 回主基地
+            float hx = 0.0f, hy = 0.0f;
+            if (!world_.Home_Cell(&hx, &hy) && !world_.Spawn_Cell(0, &hx, &hy)) {
+                break;
+            }
+            world_.Request_Camera(hx, hy);
+            break;
+        }
+        case VK_SPACE: {                             // 去最近的雷达事件
+            // 没有事件系统前，退化成"去最近的战斗单位"
+            const Object* best = nullptr;
+            for (const Object& o : world_.Objects()) {
+                if (o.selectable && o.mission != Mission::Sleep) {
+                    best = &o;
+                    break;
+                }
+            }
+            if (best) {
+                world_.Request_Camera(best->x, best->y);
+            }
+            break;
+        }
+        case 'F': follow_ = !follow_; break;         // 跟随镜头
+        case 'K': cursor_mode_ = (cursor_mode_ == 1) ? 0 : 1; break;  // 修理
+        case 'L': cursor_mode_ = (cursor_mode_ == 2) ? 0 : 2; break;  // 变卖
+
+        case VK_NUMPAD5:                             // 回屏幕中央
+        case VK_CLEAR: {
+            const float cxw = static_cast<float>(terrain_w_) * 0.5f;
+            const float cyw = static_cast<float>(terrain_h_) * 0.5f;
+            camera_.Set(cxw - static_cast<float>(win_w_ - kSidebarW) * 0.5f /
+                                  camera_.Scale(),
+                        cyw - static_cast<float>(win_h_ - kTopBarH) * 0.5f /
+                                  camera_.Scale());
+            break;
+        }
+        case VK_ESCAPE:
+            world_.Select_None();
+            cursor_mode_ = 0;
+            break;
+        case VK_ADD:      camera_.Zoom_By(1.25f); break;
+        case VK_SUBTRACT: camera_.Zoom_By(0.8f); break;
         default: break;
     }
+    (void)shift;
+}
+
+void GameShell::On_Key_Up(int vk) {
+    if (vk >= 0 && vk < 256) {
+        keys_down_[vk] = false;
+    }
+}
+
+/// M / N：在当前可选项里循环选下一个（上一个）。
+void GameShell::Cycle_Selection(int dir) {
+    const std::vector<Object>& objs = world_.Objects();
+    if (objs.empty()) {
+        return;
+    }
+    int cur = -1;
+    for (size_t i = 0; i < objs.size(); ++i) {
+        if (objs[i].selected) {
+            cur = static_cast<int>(i);
+            break;
+        }
+    }
+    int next = cur;
+    for (int step = 0; step < static_cast<int>(objs.size()); ++step) {
+        next += dir;
+        if (next < 0) next = static_cast<int>(objs.size()) - 1;
+        if (next >= static_cast<int>(objs.size())) next = 0;
+        if (objs[static_cast<size_t>(next)].selectable) {
+            break;
+        }
+    }
+    world_.Select_None();
+    world_.Objects()[static_cast<size_t>(next)].selected = true;
+    world_.Request_Camera(objs[static_cast<size_t>(next)].x,
+                          objs[static_cast<size_t>(next)].y);
 }
 
 void GameShell::On_Mouse_Move(int x, int y) {
@@ -335,27 +697,201 @@ void GameShell::On_Mouse_Move(int x, int y) {
     mouse_y_ = y;
 }
 
-void GameShell::On_Mouse_Down(int button, int x, int y, bool /*shift*/) {
+void GameShell::On_Mouse_Down(int button, int x, int y, bool shift) {
     mouse_x_ = x;
     mouse_y_ = y;
     if (button == 0) {
         dragging_ = true;
         drag_x0_ = x;
         drag_y0_ = y;
+        drag_shift_ = shift;
     }
 }
 
 void GameShell::On_Mouse_Up(int button, int x, int y) {
     mouse_x_ = x;
     mouse_y_ = y;
+
     if (button == 0 && dragging_) {
         dragging_ = false;
-        int cx0 = 0, cy0 = 0, cx1 = 0, cy1 = 0;
-        if (Pick_Cell(drag_x0_, drag_y0_, &cx0, &cy0) &&
-            Pick_Cell(x, y, &cx1, &cy1)) {
-            std::printf("框选 格 (%d,%d) -> (%d,%d)\n", cx0, cy0, cx1, cy1);
+        // 拖动距离小于 4 像素算"点选"，否则算"框选"。
+        // 原版也是这个判据 —— 没有它，每次点单位都会变成一次 0 面积的框选。
+        const int dx = x - drag_x0_;
+        const int dy = y - drag_y0_;
+        if (dx * dx + dy * dy < 16) {
+            float fx = 0.0f, fy = 0.0f;
+            if (Pick_Cell_F(x, y, &fx, &fy)) {
+                world_.Select_At(fx, fy, drag_shift_);
+            } else if (!drag_shift_) {
+                world_.Select_None();
+            }
+        } else {
+            float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
+            if (Pick_Cell_F(drag_x0_, drag_y0_, &x0, &y0) &&
+                Pick_Cell_F(x, y, &x1, &y1)) {
+                const int n = world_.Select_In_Rect(x0, y0, x1, y1, drag_shift_);
+                std::printf("框选 (%.1f,%.1f)->(%.1f,%.1f) 选中 %d\n", x0, y0, x1, y1, n);
+            }
+        }
+        return;
+    }
+
+    if (button == 1) {
+        // 右键：命令。Ctrl = 强制攻击，Alt = 强制移动，Ctrl+Shift = 移动攻击。
+        float fx = 0.0f, fy = 0.0f;
+        if (!Pick_Cell_F(x, y, &fx, &fy)) {
+            return;
+        }
+        const int hit = world_.Pick_At(fx, fy);
+        const bool ctrl = keys_down_[VK_CONTROL];
+        const bool alt = keys_down_[VK_MENU];
+        if (hit >= 0 && (ctrl || !alt)) {
+            world_.Order_Attack(hit);
+        } else if (ctrl && (keys_down_[VK_SHIFT])) {
+            world_.Order_Attack_Move(fx, fy);
+        } else {
+            world_.Order_Move(fx, fy);
+        }
+        // 右键同时取消光标命令（原版行为）
+        cursor_mode_ = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 行为自检
+// ---------------------------------------------------------------------------
+
+bool GameShell::Self_Test() {
+    bool ok = true;
+    auto check = [&ok](bool cond, const char* what) {
+        std::printf("  [%s] %s\n", cond ? "OK" : "FAIL", what);
+        if (!cond) ok = false;
+    };
+
+    std::printf("== 对象层 ==\n");
+    int techno = 0;
+    for (const Object& o : world_.Objects()) {
+        if (o.Is_Techno()) ++techno;
+    }
+    check(world_.Count() > 0, "地图里有对象");
+    std::printf("     对象 %d 个，可交互 %d 个，阵营 %zu 个\n", world_.Count(),
+                techno, world_.Houses().size());
+    if (techno == 0) {
+        // 官方图里有纯装饰的（Ice_Age / RiverRam 一个单位都没有，全是树和石头），
+        // 这不是解析失败，跳过后面依赖单位的检查。
+        std::printf("     （纯装饰地图，没有可交互对象，跳过单位相关检查）\n");
+        Render();
+        check(objects_drawn_ > 0, "这一帧画出了对象");
+        std::printf(ok ? "[OK] 行为自检全过\n" : "[x] 行为自检有不过的\n");
+        return ok;
+    }
+    check(techno > 0, "其中有可交互对象（车/兵/建筑/飞机）");
+
+    std::printf("== 选择 ==\n");
+    // 框选整张地图，应该把所有可交互对象选上
+    const int n_box = world_.Select_In_Rect(-1.0f, -1.0f,
+                                            static_cast<float>(map_.Width()),
+                                            static_cast<float>(map_.Height()), false);
+    check(n_box == techno, "框选全图 == 全部可交互对象");
+    std::printf("     框选 %d / 可交互 %d\n", n_box, techno);
+
+    world_.Select_None();
+    check(world_.Selected_Count() == 0, "取消选择后没有选中");
+
+    // 点选：拿第一个可交互对象的位置去点
+    const Object* first = nullptr;
+    for (const Object& o : world_.Objects()) {
+        if (o.Is_Techno()) {
+            first = &o;
+            break;
         }
     }
+    if (first) {
+        const int hit = world_.Pick_At(first->x, first->y);
+        check(hit == first->id, "点选能命中脚下那个对象");
+        world_.Select_At(first->x, first->y, false);
+        check(world_.Selected_Count() == 1, "点选后正好选中 1 个");
+    }
+
+    std::printf("== 命令与逻辑帧 ==\n");
+    // 挑一个能动的单位，下令移动，推进逻辑帧看它有没有真的走过去
+    Object* mover = nullptr;
+    for (Object& o : world_.Objects()) {
+        if (o.Is_Techno() && o.speed > 0.0f && o.mission != Mission::Sleep &&
+            o.mission != Mission::Sticky) {
+            mover = &o;
+            break;
+        }
+    }
+    if (mover != nullptr) {
+        world_.Select_None();
+        mover->selected = true;
+        const float x0 = mover->x;
+        const float y0 = mover->y;
+        const float tx = x0 + 3.0f;
+        const float ty = y0 + 2.0f;
+        const int ordered = world_.Order_Move(tx, ty);
+        check(ordered == 1, "移动命令下达成功");
+        const float before = std::sqrt((x0 - tx) * (x0 - tx) + (y0 - ty) * (y0 - ty));
+        for (int i = 0; i < kLogicFps * 3; ++i) {   // 3 秒 = 45 个逻辑帧
+            world_.Update(kLogicDt);
+        }
+        const float after = std::sqrt((mover->x - tx) * (mover->x - tx) +
+                                      (mover->y - ty) * (mover->y - ty));
+        check(after < before - 0.5f, "推进 3 秒后离目标更近了");
+        std::printf("     距目标 %.2f -> %.2f 格\n", before, after);
+        check(mover->mission == Mission::Move || after < 0.05f,
+              "任务状态是 Move（或已到达）");
+    } else {
+        std::printf("     （这张图没有能动的单位，跳过）\n");
+    }
+
+    std::printf("== 编队 ==\n");
+    int combat = world_.Select_All_Combat();
+    if (combat == 0) {
+        std::printf("     （这张图没有车辆/步兵，跳过编队检查）\n");
+    } else {
+        world_.Team_Set(0);
+        world_.Select_None();
+        const int back = world_.Team_Select(0);
+        check(back == combat, "Ctrl+1 存编队、1 取回，数量一致");
+        std::printf("     编队 1：%d 个单位\n", back);
+    }
+
+    std::printf("== 快捷键 ==\n");
+    const int tab0 = sidebar_tab_;
+    On_Key_Down('W', false, false);
+    On_Key_Down('E', false, false);
+    check(sidebar_tab_ == 2, "E 切到步兵页");
+    On_Key_Down('R', false, false);
+    check(sidebar_tab_ == 3, "R 切到车辆页");
+    On_Key_Down('Q', false, false);
+    check(sidebar_tab_ == 0, "Q 切回建筑页");
+    (void)tab0;
+
+    On_Key_Down('K', false, false);
+    check(cursor_mode_ == 1, "K 进入修理模式");
+    On_Key_Down('L', false, false);
+    check(cursor_mode_ == 2, "L 进入变卖模式");
+    On_Key_Down(VK_ESCAPE, false, false);
+    check(cursor_mode_ == 0, "Esc 取消光标命令");
+
+    // 编队热键：Ctrl+2 存、2 取
+    if (world_.Select_All_Combat() > 0) {
+        world_.Team_Set(1);
+        world_.Select_None();
+        On_Key_Down('2', false, false);
+        check(world_.Selected_Count() > 0, "数字键 2 取回编队");
+    }
+
+    std::printf("== 渲染 ==\n");
+    world_.Select_None();
+    Render();
+    check(objects_drawn_ > 0, "这一帧画出了对象");
+    std::printf("     画出 %d 个对象\n", objects_drawn_);
+
+    std::printf(ok ? "[OK] 行为自检全过\n" : "[x] 行为自检有不过的\n");
+    return ok;
 }
 
 bool GameShell::Offscreen_Frame(std::vector<uint8_t>* rgba, int* w, int* h) {

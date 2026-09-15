@@ -61,8 +61,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_KEYUP:
-            if (wp == VK_OEM_PLUS || wp == VK_ADD) {
-                if (g) g->On_Key_Down(VK_ADD, false, false);
+            // 松开要通知外壳：方向键是"按住就一直卷屏"的，
+            // 不把抬起记下来，方向键一按就再也停不下来。
+            if (g) {
+                g->On_Key_Up(static_cast<int>(wp));
+                if (wp == VK_OEM_PLUS || wp == VK_ADD) {
+                    g->On_Key_Down(VK_ADD, false, false);
+                }
             }
             return 0;
         case WM_MOUSEMOVE:
@@ -137,12 +142,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     std::vector<std::string> mixes;
     std::string map_path;
     bool offscreen = false;
+    bool selftest = false;
     std::string out_path = "build/game.raw";
     for (int i = 0; i < argc; ++i) {
         if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < argc) {
             mixes.push_back(args[++i]);
         } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < argc) {
             map_path = args[++i];
+        } else if (std::strcmp(args[i], "--selftest") == 0) {
+            selftest = true;
+            offscreen = true;
         } else if (std::strncmp(args[i], "--offscreen", 11) == 0) {
             offscreen = true;
         } else if (std::strcmp(args[i], "--out") == 0 && i + 1 < argc) {
@@ -171,6 +180,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         if (!game.Load_Map(mixes, map_path.c_str(), &err)) {
             std::printf("[x] 载入失败: %s\n", err.c_str());
             return 1;
+        }
+        if (selftest) {
+            return game.Self_Test() ? 0 : 1;
         }
         game.Update(1.0f / 60.0f);
         return Run_Offscreen(game, out_path.c_str());

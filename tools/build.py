@@ -79,6 +79,7 @@ VIEW_SOURCES = [
 GAME_SOURCES = [
     "src/game/GameMain.cpp",
     "src/game/GameShell.cpp",
+    "src/game/World.cpp",
     "src/io/FileSystem.cpp",
     "src/io/MixCrypto.cpp",
     "src/io/Lzo1x.cpp",
