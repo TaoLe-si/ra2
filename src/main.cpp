@@ -20,6 +20,7 @@
 #include "ai/PathFinder.h"
 #include "core/VTableMap.h"
 #include "data/Ini.h"
+#include "data/UnitModel.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/HvaFile.h"
@@ -916,6 +917,60 @@ static int Verify_Ini(const char* path, uint32_t ini_id) {
     return 0;
 }
 
+// ---- P2 数据层：按 INI 把单位名解析成体素模型组成 ----
+//
+// 判据是"能不能自证"：86 个 Voxel=yes 单位的车体 VXL **必须全部命中**，
+// 缺一个就说明 Image= / CRC 大小写 / 段合并这三处里有一处写错了。
+// --dump 会把整张表写出去，交给 tools/unitvxl_check.py 与 Python 参考实现逐行对账。
+static int Unit_DB(const std::vector<std::string>& mix_paths, const char* dump_path) {
+    std::vector<ra2::MixFileClass> mixes(mix_paths.size());
+    std::vector<const ra2::MixFileClass*> ptrs(mix_paths.size());
+    for (size_t i = 0; i < mix_paths.size(); ++i) {
+        if (!mixes[i].Open(mix_paths[i].c_str())) {
+            std::printf("[x] 打不开 %s\n", mix_paths[i].c_str());
+            return 1;
+        }
+        ptrs[i] = &mixes[i];
+    }
+    ra2::UnitModelDB db;
+    if (!db.Load(ptrs.data(), static_cast<int>(ptrs.size()))) {
+        return 1;
+    }
+
+    const ra2::UnitModelDB::Stats& s = db.Stats_();
+    std::printf("段: rules=%d art=%d | 单位 %d | 体素 %d | 炮塔 %d | 炮管 %d | 车体缺失 %d\n",
+                s.rules_sections, s.art_sections, s.units, s.voxel,
+                s.with_turret, s.with_barrel, s.body_missing);
+
+    if (dump_path) {
+        std::FILE* f = std::fopen(dump_path, "wb");
+        if (!f) {
+            std::printf("[x] 写不了 %s\n", dump_path);
+            return 1;
+        }
+        std::fprintf(f, "# unit image voxel turret bodyid bodypresent "
+                        "turid turpresent barlid barlpresent\n");
+        for (const std::string& u : db.Units()) {
+            const ra2::UnitModel* m = db.Resolve(u.c_str());
+            if (!m) {
+                continue;
+            }
+            std::fprintf(f, "%s %s %d %d 0x%08X %d 0x%08X %d 0x%08X %d\n",
+                         m->unit.c_str(), m->image.c_str(),
+                         m->voxel ? 1 : 0, m->turret ? 1 : 0,
+                         m->body.id, m->body.present ? 1 : 0,
+                         m->turret_vxl.id, m->turret_vxl.present ? 1 : 0,
+                         m->barrel_vxl.id, m->barrel_vxl.present ? 1 : 0);
+        }
+        std::fclose(f);
+        std::printf("已写出 %s\n", dump_path);
+        return 0;
+    }
+
+    db.Dump(true);
+    return s.body_missing == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--ini") == 0) {
         if (argc < 4) {
@@ -950,6 +1005,32 @@ int main(int argc, char** argv) {
         }
         return Verify_Hva(argv[2],
                           static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--unitdb") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --unitdb <顶层mix> [更多mix...] [--dump <out.txt>]\n");
+            std::printf("  例：ra2core --unitdb D:/westwood/RA2YR/ra2.mix"
+                        " D:/westwood/RA2YR/ra2md.mix\n");
+            return 1;
+        }
+        // 位置参数收到第一个 -- 开头的为止；后面的 --dump 单独认。
+        std::vector<std::string> mixes;
+        const char* dump = nullptr;
+        for (int i = 2; i < argc; ++i) {
+            if (argv[i][0] == '-' && argv[i][1] == '-') {
+                if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
+                    dump = argv[i + 1];
+                    ++i;
+                }
+                continue;
+            }
+            mixes.push_back(argv[i]);
+        }
+        if (mixes.empty()) {
+            std::printf("[x] 至少要给一个 .mix\n");
+            return 1;
+        }
+        return Unit_DB(mixes, dump);
     }
     if (argc > 1 && std::strcmp(argv[1], "--vxlhash") == 0) {
         if (argc < 3) {

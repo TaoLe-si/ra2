@@ -26,15 +26,19 @@ def palette_rgb(v: VxlFile):
 
 
 def render(v: VxlFile, scale: float = 6.0, shading: bool = True):
-    pal, _shift = palette_rgb(v)
+    pal = palette_rgb(v)
     pts = []
     for li in range(v.num_limbs):
         t = v.tailers[li]
         m = t.transform
+        # 体素索引不是局部坐标：局部坐标 = 索引 + min_bounds
+        # （min/max_bounds 是该肢体体素在局部系下的 AABB，局部原点在 AABB 中心）。
+        ox, oy, oz = t.min_bounds
         for x, y, z, c, n in v.voxels(li):
-            px = m[0] * x + m[1] * y + m[2] * z + m[3]
-            py = m[4] * x + m[5] * y + m[6] * z + m[7]
-            pz = m[8] * x + m[9] * y + m[10] * z + m[11]
+            lx, ly, lz = x + ox, y + oy, z + oz
+            px = m[0] * lx + m[1] * ly + m[2] * lz + m[3]
+            py = m[4] * lx + m[5] * ly + m[6] * lz + m[7]
+            pz = m[8] * lx + m[9] * ly + m[10] * lz + m[11]
             pts.append((px, py, pz, c, n))
 
     # 等距投影：绕 Z 转 45°，再压扁

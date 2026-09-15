@@ -25,6 +25,12 @@
 //           +64 f32[3] min_bounds   +76 f32[3] max_bounds
 //           +88 u8 XSize  +89 u8 YSize  +90 u8 ZSize  +91 u8 NormalsType(2 或 4)
 //
+// 【min_bounds/max_bounds 是干嘛的】它们是**该肢体体素在局部坐标系下的 AABB**，
+// 而局部原点落在 AABB 中心 —— 13 根肢体的 (min+max)/2 实测都 ≤1.8，
+// BODY 是 (0.000,-0.164,0.345)。所以体素索引不能直接喂变换，要先平移：
+//     world = R · (index + min_bounds) + T
+// 判据（多肢模型立刻散架 vs 落地）：见 Render_Isometric 的注释。
+//
 // 【只认两张表】网上不少资料说 span_start / span_end / span_data 是三张表。
 // 实测不是：body 里只有 [start 表 (X*Y u32)][end 表 (X*Y u32)][体素数据]，
 // span_data_ofs 是**数据区起点**。硬证据：多数肢体上 span_data_ofs + X*Y*4
@@ -91,6 +97,21 @@ struct VxlLimbTailer {
     uint8_t normals_type = 0;      ///< 实测只有 2 和 4
 };
 
+class VxlFile;
+
+/// 附加模型层：把另一个 VXL（炮塔 / 炮管）按给定变换叠到主体上。
+///
+/// RA2 把坦克拆成三个文件，三者**共享同一模型空间原点**（实测 GTNK /
+/// GTNKTUR / GTNKBARL 的肢体平移都是 `(0.377,-0.052,-0.555)`），所以这里
+/// 的 transform 是**叠加在肢体自身变换之前**的模型空间变换：
+///     world = Attach · (R·(index + min_bounds) + T)
+/// 绕 Z 转就是炮塔朝向，绕 Y 转就是炮口俯仰（模型空间 X 向前、Y 横向、Z 向上，
+/// 实测四足机甲的四只脚分别在 ±Y、±X 上）。
+struct VxlAttach {
+    const VxlFile* file = nullptr;
+    float transform[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+};
+
 class VxlFile {
 public:
     /// 解析一整块 VXL 数据。返回 false 表示不是 VXL 或外层长度不自洽。
@@ -137,8 +158,29 @@ public:
     ///
     /// 投影：先套每根肢体的 3×4 变换进模型空间，再按 (x-y, (x+y)/2 - z)
     /// 做等距投影（z 向上），画家算法按 x+y+z 从远到近落格。
+    ///
+    /// pose 是 HVA 的姿态：指向 `Limb_Count() × 12` 个 float（行主序 3×4）。
+    /// 传 nullptr 就用 VXL 肢体尾自带的静态变换。
+    ///
+    /// attach/attach_count 是**附加模型层**：炮塔、炮管这些在 RA2 里是独立
+    /// 的 VXL 文件（`<名>TUR.VXL` / `<名>BARL.VXL`），三者共享同一模型空间
+    /// 原点 —— 实测 GTNK 车体顶面 z=11.01、GTNKTUR 底面 z=11.02、GTNKBARL
+    /// 从炮塔内部穿出。所以只要给这一层一个额外的 3×4（比如绕 Z 转炮塔朝向），
+    /// 就能直接叠上去，不需要坐标换算。见 VxlAttach。
+    ///
+    /// 【两套变换怎么统一】实测（3 个肢体名唯一的 VXL/HVA 配对，18 根肢体）：
+    ///   * 3×3 部分两边**完全相同**（最大差 0.000000）；
+    ///   * 平移 T_vxl == T_hva × det，det 恒为 1/12。
+    /// 于是统一成 `world = R·(index + min_bounds) + T`，其中 T 都换算到和
+    /// 体素坐标同一套单位：HVA 的平移乘 det，VXL 肢体尾的平移**已经是**
+    /// 那个单位了，直接用。
+    ///
+    /// 注意 det **只乘平移**。写成 `world = det×(R·v + T)` 会把体素坐标缩小
+    /// 12 倍而平移不变，13 根肢体立刻散成天上的一堆小方块（实测踩过）。
     bool Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
-                          float scale = 8.0f) const;
+                          float scale = 8.0f, const float* pose = nullptr,
+                          const VxlAttach* attach = nullptr,
+                          int attach_count = 0) const;
 
     void Reset();
 

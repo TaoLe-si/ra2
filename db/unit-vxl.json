@@ -1,0 +1,10365 @@
+[
+ {
+  "unit": "AMCV",
+  "image": "MCV",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "MCV.VXL",
+   "id": "0x4F7363FB",
+   "found": true
+  },
+  "hva": {
+   "name": "MCV.HVA",
+   "id": "0x40851010",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "HARV",
+  "image": "HARV",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "HARV.VXL",
+   "id": "0xAEE7BB83",
+   "found": true
+  },
+  "hva": {
+   "name": "HARV.HVA",
+   "id": "0x586D64CA",
+   "found": true
+  },
+  "turret_part": {
+   "name": "HARVTUR.VXL",
+   "id": "0x30EFD2B7",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "HARVBARL.VXL",
+   "id": "0x968058C6",
+   "found": false
+  },
+  "flh": "75,0,150",
+  "turret_offset": "50"
+ },
+ {
+  "unit": "APOC",
+  "image": "MTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "MTNK.VXL",
+   "id": "0x3F85975D",
+   "found": true
+  },
+  "hva": {
+   "name": "MTNK.HVA",
+   "id": "0xC90F4814",
+   "found": true
+  },
+  "turret_part": {
+   "name": "MTNKTUR.VXL",
+   "id": "0x17F0096E",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "MTNKBARL.VXL",
+   "id": "0xB19F831F",
+   "found": true
+  },
+  "flh": "190,25,120"
+ },
+ {
+  "unit": "HTNK",
+  "image": "HTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "HTNK.VXL",
+   "id": "0x77659939",
+   "found": true
+  },
+  "hva": {
+   "name": "HTNK.HVA",
+   "id": "0x81EF4670",
+   "found": true
+  },
+  "turret_part": {
+   "name": "HTNKTUR.VXL",
+   "id": "0x8F537E7E",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "HTNKBARL.VXL",
+   "id": "0x293CF40F",
+   "found": true
+  },
+  "flh": "150,0,100"
+ },
+ {
+  "unit": "SAPC",
+  "image": "TRS",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TRS.VXL",
+   "id": "0xBDE34F32",
+   "found": true
+  },
+  "hva": {
+   "name": "TRS.HVA",
+   "id": "0xB2153CD9",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,120"
+ },
+ {
+  "unit": "CAR",
+  "image": "CAR",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CAR.VXL",
+   "id": "0x56F722F6",
+   "found": true
+  },
+  "hva": {
+   "name": "CAR.HVA",
+   "id": "0x5901511D",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "BUS",
+  "image": "BUS",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BUS.VXL",
+   "id": "0xC2904910",
+   "found": true
+  },
+  "hva": {
+   "name": "BUS.HVA",
+   "id": "0xCD663AFB",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "WINI",
+  "image": "WINI",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "WINI.VXL",
+   "id": "0xAE3714D0",
+   "found": true
+  },
+  "hva": {
+   "name": "WINI.HVA",
+   "id": "0x58BDCB99",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "PICK",
+  "image": "PICK",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "PICK.VXL",
+   "id": "0x62AC5D77",
+   "found": true
+  },
+  "hva": {
+   "name": "PICK.HVA",
+   "id": "0x9426823E",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "MTNK",
+  "image": "GTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "GTNK.VXL",
+   "id": "0xAE458B95",
+   "found": true
+  },
+  "hva": {
+   "name": "GTNK.HVA",
+   "id": "0x58CF54DC",
+   "found": true
+  },
+  "turret_part": {
+   "name": "GTNKTUR.VXL",
+   "id": "0xFDC7E10F",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "GTNKBARL.VXL",
+   "id": "0x5BA86B7E",
+   "found": true
+  },
+  "flh": "150,0,100"
+ },
+ {
+  "unit": "HORV",
+  "image": "HORV",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "HORV.VXL",
+   "id": "0xFED8C0DE",
+   "found": true
+  },
+  "hva": {
+   "name": "HORV.HVA",
+   "id": "0x08521F97",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TRUCKA",
+  "image": "TRUCKA",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TRUCKA.VXL",
+   "id": "0xE099A7C1",
+   "found": true
+  },
+  "hva": {
+   "name": "TRUCKA.HVA",
+   "id": "0x30F64745",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "40,32,96"
+ },
+ {
+  "unit": "TRUCKB",
+  "image": "TRUCKB",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TRUCKB.VXL",
+   "id": "0xD171BD5C",
+   "found": true
+  },
+  "hva": {
+   "name": "TRUCKB.HVA",
+   "id": "0x011E5DD8",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "40,32,96"
+ },
+ {
+  "unit": "CARRIER",
+  "image": "CARRIER",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CARRIER.VXL",
+   "id": "0x9CF19F81",
+   "found": true
+  },
+  "hva": {
+   "name": "CARRIER.HVA",
+   "id": "0x9307EC6A",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "V3",
+  "image": "V3",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "V3.VXL",
+   "id": "0xC5AA2C67",
+   "found": true
+  },
+  "hva": {
+   "name": "V3.HVA",
+   "id": "0x15C5CCE3",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "-160,0,75"
+ },
+ {
+  "unit": "ZEP",
+  "image": "ZEP",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "ZEP.VXL",
+   "id": "0x8C848DEE",
+   "found": true
+  },
+  "hva": {
+   "name": "ZEP.HVA",
+   "id": "0x8372FE05",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "-50,0,-140"
+ },
+ {
+  "unit": "DRON",
+  "image": "DRON",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DRON.VXL",
+   "id": "0x40A6E599",
+   "found": false
+  },
+  "hva": {
+   "name": "DRON.HVA",
+   "id": "0xB62C3AD0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,30"
+ },
+ {
+  "unit": "HTK",
+  "image": "HTK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "HTK.VXL",
+   "id": "0x1AA2DE9A",
+   "found": true
+  },
+  "hva": {
+   "name": "HTK.HVA",
+   "id": "0x1554AD71",
+   "found": true
+  },
+  "turret_part": {
+   "name": "HTKTUR.VXL",
+   "id": "0xCFFFF656",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "HTKBARL.VXL",
+   "id": "0x0DF9614B",
+   "found": true
+  },
+  "flh": "65,0,220",
+  "turret_offset": "-80"
+ },
+ {
+  "unit": "DEST",
+  "image": "DEST",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "DEST.VXL",
+   "id": "0xBC9B0A1A",
+   "found": true
+  },
+  "hva": {
+   "name": "DEST.HVA",
+   "id": "0x4A11D553",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "280,0,120"
+ },
+ {
+  "unit": "SUB",
+  "image": "SUB",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "SUB.VXL",
+   "id": "0xBA0BA99B",
+   "found": true
+  },
+  "hva": {
+   "name": "SUB.HVA",
+   "id": "0xB5FDDA70",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "150,0,0"
+ },
+ {
+  "unit": "AEGIS",
+  "image": "AEGIS",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "AEGIS.VXL",
+   "id": "0x1C6278DC",
+   "found": true
+  },
+  "hva": {
+   "name": "AEGIS.HVA",
+   "id": "0xA3FB7F7B",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "LCRF",
+  "image": "LCRF",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "LCRF.VXL",
+   "id": "0xDDD233D2",
+   "found": true
+  },
+  "hva": {
+   "name": "LCRF.HVA",
+   "id": "0x2B58EC9B",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "DRED",
+  "image": "DRED",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "DRED.VXL",
+   "id": "0xAB8DDE5E",
+   "found": true
+  },
+  "hva": {
+   "name": "DRED.HVA",
+   "id": "0x5D070117",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "30,43,92"
+ },
+ {
+  "unit": "SHAD",
+  "image": "SHAD",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "SHAD.VXL",
+   "id": "0x85CC67FA",
+   "found": true
+  },
+  "hva": {
+   "name": "SHAD.HVA",
+   "id": "0x7346B8B3",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "175,0,10",
+  "turret_offset": "50"
+ },
+ {
+  "unit": "SQD",
+  "image": "SQD",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SQD.VXL",
+   "id": "0x981D6E95",
+   "found": false
+  },
+  "hva": {
+   "name": "SQD.HVA",
+   "id": "0x97EB1D7E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "DLPH",
+  "image": "DLPH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DLPH.VXL",
+   "id": "0x0A8747E4",
+   "found": false
+  },
+  "hva": {
+   "name": "DLPH.HVA",
+   "id": "0xFC0D98AD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SMCV",
+  "image": "SMCV",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "SMCV.VXL",
+   "id": "0x801C2DB4",
+   "found": true
+  },
+  "hva": {
+   "name": "SMCV.HVA",
+   "id": "0x7696F2FD",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TNKD",
+  "image": "TNKD",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TNKD.VXL",
+   "id": "0x4D4278BF",
+   "found": true
+  },
+  "hva": {
+   "name": "TNKD.HVA",
+   "id": "0xBBC8A7F6",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "200,0,55"
+ },
+ {
+  "unit": "HOWI",
+  "image": "HWTZ",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "HWTZ.VXL",
+   "id": "0xB9401C6B",
+   "found": true
+  },
+  "hva": {
+   "name": "HWTZ.HVA",
+   "id": "0x4FCAC322",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "200,0,55"
+ },
+ {
+  "unit": "TTNK",
+  "image": "TTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "TTNK.VXL",
+   "id": "0x5C71BD5D",
+   "found": true
+  },
+  "hva": {
+   "name": "TTNK.HVA",
+   "id": "0xAAFB6214",
+   "found": true
+  },
+  "turret_part": {
+   "name": "TTNKTUR.VXL",
+   "id": "0x8641DE03",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "TTNKBARL.VXL",
+   "id": "0x202E5472",
+   "found": false
+  },
+  "flh": "60,0,100"
+ },
+ {
+  "unit": "HIND",
+  "image": "HIND",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "HIND.VXL",
+   "id": "0xF33CF3E6",
+   "found": true
+  },
+  "hva": {
+   "name": "HIND.HVA",
+   "id": "0x05B62CAF",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "LTNK",
+  "image": "LTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "LTNK.VXL",
+   "id": "0xF32F97C3",
+   "found": true
+  },
+  "hva": {
+   "name": "LTNK.HVA",
+   "id": "0x05A5488A",
+   "found": true
+  },
+  "turret_part": {
+   "name": "LTNKTUR.VXL",
+   "id": "0x8C554501",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "LTNKBARL.VXL",
+   "id": "0x2A3ACF70",
+   "found": true
+  },
+  "flh": "225,0,100"
+ },
+ {
+  "unit": "CMON",
+  "image": "CMON",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CMON.VXL",
+   "id": "0xDBF500A7",
+   "found": true
+  },
+  "hva": {
+   "name": "CMON.HVA",
+   "id": "0x2D7FDFEE",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CMIN",
+  "image": "CMIN",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CMIN.VXL",
+   "id": "0x0DACE3BA",
+   "found": true
+  },
+  "hva": {
+   "name": "CMIN.HVA",
+   "id": "0xFB263CF3",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SREF",
+  "image": "SREF",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "SREF.VXL",
+   "id": "0xA733B50C",
+   "found": true
+  },
+  "hva": {
+   "name": "SREF.HVA",
+   "id": "0x51B96A45",
+   "found": true
+  },
+  "turret_part": {
+   "name": "SREFTUR.VXL",
+   "id": "0x13C3E16F",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "SREFBARL.VXL",
+   "id": "0xB5AC6B1E",
+   "found": false
+  }
+ },
+ {
+  "unit": "XCOMET",
+  "image": "HTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "HTNK.VXL",
+   "id": "0x77659939",
+   "found": true
+  },
+  "hva": {
+   "name": "HTNK.HVA",
+   "id": "0x81EF4670",
+   "found": true
+  },
+  "turret_part": {
+   "name": "HTNKTUR.VXL",
+   "id": "0x8F537E7E",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "HTNKBARL.VXL",
+   "id": "0x293CF40F",
+   "found": true
+  },
+  "flh": "150,0,100"
+ },
+ {
+  "unit": "HYD",
+  "image": "HYD",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "HYD.VXL",
+   "id": "0x8A230D8F",
+   "found": true
+  },
+  "hva": {
+   "name": "HYD.HVA",
+   "id": "0x85D57E64",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "65,0,180"
+ },
+ {
+  "unit": "MGTK",
+  "image": "RTNK",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "RTNK.VXL",
+   "id": "0x9A1EB4DA",
+   "found": true
+  },
+  "hva": {
+   "name": "RTNK.HVA",
+   "id": "0x6C946B93",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "130,0,80"
+ },
+ {
+  "unit": "FV",
+  "image": "FV",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "FV.VXL",
+   "id": "0x609F7E0E",
+   "found": true
+  },
+  "hva": {
+   "name": "FV.HVA",
+   "id": "0xB0F09E8A",
+   "found": true
+  },
+  "turret_part": {
+   "name": "FVTUR.VXL",
+   "id": "0x1529B889",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "FVBARL.VXL",
+   "id": "0x59C45EF7",
+   "found": false
+  }
+ },
+ {
+  "unit": "DeathDummy",
+  "image": "DeathDummy",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DeathDummy.VXL",
+   "id": "0x748CB059",
+   "found": false
+  },
+  "hva": {
+   "name": "DeathDummy.HVA",
+   "id": "0xA4E350DD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "VLAD",
+  "image": "VLAD",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "VLAD.VXL",
+   "id": "0x39634D8D",
+   "found": true
+  },
+  "hva": {
+   "name": "VLAD.HVA",
+   "id": "0xCFE992C4",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "30,43,92"
+ },
+ {
+  "unit": "DTRUCK",
+  "image": "TRUCKA",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TRUCKA.VXL",
+   "id": "0xE099A7C1",
+   "found": true
+  },
+  "hva": {
+   "name": "TRUCKA.HVA",
+   "id": "0x30F64745",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "40,32,96"
+ },
+ {
+  "unit": "PROPA",
+  "image": "PROPA",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "PROPA.VXL",
+   "id": "0x21388A8F",
+   "found": true
+  },
+  "hva": {
+   "name": "PROPA.HVA",
+   "id": "0x9EA18D28",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CONA",
+  "image": "CONA",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CONA.VXL",
+   "id": "0x056655FA",
+   "found": true
+  },
+  "hva": {
+   "name": "CONA.HVA",
+   "id": "0xF3EC8AB3",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "COP",
+  "image": "COP",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "COP.VXL",
+   "id": "0x4B00F8A0",
+   "found": true
+  },
+  "hva": {
+   "name": "COP.HVA",
+   "id": "0x44F68B4B",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "EUROC",
+  "image": "EUROC",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "EUROC.VXL",
+   "id": "0x7FB48565",
+   "found": true
+  },
+  "hva": {
+   "name": "EUROC.HVA",
+   "id": "0xC02D82C2",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "LIMO",
+  "image": "LIMO",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "LIMO.VXL",
+   "id": "0x8632BEA3",
+   "found": true
+  },
+  "hva": {
+   "name": "LIMO.HVA",
+   "id": "0x70B861EA",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "STANG",
+  "image": "STANG",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "STANG.VXL",
+   "id": "0x02B732EB",
+   "found": true
+  },
+  "hva": {
+   "name": "STANG.HVA",
+   "id": "0xBD2E354C",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SUVB",
+  "image": "SUVB",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "SUVB.VXL",
+   "id": "0x12565D77",
+   "found": true
+  },
+  "hva": {
+   "name": "SUVB.HVA",
+   "id": "0xE4DC823E",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SUVW",
+  "image": "SUVW",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "SUVW.VXL",
+   "id": "0xBA564585",
+   "found": true
+  },
+  "hva": {
+   "name": "SUVW.HVA",
+   "id": "0x4CDC9ACC",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TAXI",
+  "image": "TAXI",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TAXI.VXL",
+   "id": "0xC6D8BCD2",
+   "found": true
+  },
+  "hva": {
+   "name": "TAXI.HVA",
+   "id": "0x3052639B",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "PTRUCK",
+  "image": "PTRUCK",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "PTRUCK.VXL",
+   "id": "0x41B93284",
+   "found": true
+  },
+  "hva": {
+   "name": "PTRUCK.HVA",
+   "id": "0x91D6D200",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CRUISE",
+  "image": "CRUISE",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CRUISE.VXL",
+   "id": "0x562627A1",
+   "found": true
+  },
+  "hva": {
+   "name": "CRUISE.HVA",
+   "id": "0x8649C725",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TUG",
+  "image": "TUG",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "TUG.VXL",
+   "id": "0xE0033131",
+   "found": true
+  },
+  "hva": {
+   "name": "TUG.HVA",
+   "id": "0xEFF542DA",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CDEST",
+  "image": "CDEST",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CDEST.VXL",
+   "id": "0x06092848",
+   "found": true
+  },
+  "hva": {
+   "name": "CDEST.HVA",
+   "id": "0xB9902FEF",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "285,0,130"
+ },
+ {
+  "unit": "YHVR",
+  "image": "YHVR",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "YHVR.VXL",
+   "id": "0xE57F2B33",
+   "found": true
+  },
+  "hva": {
+   "name": "YHVR.HVA",
+   "id": "0x13F5F47A",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,120"
+ },
+ {
+  "unit": "PCV",
+  "image": "PCV",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "PCV.VXL",
+   "id": "0xA8CD4701",
+   "found": true
+  },
+  "hva": {
+   "name": "PCV.HVA",
+   "id": "0xA73B34EA",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SMIN",
+  "image": "SMIN",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "SMIN.VXL",
+   "id": "0x7117D291",
+   "found": true
+  },
+  "hva": {
+   "name": "SMIN.HVA",
+   "id": "0x879D0DD8",
+   "found": true
+  },
+  "turret_part": {
+   "name": "SMINTUR.VXL",
+   "id": "0x8F2993F4",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "SMINBARL.VXL",
+   "id": "0x29461985",
+   "found": false
+  },
+  "flh": "120,0,185",
+  "turret_offset": "70"
+ },
+ {
+  "unit": "SMON",
+  "image": "CMON",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CMON.VXL",
+   "id": "0xDBF500A7",
+   "found": true
+  },
+  "hva": {
+   "name": "CMON.HVA",
+   "id": "0x2D7FDFEE",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YCAB",
+  "image": "YCAB",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "YCAB.VXL",
+   "id": "0x994BDA68",
+   "found": true
+  },
+  "hva": {
+   "name": "YCAB.HVA",
+   "id": "0x6FC10521",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YTNK",
+  "image": "YTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "YTNK.VXL",
+   "id": "0xC774A88C",
+   "found": true
+  },
+  "hva": {
+   "name": "YTNK.HVA",
+   "id": "0x31FE77C5",
+   "found": true
+  },
+  "turret_part": {
+   "name": "YTNKTUR.VXL",
+   "id": "0x18EEDFED",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "YTNKBARL.VXL",
+   "id": "0xBE81559C",
+   "found": false
+  },
+  "flh": "160,30,150"
+ },
+ {
+  "unit": "BFRT",
+  "image": "BFRT",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BFRT.VXL",
+   "id": "0x8040CAA5",
+   "found": true
+  },
+  "hva": {
+   "name": "BFRT.HVA",
+   "id": "0x76CA15EC",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "220,0,130"
+ },
+ {
+  "unit": "TELE",
+  "image": "TELE",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "TELE.VXL",
+   "id": "0x6F20354D",
+   "found": true
+  },
+  "hva": {
+   "name": "TELE.HVA",
+   "id": "0x99AAEA04",
+   "found": true
+  },
+  "turret_part": {
+   "name": "TELETUR.VXL",
+   "id": "0x250ECEA7",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "TELEBARL.VXL",
+   "id": "0x836144D6",
+   "found": false
+  },
+  "flh": "85,0,130",
+  "turret_offset": "-100"
+ },
+ {
+  "unit": "CAOS",
+  "image": "CAOS",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CAOS.VXL",
+   "id": "0x842539E0",
+   "found": true
+  },
+  "hva": {
+   "name": "CAOS.HVA",
+   "id": "0x72AFE6A9",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "DDBX",
+  "image": "DDBX",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "DDBX.VXL",
+   "id": "0x17963D91",
+   "found": true
+  },
+  "hva": {
+   "name": "DDBX.HVA",
+   "id": "0xE11CE2D8",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "BCAB",
+  "image": "BCAB",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BCAB.VXL",
+   "id": "0xB89AF715",
+   "found": true
+  },
+  "hva": {
+   "name": "BCAB.HVA",
+   "id": "0x4E10285C",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "BSUB",
+  "image": "BSUB",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BSUB.VXL",
+   "id": "0x47032B56",
+   "found": true
+  },
+  "hva": {
+   "name": "BSUB.HVA",
+   "id": "0xB189F41F",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "225,65,0"
+ },
+ {
+  "unit": "SCHP",
+  "image": "SCHP",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "SCHP.VXL",
+   "id": "0x35A4538A",
+   "found": true
+  },
+  "hva": {
+   "name": "SCHP.HVA",
+   "id": "0xC32E8CC3",
+   "found": true
+  },
+  "turret_part": {
+   "name": "SCHPTUR.VXL",
+   "id": "0x569F4A2F",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "SCHPBARL.VXL",
+   "id": "0xF0F0C05E",
+   "found": false
+  },
+  "flh": "0,0,50"
+ },
+ {
+  "unit": "JEEP",
+  "image": "JEEP",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "JEEP.VXL",
+   "id": "0x891E5F6E",
+   "found": true
+  },
+  "hva": {
+   "name": "JEEP.HVA",
+   "id": "0x7F948027",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "MIND",
+  "image": "MIND",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "MIND.VXL",
+   "id": "0xBBDCFD82",
+   "found": true
+  },
+  "hva": {
+   "name": "MIND.HVA",
+   "id": "0x4D5622CB",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "DISK",
+  "image": "DISK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "DISK.VXL",
+   "id": "0x998B603D",
+   "found": true
+  },
+  "hva": {
+   "name": "DISK.HVA",
+   "id": "0x6F01BF74",
+   "found": true
+  },
+  "turret_part": {
+   "name": "DISKTUR.VXL",
+   "id": "0x3D6BB06B",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "DISKBARL.VXL",
+   "id": "0x9B043A1A",
+   "found": false
+  },
+  "flh": "0,0,75",
+  "turret_offset": "0"
+ },
+ {
+  "unit": "UTNK",
+  "image": "HTNK",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "HTNK.VXL",
+   "id": "0x77659939",
+   "found": true
+  },
+  "hva": {
+   "name": "HTNK.HVA",
+   "id": "0x81EF4670",
+   "found": true
+  },
+  "turret_part": {
+   "name": "HTNKTUR.VXL",
+   "id": "0x8F537E7E",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "HTNKBARL.VXL",
+   "id": "0x293CF40F",
+   "found": true
+  },
+  "flh": "150,0,100"
+ },
+ {
+  "unit": "ROBO",
+  "image": "ROBO",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "ROBO.VXL",
+   "id": "0x7D851A55",
+   "found": true
+  },
+  "hva": {
+   "name": "ROBO.HVA",
+   "id": "0x8B0FC51C",
+   "found": true
+  },
+  "turret_part": {
+   "name": "ROBOTUR.VXL",
+   "id": "0xA37B89EE",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "ROBOBARL.VXL",
+   "id": "0x0514039F",
+   "found": false
+  },
+  "flh": "150,0,100"
+ },
+ {
+  "unit": "YDUM",
+  "image": "YDUM",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YDUM.VXL",
+   "id": "0x46FB33BA",
+   "found": false
+  },
+  "hva": {
+   "name": "YDUM.HVA",
+   "id": "0xB071ECF3",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SCHD",
+  "image": "SCHD",
+  "voxel": true,
+  "turret": true,
+  "body": {
+   "name": "SCHD.VXL",
+   "id": "0xA0C462C8",
+   "found": true
+  },
+  "hva": {
+   "name": "SCHD.HVA",
+   "id": "0x564EBD81",
+   "found": true
+  },
+  "turret_part": {
+   "name": "SCHDTUR.VXL",
+   "id": "0xA7B35952",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "SCHDBARL.VXL",
+   "id": "0x01DCD323",
+   "found": false
+  },
+  "flh": "200,0,250"
+ },
+ {
+  "unit": "DOLY",
+  "image": "DOLY",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "DOLY.VXL",
+   "id": "0x12FB21AB",
+   "found": true
+  },
+  "hva": {
+   "name": "DOLY.HVA",
+   "id": "0xE471FEE2",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CBLC",
+  "image": "CBLC",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CBLC.VXL",
+   "id": "0x53B9C651",
+   "found": true
+  },
+  "hva": {
+   "name": "CBLC.HVA",
+   "id": "0xA5331918",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "FTRK",
+  "image": "FTRK",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "FTRK.VXL",
+   "id": "0x16FB49EB",
+   "found": true
+  },
+  "hva": {
+   "name": "FTRK.HVA",
+   "id": "0xE07196A2",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "AMBU",
+  "image": "AMBU",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "AMBU.VXL",
+   "id": "0x327EB297",
+   "found": true
+  },
+  "hva": {
+   "name": "AMBU.HVA",
+   "id": "0xC4F46DDE",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVP",
+  "image": "CIVP",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "CIVP.VXL",
+   "id": "0xD4B35E04",
+   "found": true
+  },
+  "hva": {
+   "name": "CIVP.HVA",
+   "id": "0x2239814D",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "APACHE",
+  "image": "APACHE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "APACHE.VXL",
+   "id": "0x78CB868E",
+   "found": true
+  },
+  "hva": {
+   "name": "APACHE.HVA",
+   "id": "0xA8A4660A",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "ORCA",
+  "image": "FALC",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "FALC.VXL",
+   "id": "0x2AB1D2A8",
+   "found": true
+  },
+  "hva": {
+   "name": "FALC.HVA",
+   "id": "0xDC3B0DE1",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "HORNET",
+  "image": "HORNET",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "HORNET.VXL",
+   "id": "0xBF16D305",
+   "found": true
+  },
+  "hva": {
+   "name": "HORNET.HVA",
+   "id": "0x6F793381",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,32,0"
+ },
+ {
+  "unit": "V3ROCKET",
+  "image": "V3ROCKET",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "V3ROCKET.VXL",
+   "id": "0xF31DC88C",
+   "found": true
+  },
+  "hva": {
+   "name": "V3ROCKET.HVA",
+   "id": "0x059717C5",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "ASW",
+  "image": "ASW",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "ASW.VXL",
+   "id": "0xB45E39DF",
+   "found": true
+  },
+  "hva": {
+   "name": "ASW.HVA",
+   "id": "0xBBA84A34",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,32,0"
+ },
+ {
+  "unit": "DMISL",
+  "image": "DMISL",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "DMISL.VXL",
+   "id": "0xBCBE3552",
+   "found": true
+  },
+  "hva": {
+   "name": "DMISL.HVA",
+   "id": "0x032732F5",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "PDPLANE",
+  "image": "PDPLANE",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "PDPLANE.VXL",
+   "id": "0x39E6387D",
+   "found": true
+  },
+  "hva": {
+   "name": "PDPLANE.HVA",
+   "id": "0x36104B96",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,32,0"
+ },
+ {
+  "unit": "BEAG",
+  "image": "BEAG",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BEAG.VXL",
+   "id": "0x13AA4D5F",
+   "found": true
+  },
+  "hva": {
+   "name": "BEAG.HVA",
+   "id": "0xE5209216",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARGOPLANE",
+  "image": "PDPLANE",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "PDPLANE.VXL",
+   "id": "0x39E6387D",
+   "found": true
+  },
+  "hva": {
+   "name": "PDPLANE.HVA",
+   "id": "0x36104B96",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,32,0"
+ },
+ {
+  "unit": "BPLN",
+  "image": "BPLN",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BPLN.VXL",
+   "id": "0x97C28F99",
+   "found": true
+  },
+  "hva": {
+   "name": "BPLN.HVA",
+   "id": "0x614850D0",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "25,100,0"
+ },
+ {
+  "unit": "SPYP",
+  "image": "SPYP",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "SPYP.VXL",
+   "id": "0xAB1804E7",
+   "found": true
+  },
+  "hva": {
+   "name": "SPYP.HVA",
+   "id": "0x5D92DBAE",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CMISL",
+  "image": "BSUBMISL",
+  "voxel": true,
+  "turret": false,
+  "body": {
+   "name": "BSUBMISL.VXL",
+   "id": "0xB84E4AC7",
+   "found": true
+  },
+  "hva": {
+   "name": "BSUBMISL.HVA",
+   "id": "0x4EC4958E",
+   "found": true
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "E1",
+  "image": "GI",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GI.VXL",
+   "id": "0x3DA392B7",
+   "found": false
+  },
+  "hva": {
+   "name": "GI.HVA",
+   "id": "0xEDCC7233",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,105"
+ },
+ {
+  "unit": "E2",
+  "image": "CONS",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CONS.VXL",
+   "id": "0x1F469118",
+   "found": false
+  },
+  "hva": {
+   "name": "CONS.HVA",
+   "id": "0xE9CC4E51",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "60,0,100"
+ },
+ {
+  "unit": "SHK",
+  "image": "SHK",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SHK.VXL",
+   "id": "0x9B0D055D",
+   "found": false
+  },
+  "hva": {
+   "name": "SHK.HVA",
+   "id": "0x94FB76B6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "ENGINEER",
+  "image": "ENGINEER",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ENGINEER.VXL",
+   "id": "0x4BCA407E",
+   "found": false
+  },
+  "hva": {
+   "name": "ENGINEER.HVA",
+   "id": "0xBD409F37",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "JUMPJET",
+  "image": "ROCK",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ROCK.VXL",
+   "id": "0x43596F30",
+   "found": false
+  },
+  "hva": {
+   "name": "ROCK.HVA",
+   "id": "0xB5D3B079",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,0,120"
+ },
+ {
+  "unit": "GHOST",
+  "image": "SEAL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SEAL.VXL",
+   "id": "0xD46B4DFB",
+   "found": false
+  },
+  "hva": {
+   "name": "SEAL.HVA",
+   "id": "0x22E192B2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,0,100"
+ },
+ {
+  "unit": "YURI",
+  "image": "YURI",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YURI.VXL",
+   "id": "0x6FD732B8",
+   "found": false
+  },
+  "hva": {
+   "name": "YURI.HVA",
+   "id": "0x995DEDF1",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "15,0,140"
+ },
+ {
+  "unit": "IVAN",
+  "image": "IVAN",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "IVAN.VXL",
+   "id": "0x15E6B52B",
+   "found": false
+  },
+  "hva": {
+   "name": "IVAN.HVA",
+   "id": "0xE36C6A62",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,85"
+ },
+ {
+  "unit": "DESO",
+  "image": "DESO",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DESO.VXL",
+   "id": "0xABABAC89",
+   "found": false
+  },
+  "hva": {
+   "name": "DESO.HVA",
+   "id": "0x5D2173C0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "DOG",
+  "image": "DOG",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DOG.VXL",
+   "id": "0x5F16C39A",
+   "found": false
+  },
+  "hva": {
+   "name": "DOG.HVA",
+   "id": "0x50E0B071",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,0"
+ },
+ {
+  "unit": "CIV1",
+  "image": "CIV1",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIV1.VXL",
+   "id": "0x70E100F9",
+   "found": false
+  },
+  "hva": {
+   "name": "CIV1.HVA",
+   "id": "0x866BDFB0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIV2",
+  "image": "CIV2",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIV2.VXL",
+   "id": "0x37417A29",
+   "found": false
+  },
+  "hva": {
+   "name": "CIV2.HVA",
+   "id": "0xC1CBA560",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIV3",
+  "image": "CIV3",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIV3.VXL",
+   "id": "0x0A215399",
+   "found": false
+  },
+  "hva": {
+   "name": "CIV3.HVA",
+   "id": "0xFCAB8CD0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CTECH",
+  "image": "CIV3",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIV3.VXL",
+   "id": "0x0A215399",
+   "found": false
+  },
+  "hva": {
+   "name": "CIV3.HVA",
+   "id": "0xFCAB8CD0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "WEEDGUY",
+  "image": "WEEDGUY",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "WEEDGUY.VXL",
+   "id": "0x210DE5D5",
+   "found": false
+  },
+  "hva": {
+   "name": "WEEDGUY.HVA",
+   "id": "0x2EFB963E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CLEG",
+  "image": "CLEG",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CLEG.VXL",
+   "id": "0xD1094A04",
+   "found": false
+  },
+  "hva": {
+   "name": "CLEG.HVA",
+   "id": "0x2783954D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "SPY",
+  "image": "SPY",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SPY.VXL",
+   "id": "0x81227464",
+   "found": false
+  },
+  "hva": {
+   "name": "SPY.HVA",
+   "id": "0x8ED4078F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CCOMAND",
+  "image": "CCOMAND",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CCOMAND.VXL",
+   "id": "0x61D90F71",
+   "found": false
+  },
+  "hva": {
+   "name": "CCOMAND.HVA",
+   "id": "0x6E2F7C9A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,0,100"
+ },
+ {
+  "unit": "PTROOP",
+  "image": "PTROOP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "PTROOP.VXL",
+   "id": "0x4A212710",
+   "found": false
+  },
+  "hva": {
+   "name": "PTROOP.HVA",
+   "id": "0x9A4EC794",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "15,0,140"
+ },
+ {
+  "unit": "CIVAN",
+  "image": "CIVAN",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVAN.VXL",
+   "id": "0x6E4918B0",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVAN.HVA",
+   "id": "0xD1D01F17",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,85"
+ },
+ {
+  "unit": "YURIPR",
+  "image": "YURIX",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YURIX.VXL",
+   "id": "0x246D71EF",
+   "found": false
+  },
+  "hva": {
+   "name": "YURIX.HVA",
+   "id": "0x9BF47648",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "10,0,195"
+ },
+ {
+  "unit": "SNIPE",
+  "image": "SNIPE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SNIPE.VXL",
+   "id": "0x7B1E70CE",
+   "found": false
+  },
+  "hva": {
+   "name": "SNIPE.HVA",
+   "id": "0xC4877769",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,85"
+ },
+ {
+  "unit": "COW",
+  "image": "COW",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "COW.VXL",
+   "id": "0x5605C818",
+   "found": false
+  },
+  "hva": {
+   "name": "COW.HVA",
+   "id": "0x59F3BBF3",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,85"
+ },
+ {
+  "unit": "ALL",
+  "image": "ALL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ALL.VXL",
+   "id": "0x4CD927A0",
+   "found": false
+  },
+  "hva": {
+   "name": "ALL.HVA",
+   "id": "0x432F544B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TANY",
+  "image": "TANY",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "TANY.VXL",
+   "id": "0x73B7CAD6",
+   "found": false
+  },
+  "hva": {
+   "name": "TANY.HVA",
+   "id": "0x853D159F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,0,100"
+ },
+ {
+  "unit": "FLAKT",
+  "image": "FLAKT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "FLAKT.VXL",
+   "id": "0x3A9AFE0E",
+   "found": false
+  },
+  "hva": {
+   "name": "FLAKT.HVA",
+   "id": "0x8503F9A9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "90,0,175"
+ },
+ {
+  "unit": "TERROR",
+  "image": "TRST",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "TRST.VXL",
+   "id": "0x62599971",
+   "found": false
+  },
+  "hva": {
+   "name": "TRST.HVA",
+   "id": "0x94D34638",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SENGINEER",
+  "image": "ENGINEER",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ENGINEER.VXL",
+   "id": "0x4BCA407E",
+   "found": false
+  },
+  "hva": {
+   "name": "ENGINEER.HVA",
+   "id": "0xBD409F37",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "ADOG",
+  "image": "ADOG",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ADOG.VXL",
+   "id": "0x01582078",
+   "found": false
+  },
+  "hva": {
+   "name": "ADOG.HVA",
+   "id": "0xF7D2FF31",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,0"
+ },
+ {
+  "unit": "VLADIMIR",
+  "image": "VLADIMIR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "VLADIMIR.VXL",
+   "id": "0xDA99D6A6",
+   "found": false
+  },
+  "hva": {
+   "name": "VLADIMIR.HVA",
+   "id": "0x2C1309EF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "PENTGEN",
+  "image": "PENTGEN",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "PENTGEN.VXL",
+   "id": "0x78B81B31",
+   "found": false
+  },
+  "hva": {
+   "name": "PENTGEN.HVA",
+   "id": "0x774E68DA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "PRES",
+  "image": "PRES",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "PRES.VXL",
+   "id": "0x81BCAA1D",
+   "found": false
+  },
+  "hva": {
+   "name": "PRES.HVA",
+   "id": "0x77367554",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "SSRV",
+  "image": "SSRV",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SSRV.VXL",
+   "id": "0x7F771B19",
+   "found": false
+  },
+  "hva": {
+   "name": "SSRV.HVA",
+   "id": "0x89FDC450",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "CIVA",
+  "image": "CIVA",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVA.VXL",
+   "id": "0x8933E036",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVA.HVA",
+   "id": "0x7FB93F7F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVB",
+  "image": "CIVB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVB.VXL",
+   "id": "0xCE939AE6",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVB.HVA",
+   "id": "0x381945AF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVC",
+  "image": "CIVC",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVC.VXL",
+   "id": "0xF3F3B356",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVC.HVA",
+   "id": "0x05796C1F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVBBP",
+  "image": "CIVBBP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVBBP.VXL",
+   "id": "0x3764C32C",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVBBP.HVA",
+   "id": "0xE70B23A8",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVBFM",
+  "image": "CIVBFM",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVBFM.VXL",
+   "id": "0xB52730D8",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVBFM.HVA",
+   "id": "0x6548D05C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVBF",
+  "image": "CIVBF",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVBF.VXL",
+   "id": "0x84213FC0",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVBF.HVA",
+   "id": "0x3BB83867",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVBTM",
+  "image": "CIVBTM",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVBTM.VXL",
+   "id": "0x8BB9068E",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVBTM.HVA",
+   "id": "0x5BD6E60A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVSFM",
+  "image": "CIVSFM",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVSFM.VXL",
+   "id": "0x0E9C66EA",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVSFM.HVA",
+   "id": "0xDEF3866E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVSF",
+  "image": "CIVSF",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVSF.VXL",
+   "id": "0x3F9A69F2",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVSF.HVA",
+   "id": "0x80036E55",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CIVSTM",
+  "image": "CIVSTM",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVSTM.VXL",
+   "id": "0x300250BC",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVSTM.HVA",
+   "id": "0xE06DB038",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "POLARB",
+  "image": "POLARB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "POLARB.VXL",
+   "id": "0x21ACA74B",
+   "found": false
+  },
+  "hva": {
+   "name": "POLARB.HVA",
+   "id": "0xF1C347CF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "JOSH",
+  "image": "JOSH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "JOSH.VXL",
+   "id": "0xA8713DE5",
+   "found": false
+  },
+  "hva": {
+   "name": "JOSH.HVA",
+   "id": "0x5EFBE2AC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YENGINEER",
+  "image": "ENGINEER",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ENGINEER.VXL",
+   "id": "0x4BCA407E",
+   "found": false
+  },
+  "hva": {
+   "name": "ENGINEER.HVA",
+   "id": "0xBD409F37",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GGI",
+  "image": "GGI",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GGI.VXL",
+   "id": "0xD87CEB6E",
+   "found": false
+  },
+  "hva": {
+   "name": "GGI.HVA",
+   "id": "0xD78A9885",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,105"
+ },
+ {
+  "unit": "INIT",
+  "image": "INIT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "INIT.VXL",
+   "id": "0x87D46ACC",
+   "found": false
+  },
+  "hva": {
+   "name": "INIT.HVA",
+   "id": "0x715EB585",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "60,0,100"
+ },
+ {
+  "unit": "BORIS",
+  "image": "BORIS",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "BORIS.VXL",
+   "id": "0x48D4B804",
+   "found": false
+  },
+  "hva": {
+   "name": "BORIS.HVA",
+   "id": "0xF74DBFA3",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,0,100"
+ },
+ {
+  "unit": "BRUTE",
+  "image": "BRUTE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "BRUTE.VXL",
+   "id": "0x2831B73B",
+   "found": false
+  },
+  "hva": {
+   "name": "BRUTE.HVA",
+   "id": "0x97A8B09C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "VIRUS",
+  "image": "VIRUS",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "VIRUS.VXL",
+   "id": "0xE58B15A1",
+   "found": false
+  },
+  "hva": {
+   "name": "VIRUS.HVA",
+   "id": "0x5A121206",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "80,0,85"
+ },
+ {
+  "unit": "CLNT",
+  "image": "CIVC",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CIVC.VXL",
+   "id": "0xF3F3B356",
+   "found": false
+  },
+  "hva": {
+   "name": "CIVC.HVA",
+   "id": "0x05796C1F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "ARND",
+  "image": "ARND",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ARND.VXL",
+   "id": "0x89AA20F9",
+   "found": false
+  },
+  "hva": {
+   "name": "ARND.HVA",
+   "id": "0x7F20FFB0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "STLN",
+  "image": "STLN",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "STLN.VXL",
+   "id": "0xD39C9A3F",
+   "found": false
+  },
+  "hva": {
+   "name": "STLN.HVA",
+   "id": "0x25164576",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "CAML",
+  "image": "CAML",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAML.VXL",
+   "id": "0x2B5D98B8",
+   "found": false
+  },
+  "hva": {
+   "name": "CAML.HVA",
+   "id": "0xDDD747F1",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "EINS",
+  "image": "EINS",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "EINS.VXL",
+   "id": "0xBAF9ADA5",
+   "found": false
+  },
+  "hva": {
+   "name": "EINS.HVA",
+   "id": "0x4C7372EC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "MUMY",
+  "image": "MUMY",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "MUMY.VXL",
+   "id": "0x05462AA5",
+   "found": false
+  },
+  "hva": {
+   "name": "MUMY.HVA",
+   "id": "0xF3CCF5EC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "RMNV",
+  "image": "RMNV",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "RMNV.VXL",
+   "id": "0xF0283EF4",
+   "found": false
+  },
+  "hva": {
+   "name": "RMNV.HVA",
+   "id": "0x06A2E1BD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "100,-25,135"
+ },
+ {
+  "unit": "LUNR",
+  "image": "LUNR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "LUNR.VXL",
+   "id": "0x38A86984",
+   "found": false
+  },
+  "hva": {
+   "name": "LUNR.HVA",
+   "id": "0xCE22B6CD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "75,-50,85"
+ },
+ {
+  "unit": "DNOA",
+  "image": "DNOA",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DNOA.VXL",
+   "id": "0x628884F2",
+   "found": false
+  },
+  "hva": {
+   "name": "DNOA.HVA",
+   "id": "0x94025BBB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "DNOB",
+  "image": "DNOB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DNOB.VXL",
+   "id": "0x2528FE22",
+   "found": false
+  },
+  "hva": {
+   "name": "DNOB.HVA",
+   "id": "0xD3A2216B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SLAV",
+  "image": "SLAV",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "SLAV.VXL",
+   "id": "0x6BA3870B",
+   "found": false
+  },
+  "hva": {
+   "name": "SLAV.HVA",
+   "id": "0x9D295842",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "60,0,100"
+ },
+ {
+  "unit": "WWLF",
+  "image": "MUMY",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "MUMY.VXL",
+   "id": "0x05462AA5",
+   "found": false
+  },
+  "hva": {
+   "name": "MUMY.HVA",
+   "id": "0xF3CCF5EC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YDOG",
+  "image": "DOG",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "DOG.VXL",
+   "id": "0x5F16C39A",
+   "found": false
+  },
+  "hva": {
+   "name": "DOG.HVA",
+   "id": "0x50E0B071",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,0"
+ },
+ {
+  "unit": "YADOG",
+  "image": "ADOG",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "ADOG.VXL",
+   "id": "0x01582078",
+   "found": false
+  },
+  "hva": {
+   "name": "ADOG.HVA",
+   "id": "0xF7D2FF31",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,0"
+ },
+ {
+  "unit": "GAPOWR",
+  "image": "GAPOWR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAPOWR.VXL",
+   "id": "0xD134A060",
+   "found": false
+  },
+  "hva": {
+   "name": "GAPOWR.HVA",
+   "id": "0x015B40E4",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAREFN",
+  "image": "GAREFN",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAREFN.VXL",
+   "id": "0x50803DCC",
+   "found": false
+  },
+  "hva": {
+   "name": "GAREFN.HVA",
+   "id": "0x80EFDD48",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GACNST",
+  "image": "GACNST",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GACNST.VXL",
+   "id": "0xED4CB508",
+   "found": false
+  },
+  "hva": {
+   "name": "GACNST.HVA",
+   "id": "0x3D23558C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAPILE",
+  "image": "GAPILE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAPILE.VXL",
+   "id": "0x218656D7",
+   "found": false
+  },
+  "hva": {
+   "name": "GAPILE.HVA",
+   "id": "0xF1E9B653",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GASAND",
+  "image": "GASAND",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GASAND.VXL",
+   "id": "0x953B4305",
+   "found": false
+  },
+  "hva": {
+   "name": "GASAND.HVA",
+   "id": "0x4554A381",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GADEPT",
+  "image": "GADEPT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GADEPT.VXL",
+   "id": "0x034A374F",
+   "found": false
+  },
+  "hva": {
+   "name": "GADEPT.HVA",
+   "id": "0xD325D7CB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GATECH",
+  "image": "GATECH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GATECH.VXL",
+   "id": "0x76AE76D5",
+   "found": false
+  },
+  "hva": {
+   "name": "GATECH.HVA",
+   "id": "0xA6C19651",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAWEAP",
+  "image": "GAWEAP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAWEAP.VXL",
+   "id": "0x8B8D1802",
+   "found": false
+  },
+  "hva": {
+   "name": "GAWEAP.HVA",
+   "id": "0x5BE2F886",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALAB",
+  "image": "CALAB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALAB.VXL",
+   "id": "0xB3A9FD9B",
+   "found": false
+  },
+  "hva": {
+   "name": "CALAB.HVA",
+   "id": "0x0C30FA3C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAPOWR",
+  "image": "NAPOWR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAPOWR.VXL",
+   "id": "0x4C9D9AF1",
+   "found": false
+  },
+  "hva": {
+   "name": "NAPOWR.HVA",
+   "id": "0x9CF27A75",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NATECH",
+  "image": "NATECH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NATECH.VXL",
+   "id": "0xEB074C44",
+   "found": false
+  },
+  "hva": {
+   "name": "NATECH.HVA",
+   "id": "0x3B68ACC0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAHAND",
+  "image": "NAHAND",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAHAND.VXL",
+   "id": "0xD7DC038B",
+   "found": false
+  },
+  "hva": {
+   "name": "NAHAND.HVA",
+   "id": "0x07B3E30F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAWALL",
+  "image": "GAWALL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAWALL.VXL",
+   "id": "0xED1AAA65",
+   "found": false
+  },
+  "hva": {
+   "name": "GAWALL.HVA",
+   "id": "0x3D754AE1",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NARADR",
+  "image": "NARADR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NARADR.VXL",
+   "id": "0x729EA796",
+   "found": false
+  },
+  "hva": {
+   "name": "NARADR.HVA",
+   "id": "0xA2F14712",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAWEAP",
+  "image": "NAWEAP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAWEAP.VXL",
+   "id": "0x16242293",
+   "found": false
+  },
+  "hva": {
+   "name": "NAWEAP.HVA",
+   "id": "0xC64BC217",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAREFN",
+  "image": "NAREFN",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAREFN.VXL",
+   "id": "0xCD29075D",
+   "found": false
+  },
+  "hva": {
+   "name": "NAREFN.HVA",
+   "id": "0x1D46E7D9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAWALL",
+  "image": "NAWALL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAWALL.VXL",
+   "id": "0x70B390F4",
+   "found": false
+  },
+  "hva": {
+   "name": "NAWALL.HVA",
+   "id": "0xA0DC7070",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE07",
+  "image": "CAHSE07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE07.VXL",
+   "id": "0x0AC0EEC9",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE07.HVA",
+   "id": "0x05369D22",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAPSIS",
+  "image": "NAPSIS",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAPSIS.VXL",
+   "id": "0xC92F0339",
+   "found": false
+  },
+  "hva": {
+   "name": "NAPSIS.HVA",
+   "id": "0x1940E3BD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASYDN01",
+  "image": "CASYDN01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASYDN01.VXL",
+   "id": "0xA330AB66",
+   "found": false
+  },
+  "hva": {
+   "name": "CASYDN01.HVA",
+   "id": "0x55BA742F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NALASR",
+  "image": "NALASR",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "NALASR.VXL",
+   "id": "0x3D872EFF",
+   "found": false
+  },
+  "hva": {
+   "name": "NALASR.HVA",
+   "id": "0xEDE8CE7B",
+   "found": false
+  },
+  "turret_part": {
+   "name": "NALASRTUR.VXL",
+   "id": "0xD08E52EB",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "NALASRBARL.VXL",
+   "id": "0x9C63B495",
+   "found": false
+  },
+  "flh": "100,20,100"
+ },
+ {
+  "unit": "NASAM",
+  "image": "NASAM",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "NASAM.VXL",
+   "id": "0x228334BC",
+   "found": false
+  },
+  "hva": {
+   "name": "NASAM.HVA",
+   "id": "0x9D1A331B",
+   "found": false
+  },
+  "turret_part": {
+   "name": "NASAMTUR.VXL",
+   "id": "0x70CD013E",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "NASAMBARL.VXL",
+   "id": "0x67A02424",
+   "found": false
+  },
+  "flh": "90,50,100"
+ },
+ {
+  "unit": "CASYDN02",
+  "image": "CASYDN02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASYDN02.VXL",
+   "id": "0xE490D1B6",
+   "found": false
+  },
+  "hva": {
+   "name": "CASYDN02.HVA",
+   "id": "0x121A0EFF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAYARD",
+  "image": "GAYARD",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAYARD.VXL",
+   "id": "0xA90DF7A8",
+   "found": false
+  },
+  "hva": {
+   "name": "GAYARD.HVA",
+   "id": "0x7962172C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAIRON",
+  "image": "NAIRON",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAIRON.VXL",
+   "id": "0xC58949D1",
+   "found": false
+  },
+  "hva": {
+   "name": "NAIRON.HVA",
+   "id": "0x15E6A955",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NACNST",
+  "image": "NACNST",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NACNST.VXL",
+   "id": "0x70E58F99",
+   "found": false
+  },
+  "hva": {
+   "name": "NACNST.HVA",
+   "id": "0xA08A6F1D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NADEPT",
+  "image": "NADEPT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NADEPT.VXL",
+   "id": "0x9EE30DDE",
+   "found": false
+  },
+  "hva": {
+   "name": "NADEPT.HVA",
+   "id": "0x4E8CED5A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GACSPH",
+  "image": "GACSPH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GACSPH.VXL",
+   "id": "0x9E32E177",
+   "found": false
+  },
+  "hva": {
+   "name": "GACSPH.HVA",
+   "id": "0x4E5D01F3",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GADUMY",
+  "image": "NTIRON",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NTIRON.VXL",
+   "id": "0x1A282158",
+   "found": false
+  },
+  "hva": {
+   "name": "NTIRON.HVA",
+   "id": "0xCA47C1DC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAWEAT",
+  "image": "GAWETH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAWETH.VXL",
+   "id": "0xEBE7F5E4",
+   "found": false
+  },
+  "hva": {
+   "name": "GAWETH.HVA",
+   "id": "0x3B881560",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABHUT",
+  "image": "CABHUT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABHUT.VXL",
+   "id": "0xB4FD9544",
+   "found": false
+  },
+  "hva": {
+   "name": "CABHUT.HVA",
+   "id": "0x649275C0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GALITE",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "REDLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GRENLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "BLUELAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YELWLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "PURPLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INORANLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INGRNLMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INREDLMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INBLULMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CITY01",
+  "image": "CITY01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CITY01.VXL",
+   "id": "0xDEB01E01",
+   "found": false
+  },
+  "hva": {
+   "name": "CITY01.HVA",
+   "id": "0x0EDFFE85",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CITY02",
+  "image": "CITY02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CITY02.VXL",
+   "id": "0xEF58049C",
+   "found": false
+  },
+  "hva": {
+   "name": "CITY02.HVA",
+   "id": "0x3F37E418",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CITY03",
+  "image": "CITY03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CITY03.VXL",
+   "id": "0x492F0F28",
+   "found": false
+  },
+  "hva": {
+   "name": "CITY03.HVA",
+   "id": "0x9940EFAC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CITY04",
+  "image": "CITY04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CITY04.VXL",
+   "id": "0x8C8831A6",
+   "found": false
+  },
+  "hva": {
+   "name": "CITY04.HVA",
+   "id": "0x5CE7D122",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CITY05",
+  "image": "CITY05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CITY05.VXL",
+   "id": "0x2AFF3A12",
+   "found": false
+  },
+  "hva": {
+   "name": "CITY05.HVA",
+   "id": "0xFA90DA96",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CITY06",
+  "image": "CITY06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CITY06.VXL",
+   "id": "0x1B17208F",
+   "found": false
+  },
+  "hva": {
+   "name": "CITY06.HVA",
+   "id": "0xCB78C00B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHOSP",
+  "image": "CAHOSP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHOSP.VXL",
+   "id": "0xF59E45D0",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHOSP.HVA",
+   "id": "0x25F1A554",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INGALITE",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INYELWLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "INPURPLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NEGLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NEGRED",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TESLA",
+  "image": "NATSLA",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NATSLA.VXL",
+   "id": "0x786520C0",
+   "found": false
+  },
+  "hva": {
+   "name": "NATSLA.HVA",
+   "id": "0xA80AC044",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "50,0,300"
+ },
+ {
+  "unit": "NAMISL",
+  "image": "NAMISL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAMISL.VXL",
+   "id": "0x5E7C004A",
+   "found": false
+  },
+  "hva": {
+   "name": "NAMISL.HVA",
+   "id": "0x8E13E0CE",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "ATESLA",
+  "image": "GAPRIS",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAPRIS.VXL",
+   "id": "0x43FD2DEB",
+   "found": false
+  },
+  "hva": {
+   "name": "GAPRIS.HVA",
+   "id": "0x9392CD6F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,378"
+ },
+ {
+  "unit": "CAMACH",
+  "image": "CAMACH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMACH.VXL",
+   "id": "0xF3FFB684",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMACH.HVA",
+   "id": "0x23905600",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TSTLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASYDN03",
+  "image": "CASYDN03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASYDN03.VXL",
+   "id": "0xD9F0F806",
+   "found": false
+  },
+  "hva": {
+   "name": "CASYDN03.HVA",
+   "id": "0x2F7A274F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "AMMOCRAT",
+  "image": "AMMO01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "AMMO01.VXL",
+   "id": "0x863362C5",
+   "found": false
+  },
+  "hva": {
+   "name": "AMMO01.HVA",
+   "id": "0x565C8241",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAGREEN",
+  "image": "null",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "null.VXL",
+   "id": "0xE895E611",
+   "found": false
+  },
+  "hva": {
+   "name": "null.HVA",
+   "id": "0x1E1F3958",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAYARD",
+  "image": "NAYARD",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAYARD.VXL",
+   "id": "0x34A4CD39",
+   "found": false
+  },
+  "hva": {
+   "name": "NAYARD.HVA",
+   "id": "0xE4CB2DBD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GASPYSAT",
+  "image": "GASPST",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GASPST.VXL",
+   "id": "0xAEE0AD03",
+   "found": false
+  },
+  "hva": {
+   "name": "GASPST.HVA",
+   "id": "0x7E8F4D87",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAGAP",
+  "image": "GAGAP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAGAP.VXL",
+   "id": "0x76D10B45",
+   "found": false
+  },
+  "hva": {
+   "name": "GAGAP.HVA",
+   "id": "0xC9480CE2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GTGCAN",
+  "image": "GTGCAN",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "GTGCAN.VXL",
+   "id": "0x37796F7A",
+   "found": false
+  },
+  "hva": {
+   "name": "GTGCAN.HVA",
+   "id": "0xE7168FFE",
+   "found": false
+  },
+  "turret_part": {
+   "name": "GTGCANTUR.VXL",
+   "id": "0x11BBD638",
+   "found": true
+  },
+  "barrel_part": {
+   "name": "GTGCANBARL.VXL",
+   "id": "0x5D563046",
+   "found": true
+  },
+  "flh": "250,0,230"
+ },
+ {
+  "unit": "NANRCT",
+  "image": "NANRCT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NANRCT.VXL",
+   "id": "0xB3548467",
+   "found": false
+  },
+  "hva": {
+   "name": "NANRCT.HVA",
+   "id": "0x633B64E3",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAPILL",
+  "image": "GAPILL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAPILL.VXL",
+   "id": "0xB41E1304",
+   "found": false
+  },
+  "hva": {
+   "name": "GAPILL.HVA",
+   "id": "0x6471F380",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "90,0,40"
+ },
+ {
+  "unit": "NAFLAK",
+  "image": "NAFLAK",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "NAFLAK.VXL",
+   "id": "0x1732B62A",
+   "found": false
+  },
+  "hva": {
+   "name": "NAFLAK.HVA",
+   "id": "0xC75D56AE",
+   "found": false
+  },
+  "turret_part": {
+   "name": "NAFLAKTUR.VXL",
+   "id": "0x700D6123",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "NAFLAKBARL.VXL",
+   "id": "0x3CE0875D",
+   "found": false
+  },
+  "flh": "130,0,185"
+ },
+ {
+  "unit": "CAOUTP",
+  "image": "CAOUTP",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "CAOUTP.VXL",
+   "id": "0x24699F5F",
+   "found": false
+  },
+  "hva": {
+   "name": "CAOUTP.HVA",
+   "id": "0xF4067FDB",
+   "found": false
+  },
+  "turret_part": {
+   "name": "CAOUTPTUR.VXL",
+   "id": "0xFDEFA96B",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "CAOUTPBARL.VXL",
+   "id": "0xB1024F15",
+   "found": false
+  },
+  "flh": "64,70,520"
+ },
+ {
+  "unit": "CATHOSP",
+  "image": "CAHOSP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHOSP.VXL",
+   "id": "0xF59E45D0",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHOSP.HVA",
+   "id": "0x25F1A554",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAAIRP",
+  "image": "CAAIRP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAAIRP.VXL",
+   "id": "0xB63B170E",
+   "found": false
+  },
+  "hva": {
+   "name": "CAAIRP.HVA",
+   "id": "0x6654F78A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAOILD",
+  "image": "CAOILD",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAOILD.VXL",
+   "id": "0x5252BC79",
+   "found": false
+  },
+  "hva": {
+   "name": "CAOILD.HVA",
+   "id": "0x823D5CFD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NACLON",
+  "image": "NACLON",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NACLON.VXL",
+   "id": "0xB6A940FB",
+   "found": false
+  },
+  "hva": {
+   "name": "NACLON.HVA",
+   "id": "0x66C6A07F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAOREP",
+  "image": "GAOREP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAOREP.VXL",
+   "id": "0xF31FF85C",
+   "found": false
+  },
+  "hva": {
+   "name": "GAOREP.HVA",
+   "id": "0x237018D8",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACITY01",
+  "image": "CACITY01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACITY01.VXL",
+   "id": "0xF69CFB94",
+   "found": false
+  },
+  "hva": {
+   "name": "CACITY01.HVA",
+   "id": "0x001624DD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACITY02",
+  "image": "CACITY02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACITY02.VXL",
+   "id": "0xB13C8144",
+   "found": false
+  },
+  "hva": {
+   "name": "CACITY02.HVA",
+   "id": "0x47B65E0D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACITY03",
+  "image": "CACITY03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACITY03.VXL",
+   "id": "0x8C5CA8F4",
+   "found": false
+  },
+  "hva": {
+   "name": "CACITY03.HVA",
+   "id": "0x7AD677BD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACITY04",
+  "image": "CACITY04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACITY04.VXL",
+   "id": "0x3E7C74E4",
+   "found": false
+  },
+  "hva": {
+   "name": "CACITY04.HVA",
+   "id": "0xC8F6ABAD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY01",
+  "image": "CANEWY01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY01.VXL",
+   "id": "0x6BD984D3",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY01.HVA",
+   "id": "0x9D535B9A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY04",
+  "image": "CANEWY04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY04.VXL",
+   "id": "0xA3390BA3",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY04.HVA",
+   "id": "0x55B3D4EA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY05",
+  "image": "CANEWY05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY05.VXL",
+   "id": "0x9E592213",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY05.HVA",
+   "id": "0x68D3FD5A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASWST01",
+  "image": "CASWST01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASWST01.VXL",
+   "id": "0xDE228B46",
+   "found": false
+  },
+  "hva": {
+   "name": "CASWST01.HVA",
+   "id": "0x28A8540F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATECH01",
+  "image": "CATECH01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATECH01.VXL",
+   "id": "0x620D3D59",
+   "found": false
+  },
+  "hva": {
+   "name": "CATECH01.HVA",
+   "id": "0x9487E210",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS01",
+  "image": "CATEXS01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS01.VXL",
+   "id": "0x2605D810",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS01.HVA",
+   "id": "0xD08F0759",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS02",
+  "image": "CATEXS02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS02.VXL",
+   "id": "0x61A5A2C0",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS02.HVA",
+   "id": "0x972F7D89",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH01",
+  "image": "CAWASH01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH01.VXL",
+   "id": "0xA86DE67D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH01.HVA",
+   "id": "0x5EE73934",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFARM01",
+  "image": "CAFARM01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFARM01.VXL",
+   "id": "0xFE932392",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFARM01.HVA",
+   "id": "0x0819FCDB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFARM02",
+  "image": "CAFARM02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFARM02.VXL",
+   "id": "0xB9335942",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFARM02.HVA",
+   "id": "0x4FB9860B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT01E",
+  "image": "CALIT01E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT01E.VXL",
+   "id": "0xDEB73C85",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT01E.HVA",
+   "id": "0x283DE3CC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT01N",
+  "image": "CALIT01N",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT01N.VXL",
+   "id": "0xA9670D94",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT01N.HVA",
+   "id": "0x5FEDD2DD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT01S",
+  "image": "CALIT01S",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT01S.VXL",
+   "id": "0x31175EA7",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT01S.HVA",
+   "id": "0xC79D81EE",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT01W",
+  "image": "CALIT01W",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT01W.VXL",
+   "id": "0xC497F867",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT01W.HVA",
+   "id": "0x321D272E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMISC01",
+  "image": "CAMISC01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMISC01.VXL",
+   "id": "0x213E01BE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMISC01.HVA",
+   "id": "0xD7B4DEF7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMISC02",
+  "image": "CAMISC02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMISC02.VXL",
+   "id": "0x669E7B6E",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMISC02.HVA",
+   "id": "0x9014A427",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMISC03",
+  "image": "CAMISC03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMISC03.VXL",
+   "id": "0x5BFE52DE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMISC03.HVA",
+   "id": "0xAD748D97",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMISC04",
+  "image": "CAMISC04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMISC04.VXL",
+   "id": "0xE9DE8ECE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMISC04.HVA",
+   "id": "0x1F545187",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPOL01E",
+  "image": "CAPOL01E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPOL01E.VXL",
+   "id": "0x3F610EF7",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPOL01E.HVA",
+   "id": "0xC9EBD1BE",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPOL01N",
+  "image": "CAPOL01N",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPOL01N.VXL",
+   "id": "0x48B13FE6",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPOL01N.HVA",
+   "id": "0xBE3BE0AF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPOL01S",
+  "image": "CAPOL01S",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPOL01S.VXL",
+   "id": "0xD0C16CD5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPOL01S.HVA",
+   "id": "0x264BB39C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPOL01W",
+  "image": "CAPOL01W",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPOL01W.VXL",
+   "id": "0x2541CA15",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPOL01W.HVA",
+   "id": "0xD3CB155C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASIN01E",
+  "image": "CASIN01E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASIN01E.VXL",
+   "id": "0xE569CB03",
+   "found": false
+  },
+  "hva": {
+   "name": "CASIN01E.HVA",
+   "id": "0x13E3144A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASIN01N",
+  "image": "CASIN01N",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASIN01N.VXL",
+   "id": "0x92B9FA12",
+   "found": false
+  },
+  "hva": {
+   "name": "CASIN01N.HVA",
+   "id": "0x6433255B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASIN01S",
+  "image": "CASIN01S",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASIN01S.VXL",
+   "id": "0x0AC9A921",
+   "found": false
+  },
+  "hva": {
+   "name": "CASIN01S.HVA",
+   "id": "0xFC437668",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASIN01W",
+  "image": "CASIN01W",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASIN01W.VXL",
+   "id": "0xFF490FE1",
+   "found": false
+  },
+  "hva": {
+   "name": "CASIN01W.HVA",
+   "id": "0x09C3D0A8",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS01",
+  "image": "CAPARS01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS01.VXL",
+   "id": "0xE3C235AE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS01.HVA",
+   "id": "0x1548EAE7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null,
+  "flh": "0,0,1566"
+ },
+ {
+  "unit": "GAAIRC",
+  "image": "GAAIRC",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAAIRC.VXL",
+   "id": "0xE30BAA22",
+   "found": false
+  },
+  "hva": {
+   "name": "GAAIRC.HVA",
+   "id": "0x33644AA6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFRMA",
+  "image": "CAFRMA",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFRMA.VXL",
+   "id": "0x1E406426",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFRMA.HVA",
+   "id": "0xCE2F84A2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFRMB",
+  "image": "CAFRMB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFRMB.VXL",
+   "id": "0x2FA87EBB",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFRMB.HVA",
+   "id": "0xFFC79E3F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH05",
+  "image": "CAWASH05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH05.VXL",
+   "id": "0x5DED40BD",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH05.HVA",
+   "id": "0xAB679FF4",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH04",
+  "image": "CAWASH04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH04.VXL",
+   "id": "0x608D690D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH04.HVA",
+   "id": "0x9607B644",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH03",
+  "image": "CAWASH03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH03.VXL",
+   "id": "0xD2ADB51D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH03.HVA",
+   "id": "0x24276A54",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH07",
+  "image": "CAWASH07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH07.VXL",
+   "id": "0x272D13DD",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH07.HVA",
+   "id": "0xD1A7CC94",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH11",
+  "image": "CAWASH11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH11.VXL",
+   "id": "0x633135D8",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH11.HVA",
+   "id": "0x95BBEA91",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWSH12",
+  "image": "CAWSH12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWSH12.VXL",
+   "id": "0xB1DABB7A",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWSH12.HVA",
+   "id": "0xBE2CC891",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH14",
+  "image": "CAWASH14",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH14.VXL",
+   "id": "0xABD1BAA8",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH14.HVA",
+   "id": "0x5D5B65E1",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH09",
+  "image": "CAWASH09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH09.VXL",
+   "id": "0x981DADBC",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH09.HVA",
+   "id": "0x6E9772F5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH10",
+  "image": "CAWASH10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH10.VXL",
+   "id": "0x5E511C68",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH10.HVA",
+   "id": "0xA8DBC321",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH13",
+  "image": "CAWASH13",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH13.VXL",
+   "id": "0x19F166B8",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH13.HVA",
+   "id": "0xEF7BB9F1",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAARMY01",
+  "image": "CAARMY01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAARMY01.VXL",
+   "id": "0xBF08DD05",
+   "found": false
+  },
+  "hva": {
+   "name": "CAARMY01.HVA",
+   "id": "0x4982024C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAUSFGL",
+  "image": "CAUSFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAUSFGL.VXL",
+   "id": "0x1E35F0D5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAUSFGL.HVA",
+   "id": "0x11C3833E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH08",
+  "image": "CAWASH08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH08.VXL",
+   "id": "0xA57D840C",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH08.HVA",
+   "id": "0x53F75B45",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT03E",
+  "image": "CALIT03E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT03E.VXL",
+   "id": "0x937F9D8E",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT03E.HVA",
+   "id": "0x65F542C7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT03N",
+  "image": "CALIT03N",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT03N.VXL",
+   "id": "0xE4AFAC9F",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT03N.HVA",
+   "id": "0x122573D6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT03S",
+  "image": "CALIT03S",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT03S.VXL",
+   "id": "0x7CDFFFAC",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT03S.HVA",
+   "id": "0x8A5520E5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT03W",
+  "image": "CALIT03W",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT03W.VXL",
+   "id": "0x895F596C",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT03W.HVA",
+   "id": "0x7FD58625",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT02L",
+  "image": "CALIT02L",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT02L.VXL",
+   "id": "0x55332C5A",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT02L.HVA",
+   "id": "0xA3B9F313",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALIT02R",
+  "image": "CALIT02R",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALIT02R.VXL",
+   "id": "0x8AE305B9",
+   "found": false
+  },
+  "hva": {
+   "name": "CALIT02R.HVA",
+   "id": "0x7C69DAF0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE01",
+  "image": "CAHSE01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE01.VXL",
+   "id": "0xDC990DD4",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE01.HVA",
+   "id": "0xD36F7E3F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWT01",
+  "image": "CAWT01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWT01.VXL",
+   "id": "0x7E0BA310",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWT01.HVA",
+   "id": "0xAE644394",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATS01",
+  "image": "CATS01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATS01.VXL",
+   "id": "0xF15D75DA",
+   "found": false
+  },
+  "hva": {
+   "name": "CATS01.HVA",
+   "id": "0x2132955E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABARN02",
+  "image": "CABARN02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABARN02.VXL",
+   "id": "0x8130E3A5",
+   "found": false
+  },
+  "hva": {
+   "name": "CABARN02.HVA",
+   "id": "0x77BA3CEC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWA2A",
+  "image": "CAWA2A",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWA2A.VXL",
+   "id": "0x36117378",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWA2A.HVA",
+   "id": "0xE67E93FC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWA2B",
+  "image": "CAWA2B",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWA2B.VXL",
+   "id": "0x07F969E5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWA2B.HVA",
+   "id": "0xD7968961",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWA2C",
+  "image": "CAWA2C",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWA2C.VXL",
+   "id": "0xA18E6251",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWA2C.HVA",
+   "id": "0x71E182D5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWA2D",
+  "image": "CAWA2D",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWA2D.VXL",
+   "id": "0x64295CDF",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWA2D.HVA",
+   "id": "0xB446BC5B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "AMRADR",
+  "image": "GAAIRC",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAAIRC.VXL",
+   "id": "0xE30BAA22",
+   "found": false
+  },
+  "hva": {
+   "name": "GAAIRC.HVA",
+   "id": "0x33644AA6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPRS03",
+  "image": "CAPRS03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPRS03.VXL",
+   "id": "0x0887412C",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPRS03.HVA",
+   "id": "0x077132C7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAGARD01",
+  "image": "CAGARD01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAGARD01.VXL",
+   "id": "0x84C90D7F",
+   "found": false
+  },
+  "hva": {
+   "name": "CAGARD01.HVA",
+   "id": "0x7243D236",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS01",
+  "image": "CARUS01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS01.VXL",
+   "id": "0x25DB5DD3",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS01.HVA",
+   "id": "0x2A2D2E38",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM01",
+  "image": "CAMIAM01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM01.VXL",
+   "id": "0x4F9F4CB5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM01.HVA",
+   "id": "0xB91593FC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATRAN01",
+  "image": "CATRAN01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATRAN01.VXL",
+   "id": "0x8B5920A6",
+   "found": false
+  },
+  "hva": {
+   "name": "CATRAN01.HVA",
+   "id": "0x7DD3FFEF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM02",
+  "image": "CAMIAM02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM02.VXL",
+   "id": "0x083F3665",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM02.HVA",
+   "id": "0xFEB5E92C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY05",
+  "image": "CANWY05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY05.VXL",
+   "id": "0x3CEE4AED",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY05.HVA",
+   "id": "0x33183906",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "MAYAN",
+  "image": "CAMEX01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMEX01.VXL",
+   "id": "0x02D4D991",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMEX01.HVA",
+   "id": "0x0D22AA7A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEUR1",
+  "image": "CAEUR1",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEUR1.VXL",
+   "id": "0xD8E54140",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEUR1.HVA",
+   "id": "0x088AA1C4",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEUR2",
+  "image": "CAEUR2",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEUR2.VXL",
+   "id": "0xE90D5BDD",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEUR2.HVA",
+   "id": "0x3962BB59",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEUR04",
+  "image": "CAEUR04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEUR04.VXL",
+   "id": "0x7CCE566F",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEUR04.HVA",
+   "id": "0x73382584",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMEX01",
+  "image": "CAMEX01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMEX01.VXL",
+   "id": "0x02D4D991",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMEX01.HVA",
+   "id": "0x0D22AA7A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02A",
+  "image": "CARUS02A",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02A.VXL",
+   "id": "0xD4F5E1CC",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02A.HVA",
+   "id": "0x227F3E85",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02B",
+  "image": "CARUS02B",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02B.VXL",
+   "id": "0x93559B1C",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02B.HVA",
+   "id": "0x65DF4455",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02C",
+  "image": "CARUS02C",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02C.VXL",
+   "id": "0xAE35B2AC",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02C.HVA",
+   "id": "0x58BF6DE5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02D",
+  "image": "CARUS02D",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02D.VXL",
+   "id": "0x1C156EBC",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02D.HVA",
+   "id": "0xEA9FB1F5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02E",
+  "image": "CARUS02E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02E.VXL",
+   "id": "0x2175470C",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02E.HVA",
+   "id": "0xD7FF9845",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02F",
+  "image": "CARUS02F",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02F.VXL",
+   "id": "0x66D53DDC",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02F.HVA",
+   "id": "0x905FE295",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY06",
+  "image": "CANEWY06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY06.VXL",
+   "id": "0xD9F958C3",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY06.HVA",
+   "id": "0x2F73878A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY07",
+  "image": "CANEWY07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY07.VXL",
+   "id": "0xE4997173",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY07.HVA",
+   "id": "0x1213AE3A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY08",
+  "image": "CANEWY08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY08.VXL",
+   "id": "0x66C9E6A2",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY08.HVA",
+   "id": "0x904339EB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS02",
+  "image": "CAPARS02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS02.VXL",
+   "id": "0xA4624F7E",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS02.HVA",
+   "id": "0x52E89037",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS08",
+  "image": "CAPARS08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS08.VXL",
+   "id": "0xEED257DF",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS08.HVA",
+   "id": "0x18588896",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS09",
+  "image": "CAPARS09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS09.VXL",
+   "id": "0xD3B27E6F",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS09.HVA",
+   "id": "0x2538A126",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS03",
+  "image": "CARUS03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS03.VXL",
+   "id": "0x6813FCD8",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS03.HVA",
+   "id": "0x67E58F33",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY10",
+  "image": "CANEWY10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY10.VXL",
+   "id": "0x9DE57EC6",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY10.HVA",
+   "id": "0x6B6FA18F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY11",
+  "image": "CANEWY11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY11.VXL",
+   "id": "0xA0855776",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY11.HVA",
+   "id": "0x560F883F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY12",
+  "image": "CANEWY12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY12.VXL",
+   "id": "0xE7252DA6",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY12.HVA",
+   "id": "0x11AFF2EF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY13",
+  "image": "CANEWY13",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY13.VXL",
+   "id": "0xDA450416",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY13.HVA",
+   "id": "0x2CCFDB5F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY14",
+  "image": "CANEWY14",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY14.VXL",
+   "id": "0x6865D806",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY14.HVA",
+   "id": "0x9EEF074F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY15",
+  "image": "CANEWY15",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY15.VXL",
+   "id": "0x5505F1B6",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY15.HVA",
+   "id": "0xA38F2EFF",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY16",
+  "image": "CANEWY16",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY16.VXL",
+   "id": "0x12A58B66",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY16.HVA",
+   "id": "0xE42F542F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY17",
+  "image": "CANEWY17",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY17.VXL",
+   "id": "0x2FC5A2D6",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY17.HVA",
+   "id": "0xD94F7D9F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY18",
+  "image": "CANEWY18",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY18.VXL",
+   "id": "0xAD953507",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY18.HVA",
+   "id": "0x5B1FEA4E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS04",
+  "image": "CAPARS04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS04.VXL",
+   "id": "0x2B22BADE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS04.HVA",
+   "id": "0xDDA86597",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS05",
+  "image": "CAPARS05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS05.VXL",
+   "id": "0x1642936E",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS05.HVA",
+   "id": "0xE0C84C27",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS06",
+  "image": "CAPARS06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS06.VXL",
+   "id": "0x51E2E9BE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS06.HVA",
+   "id": "0xA76836F7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS07",
+  "image": "CAPARS07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS07.VXL",
+   "id": "0x6C82C00E",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS07.HVA",
+   "id": "0x9A081F47",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH15",
+  "image": "CAWASH15",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH15.VXL",
+   "id": "0x96B19318",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH15.HVA",
+   "id": "0x603B4C51",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS10",
+  "image": "CAPARS10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS10.VXL",
+   "id": "0x15FECFBB",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS10.HVA",
+   "id": "0xE37410F2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS13",
+  "image": "CAPARS13",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS13.VXL",
+   "id": "0x525EB56B",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS13.HVA",
+   "id": "0xA4D46A22",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS14",
+  "image": "CAPARS14",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS14.VXL",
+   "id": "0xE07E697B",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS14.HVA",
+   "id": "0x16F4B632",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAGAS01",
+  "image": "CAGAS01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAGAS01.VXL",
+   "id": "0x15700402",
+   "found": false
+  },
+  "hva": {
+   "name": "CAGAS01.HVA",
+   "id": "0x1A8677E9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS11",
+  "image": "CAPARS11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS11.VXL",
+   "id": "0x289EE60B",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS11.HVA",
+   "id": "0xDE143942",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARS12",
+  "image": "CAPARS12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARS12.VXL",
+   "id": "0x6F3E9CDB",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARS12.HVA",
+   "id": "0x99B44392",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFARM06",
+  "image": "CAFARM06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFARM06.VXL",
+   "id": "0x4CB3FF82",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFARM06.HVA",
+   "id": "0xBA3920CB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM04",
+  "image": "CAMIAM04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM04.VXL",
+   "id": "0x877FC3C5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM04.HVA",
+   "id": "0x71F51C8C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAPSYB",
+  "image": "NAPSYB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAPSYB.VXL",
+   "id": "0x743DA568",
+   "found": false
+  },
+  "hva": {
+   "name": "NAPSYB.HVA",
+   "id": "0xA45245EC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAPSYA",
+  "image": "NAPSYA",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAPSYA.VXL",
+   "id": "0x45D5BFF5",
+   "found": false
+  },
+  "hva": {
+   "name": "NAPSYA.HVA",
+   "id": "0x95BA5F71",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAIND01",
+  "image": "CAIND01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAIND01.VXL",
+   "id": "0xA27EC352",
+   "found": false
+  },
+  "hva": {
+   "name": "CAIND01.HVA",
+   "id": "0xAD88B0B9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACOLO01",
+  "image": "CACOLO01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACOLO01.VXL",
+   "id": "0x2ED60174",
+   "found": false
+  },
+  "hva": {
+   "name": "CACOLO01.HVA",
+   "id": "0xD85CDE3D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY09",
+  "image": "CANWY09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY09.VXL",
+   "id": "0x4B2C8A96",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY09.HVA",
+   "id": "0x44DAF97D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY22",
+  "image": "CANWY22",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY22.VXL",
+   "id": "0xB6746B7C",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY22.HVA",
+   "id": "0xB9821897",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY23",
+  "image": "CANWY23",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY23.VXL",
+   "id": "0x7D28B8D9",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY23.HVA",
+   "id": "0x72DECB32",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY24",
+  "image": "CANWY24",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY24.VXL",
+   "id": "0x602D8861",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY24.HVA",
+   "id": "0x6FDBFB8A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY25",
+  "image": "CANWY25",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY25.VXL",
+   "id": "0xAB715BC4",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY25.HVA",
+   "id": "0xA487282F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANWY26",
+  "image": "CANWY26",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANWY26.VXL",
+   "id": "0x2DE5296A",
+   "found": false
+  },
+  "hva": {
+   "name": "CANWY26.HVA",
+   "id": "0x22135A81",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS03",
+  "image": "CATEXS03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS03.VXL",
+   "id": "0x5CC58B70",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS03.HVA",
+   "id": "0xAA4F5439",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS04",
+  "image": "CATEXS04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS04.VXL",
+   "id": "0xEEE55760",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS04.HVA",
+   "id": "0x186F8829",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS05",
+  "image": "CATEXS05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS05.VXL",
+   "id": "0xD3857ED0",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS05.HVA",
+   "id": "0x250FA199",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS02G",
+  "image": "CARUS02G",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS02G.VXL",
+   "id": "0x5BB5146C",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS02G.HVA",
+   "id": "0xAD3FCB25",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACHIG04",
+  "image": "CACHIG04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACHIG04.VXL",
+   "id": "0xF958A3CE",
+   "found": false
+  },
+  "hva": {
+   "name": "CACHIG04.HVA",
+   "id": "0x0FD27C87",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM03",
+  "image": "CAMIAM03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM03.VXL",
+   "id": "0x355F1FD5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM03.HVA",
+   "id": "0xC3D5C09C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS07",
+  "image": "CARUS07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS07.VXL",
+   "id": "0xF382BECE",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS07.HVA",
+   "id": "0xFC74CD25",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS06",
+  "image": "CATEXS06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS06.VXL",
+   "id": "0x94250400",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS06.HVA",
+   "id": "0x62AFDB49",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS07",
+  "image": "CATEXS07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS07.VXL",
+   "id": "0xA9452DB0",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS07.HVA",
+   "id": "0x5FCFF2F9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATEXS08",
+  "image": "CATEXS08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATEXS08.VXL",
+   "id": "0x2B15BA61",
+   "found": false
+  },
+  "hva": {
+   "name": "CATEXS08.HVA",
+   "id": "0xDD9F6528",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACHIG01",
+  "image": "CACHIG01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACHIG01.VXL",
+   "id": "0x31B82CBE",
+   "found": false
+  },
+  "hva": {
+   "name": "CACHIG01.HVA",
+   "id": "0xC732F3F7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACHIG02",
+  "image": "CACHIG02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACHIG02.VXL",
+   "id": "0x7618566E",
+   "found": false
+  },
+  "hva": {
+   "name": "CACHIG02.HVA",
+   "id": "0x80928927",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACHIG03",
+  "image": "CACHIG03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACHIG03.VXL",
+   "id": "0x4B787FDE",
+   "found": false
+  },
+  "hva": {
+   "name": "CACHIG03.HVA",
+   "id": "0xBDF2A097",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH16",
+  "image": "CAWASH16",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH16.VXL",
+   "id": "0xD111E9C8",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH16.HVA",
+   "id": "0x279B3681",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH17",
+  "image": "CAWASH17",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH17.VXL",
+   "id": "0xEC71C078",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH17.HVA",
+   "id": "0x1AFB1F31",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACHIG05",
+  "image": "CACHIG05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACHIG05.VXL",
+   "id": "0xC4388A7E",
+   "found": false
+  },
+  "hva": {
+   "name": "CACHIG05.HVA",
+   "id": "0x32B25537",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH19",
+  "image": "CAWASH19",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH19.VXL",
+   "id": "0x53417E19",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH19.HVA",
+   "id": "0xA5CBA150",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS08",
+  "image": "CARUS08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS08.VXL",
+   "id": "0x02D40C1B",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS08.HVA",
+   "id": "0x0D227FF0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS09",
+  "image": "CARUS09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS09.VXL",
+   "id": "0xC988DFBE",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS09.HVA",
+   "id": "0xC67EAC55",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS10",
+  "image": "CARUS10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS10.VXL",
+   "id": "0x48F085C2",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS10.HVA",
+   "id": "0x4706F629",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS11",
+  "image": "CARUS11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS11.VXL",
+   "id": "0x83AC5667",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS11.HVA",
+   "id": "0x8C5A258C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY20",
+  "image": "CANEWY20",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY20.VXL",
+   "id": "0x1B710C68",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY20.HVA",
+   "id": "0xEDFBD321",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CANEWY21",
+  "image": "CANEWY21",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CANEWY21.VXL",
+   "id": "0x261125D8",
+   "found": false
+  },
+  "hva": {
+   "name": "CANEWY21.HVA",
+   "id": "0xD09BFA91",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS04",
+  "image": "CARUS04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS04.VXL",
+   "id": "0x7516CC60",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS04.HVA",
+   "id": "0x7AE0BF8B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS05",
+  "image": "CARUS05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS05.VXL",
+   "id": "0xBE4A1FC5",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS05.HVA",
+   "id": "0xB1BC6C2E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUS06",
+  "image": "CARUS06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUS06.VXL",
+   "id": "0x38DE6D6B",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUS06.HVA",
+   "id": "0x37281E80",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC01",
+  "image": "CAMSC01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC01.VXL",
+   "id": "0xFCDFCF17",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC01.HVA",
+   "id": "0xF329BCFC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC02",
+  "image": "CAMSC02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC02.VXL",
+   "id": "0x7A4BBDB9",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC02.HVA",
+   "id": "0x75BDCE52",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC03",
+  "image": "CAMSC03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC03.VXL",
+   "id": "0xB1176E1C",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC03.HVA",
+   "id": "0xBEE11DF7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC04",
+  "image": "CAMSC04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC04.VXL",
+   "id": "0xAC125EA4",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC04.HVA",
+   "id": "0xA3E42D4F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC05",
+  "image": "CAMSC05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC05.VXL",
+   "id": "0x674E8D01",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC05.HVA",
+   "id": "0x68B8FEEA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC06",
+  "image": "CAMSC06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC06.VXL",
+   "id": "0xE1DAFFAF",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC06.HVA",
+   "id": "0xEE2C8C44",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC07",
+  "image": "CAMSC07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC07.VXL",
+   "id": "0x2A862C0A",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC07.HVA",
+   "id": "0x25705FE1",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH18",
+  "image": "CAWASH18",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH18.VXL",
+   "id": "0x6E2157A9",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH18.HVA",
+   "id": "0x98AB88E0",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEURO05",
+  "image": "CAEURO05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEURO05.VXL",
+   "id": "0x86973C05",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEURO05.HVA",
+   "id": "0x701DE34C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARK01",
+  "image": "CAPARK01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARK01.VXL",
+   "id": "0xB7F3E707",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARK01.HVA",
+   "id": "0x4179384E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARK02",
+  "image": "CAPARK02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARK02.VXL",
+   "id": "0xF0539DD7",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARK02.HVA",
+   "id": "0x06D9429E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARK03",
+  "image": "CAPARK03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARK03.VXL",
+   "id": "0xCD33B467",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARK03.HVA",
+   "id": "0x3BB96B2E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE02",
+  "image": "CAHSE02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE02.VXL",
+   "id": "0x5A0D7F7A",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE02.HVA",
+   "id": "0x55FB0C91",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE03",
+  "image": "CAHSE03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE03.VXL",
+   "id": "0x9151ACDF",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE03.HVA",
+   "id": "0x9EA7DF34",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE04",
+  "image": "CAHSE04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE04.VXL",
+   "id": "0x8C549C67",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE04.HVA",
+   "id": "0x83A2EF8C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTRT01",
+  "image": "CASTRT01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTRT01.VXL",
+   "id": "0x2B05B71D",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTRT01.HVA",
+   "id": "0xDD8F6854",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTRT02",
+  "image": "CASTRT02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTRT02.VXL",
+   "id": "0x6CA5CDCD",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTRT02.HVA",
+   "id": "0x9A2F1284",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL01",
+  "image": "CASTL01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL01.VXL",
+   "id": "0x78F90129",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL01.HVA",
+   "id": "0x770F72C2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL02",
+  "image": "CASTL02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL02.VXL",
+   "id": "0xFE6D7387",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL02.HVA",
+   "id": "0xF19B006C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL03",
+  "image": "CASTL03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL03.VXL",
+   "id": "0x3531A022",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL03.HVA",
+   "id": "0x3AC7D3C9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL04",
+  "image": "CASTL04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL04.VXL",
+   "id": "0x2834909A",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL04.HVA",
+   "id": "0x27C2E371",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE05",
+  "image": "CAHSE05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE05.VXL",
+   "id": "0x47084FC2",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE05.HVA",
+   "id": "0x48FE3C29",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAHSE06",
+  "image": "CAHSE06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAHSE06.VXL",
+   "id": "0xC19C3D6C",
+   "found": false
+  },
+  "hva": {
+   "name": "CAHSE06.HVA",
+   "id": "0xCE6A4E87",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM05",
+  "image": "CAMIAM05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM05.VXL",
+   "id": "0xBA1FEA75",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM05.HVA",
+   "id": "0x4C95353C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM06",
+  "image": "CAMIAM06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM06.VXL",
+   "id": "0xFDBF90A5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM06.HVA",
+   "id": "0x0B354FEC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM07",
+  "image": "CAMIAM07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM07.VXL",
+   "id": "0xC0DFB915",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM07.HVA",
+   "id": "0x3655665C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFNCB",
+  "image": "CAFNCB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFNCB.VXL",
+   "id": "0x70D6DDEC",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFNCB.HVA",
+   "id": "0xA0B93D68",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFNCW",
+  "image": "CAFNCW",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFNCW.VXL",
+   "id": "0x45306E85",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFNCW.HVA",
+   "id": "0x955F8E01",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMEX02",
+  "image": "CAMEX02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMEX02.VXL",
+   "id": "0x8440AB3F",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMEX02.HVA",
+   "id": "0x8BB6D8D4",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMEX03",
+  "image": "CAMEX03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMEX03.VXL",
+   "id": "0x4F1C789A",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMEX03.HVA",
+   "id": "0x40EA0B71",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMEX04",
+  "image": "CAMEX04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMEX04.VXL",
+   "id": "0x52194822",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMEX04.HVA",
+   "id": "0x5DEF3BC9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMEX05",
+  "image": "CAMEX05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMEX05.VXL",
+   "id": "0x99459B87",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMEX05.HVA",
+   "id": "0x96B3E86C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACHIG06",
+  "image": "CACHIG06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACHIG06.VXL",
+   "id": "0x8398F0AE",
+   "found": false
+  },
+  "hva": {
+   "name": "CACHIG06.HVA",
+   "id": "0x75122FE7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC08",
+  "image": "CAMSC08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC08.VXL",
+   "id": "0xDBD09EDF",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC08.HVA",
+   "id": "0xD426ED34",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC09",
+  "image": "CAMSC09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC09.VXL",
+   "id": "0x108C4D7A",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC09.HVA",
+   "id": "0x1F7A3E91",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAARMY02",
+  "image": "CAARMY02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAARMY02.VXL",
+   "id": "0xF8A8A7D5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAARMY02.HVA",
+   "id": "0x0E22789C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAARMY03",
+  "image": "CAARMY03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAARMY03.VXL",
+   "id": "0xC5C88E65",
+   "found": false
+  },
+  "hva": {
+   "name": "CAARMY03.HVA",
+   "id": "0x3342512C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAARMY04",
+  "image": "CAARMY04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAARMY04.VXL",
+   "id": "0x77E85275",
+   "found": false
+  },
+  "hva": {
+   "name": "CAARMY04.HVA",
+   "id": "0x81628D3C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TEMMORLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TEMDAYLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TEMDUSLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "TEMNITLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SNOMORLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SNODAYLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SNODUSLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "SNONITLAMP",
+  "image": "GALITE",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GALITE.VXL",
+   "id": "0xB34A1D2F",
+   "found": false
+  },
+  "hva": {
+   "name": "GALITE.HVA",
+   "id": "0x6325FDAB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAKRMW",
+  "image": "CAKRMW",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAKRMW.VXL",
+   "id": "0xEFB04662",
+   "found": false
+  },
+  "hva": {
+   "name": "CAKRMW.HVA",
+   "id": "0x3FDFA6E6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CARUFGL",
+  "image": "CARUFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CARUFGL.VXL",
+   "id": "0x8FF39226",
+   "found": false
+  },
+  "hva": {
+   "name": "CARUFGL.HVA",
+   "id": "0x8005E1CD",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFRFGL",
+  "image": "CAFRFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFRFGL.VXL",
+   "id": "0xC5D7DE7D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFRFGL.HVA",
+   "id": "0xCA21AD96",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATRAN02",
+  "image": "CATRAN02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATRAN02.VXL",
+   "id": "0xCCF95A76",
+   "found": false
+  },
+  "hva": {
+   "name": "CATRAN02.HVA",
+   "id": "0x3A73853F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CACUFGL",
+  "image": "CACUFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CACUFGL.VXL",
+   "id": "0x479F78F0",
+   "found": false
+  },
+  "hva": {
+   "name": "CACUFGL.HVA",
+   "id": "0x48690B1B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASKFGL",
+  "image": "CASKFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASKFGL.VXL",
+   "id": "0x043360FB",
+   "found": false
+  },
+  "hva": {
+   "name": "CASKFGL.HVA",
+   "id": "0x0BC51310",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALBFGL",
+  "image": "CALBFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALBFGL.VXL",
+   "id": "0x7E350CC5",
+   "found": false
+  },
+  "hva": {
+   "name": "CALBFGL.HVA",
+   "id": "0x71C37F2E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMIAM08",
+  "image": "CAMIAM08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMIAM08.VXL",
+   "id": "0x428F2EC4",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMIAM08.HVA",
+   "id": "0xB405F18D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMISC05",
+  "image": "CAMISC05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMISC05.VXL",
+   "id": "0xD4BEA77E",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMISC05.HVA",
+   "id": "0x22347837",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMISC06",
+  "image": "CAMISC06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMISC06.VXL",
+   "id": "0x931EDDAE",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMISC06.HVA",
+   "id": "0x659402E7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05A",
+  "image": "CASTL05A",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05A.VXL",
+   "id": "0x94D28D8E",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05A.HVA",
+   "id": "0x625852C7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05B",
+  "image": "CASTL05B",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05B.VXL",
+   "id": "0xD372F75E",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05B.HVA",
+   "id": "0x25F82817",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05C",
+  "image": "CASTL05C",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05C.VXL",
+   "id": "0xEE12DEEE",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05C.HVA",
+   "id": "0x189801A7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05D",
+  "image": "CASTL05D",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05D.VXL",
+   "id": "0x5C3202FE",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05D.HVA",
+   "id": "0xAAB8DDB7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05E",
+  "image": "CASTL05E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05E.VXL",
+   "id": "0x61522B4E",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05E.HVA",
+   "id": "0x97D8F407",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05F",
+  "image": "CASTL05F",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05F.VXL",
+   "id": "0x26F2519E",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05F.HVA",
+   "id": "0xD0788ED7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05G",
+  "image": "CASTL05G",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05G.VXL",
+   "id": "0x1B92782E",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05G.HVA",
+   "id": "0xED18A767",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTL05H",
+  "image": "CASTL05H",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTL05H.VXL",
+   "id": "0x99C2EFFF",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTL05H.HVA",
+   "id": "0x6F4830B6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC10",
+  "image": "CAMSC10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC10.VXL",
+   "id": "0x91F41706",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC10.HVA",
+   "id": "0x9E0264ED",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAGEFGL",
+  "image": "CAGEFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAGEFGL.VXL",
+   "id": "0xE2B49AFB",
+   "found": false
+  },
+  "hva": {
+   "name": "CAGEFGL.HVA",
+   "id": "0xED42E910",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAUKFGL",
+  "image": "CAUKFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAUKFGL.VXL",
+   "id": "0x092D10BC",
+   "found": false
+  },
+  "hva": {
+   "name": "CAUKFGL.HVA",
+   "id": "0x06DB6357",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAWASH06",
+  "image": "CAWASH06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAWASH06.VXL",
+   "id": "0x1A4D3A6D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAWASH06.HVA",
+   "id": "0xECC7E524",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC11",
+  "image": "CAMSC11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC11.VXL",
+   "id": "0x5AA8C4A3",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC11.HVA",
+   "id": "0x555EB748",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC12",
+  "image": "CAMSC12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC12.VXL",
+   "id": "0xDC3CB60D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC12.HVA",
+   "id": "0xD3CAC5E6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC13",
+  "image": "CAMSC13",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC13.VXL",
+   "id": "0x176065A8",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC13.HVA",
+   "id": "0x18961643",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPOFGL",
+  "image": "CAPOFGL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPOFGL.VXL",
+   "id": "0xB2E88AF4",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPOFGL.HVA",
+   "id": "0xBD1EF91F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMSC12A",
+  "image": "CAMSC12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMSC12.VXL",
+   "id": "0xDC3CB60D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMSC12.HVA",
+   "id": "0xD3CAC5E6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMOV01",
+  "image": "CAMOV01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMOV01.VXL",
+   "id": "0x8270413D",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMOV01.HVA",
+   "id": "0x8D8632D6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMOV02",
+  "image": "CAMOV02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMOV02.VXL",
+   "id": "0x04E43393",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMOV02.HVA",
+   "id": "0x0B124078",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABUNK01",
+  "image": "CABUNK01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABUNK01.VXL",
+   "id": "0x4E9081CB",
+   "found": false
+  },
+  "hva": {
+   "name": "CABUNK01.HVA",
+   "id": "0xB81A5E82",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABUNK02",
+  "image": "CABUNK02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABUNK02.VXL",
+   "id": "0x0930FB1B",
+   "found": false
+  },
+  "hva": {
+   "name": "CABUNK02.HVA",
+   "id": "0xFFBA2452",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAFNCP",
+  "image": "CAFNCP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAFNCP.VXL",
+   "id": "0x8097500B",
+   "found": false
+  },
+  "hva": {
+   "name": "CAFNCP.HVA",
+   "id": "0x50F8B08F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTRT03",
+  "image": "CASTRT03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTRT03.VXL",
+   "id": "0x51C5E47D",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTRT03.HVA",
+   "id": "0xA74F3B34",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTRT04",
+  "image": "CASTRT04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTRT04.VXL",
+   "id": "0xE3E5386D",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTRT04.HVA",
+   "id": "0x156FE724",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASTRT05",
+  "image": "CASTRT05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASTRT05.VXL",
+   "id": "0xDE8511DD",
+   "found": false
+  },
+  "hva": {
+   "name": "CASTRT05.HVA",
+   "id": "0x280FCE94",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YACNST",
+  "image": "YACNST",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YACNST.VXL",
+   "id": "0x08658BEA",
+   "found": false
+  },
+  "hva": {
+   "name": "YACNST.HVA",
+   "id": "0xD80A6B6E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAPOWR",
+  "image": "YAPOWR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAPOWR.VXL",
+   "id": "0x341D9E82",
+   "found": false
+  },
+  "hva": {
+   "name": "YAPOWR.HVA",
+   "id": "0xE4727E06",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YABRCK",
+  "image": "YABRCK",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YABRCK.VXL",
+   "id": "0x407E8CBD",
+   "found": false
+  },
+  "hva": {
+   "name": "YABRCK.HVA",
+   "id": "0x90116C39",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAWEAP",
+  "image": "YAWEAP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAWEAP.VXL",
+   "id": "0x6EA426E0",
+   "found": false
+  },
+  "hva": {
+   "name": "YAWEAP.HVA",
+   "id": "0xBECBC664",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAYARD",
+  "image": "YAYARD",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAYARD.VXL",
+   "id": "0x4C24C94A",
+   "found": false
+  },
+  "hva": {
+   "name": "YAYARD.HVA",
+   "id": "0x9C4B29CE",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YADEPT",
+  "image": "GADEPT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GADEPT.VXL",
+   "id": "0x034A374F",
+   "found": false
+  },
+  "hva": {
+   "name": "GADEPT.HVA",
+   "id": "0xD325D7CB",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YATECH",
+  "image": "YATECH",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YATECH.VXL",
+   "id": "0x93874837",
+   "found": false
+  },
+  "hva": {
+   "name": "YATECH.HVA",
+   "id": "0x43E8A8B3",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAFWLL",
+  "image": "GAFWLL",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAFWLL.VXL",
+   "id": "0xFAAC7B48",
+   "found": false
+  },
+  "hva": {
+   "name": "GAFWLL.HVA",
+   "id": "0x2AC39BCC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAGGUN",
+  "image": "YAGGUN",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "YAGGUN.VXL",
+   "id": "0xA8EC57CC",
+   "found": true
+  },
+  "hva": {
+   "name": "YAGGUN.HVA",
+   "id": "0x7883B748",
+   "found": true
+  },
+  "turret_part": {
+   "name": "YAGGUNTUR.VXL",
+   "id": "0x6F5C83DC",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "YAGGUNBARL.VXL",
+   "id": "0x23B165A2",
+   "found": false
+  },
+  "flh": "150,60,200"
+ },
+ {
+  "unit": "YAPSYT",
+  "image": "YAPSYT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAPSYT.VXL",
+   "id": "0x08B308EF",
+   "found": false
+  },
+  "hva": {
+   "name": "YAPSYT.HVA",
+   "id": "0xD8DCE86B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NAINDP",
+  "image": "NAINDP",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NAINDP.VXL",
+   "id": "0xE5F60371",
+   "found": false
+  },
+  "hva": {
+   "name": "NAINDP.HVA",
+   "id": "0x3599E3F5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAGRND",
+  "image": "YAGRND",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAGRND.VXL",
+   "id": "0xCB1A22C1",
+   "found": false
+  },
+  "hva": {
+   "name": "YAGRND.HVA",
+   "id": "0x1B75C245",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAGNTC",
+  "image": "YAGNTC",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAGNTC.VXL",
+   "id": "0xA93280C9",
+   "found": false
+  },
+  "hva": {
+   "name": "YAGNTC.HVA",
+   "id": "0x795D604D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASLAB",
+  "image": "CASLAB",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASLAB.VXL",
+   "id": "0xDD82B8BB",
+   "found": false
+  },
+  "hva": {
+   "name": "CASLAB.HVA",
+   "id": "0x0DED583F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATIME",
+  "image": "CATIME",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATIME.VXL",
+   "id": "0xE7C1CD4C",
+   "found": false
+  },
+  "hva": {
+   "name": "CATIME.HVA",
+   "id": "0x37AE2DC8",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAPPET",
+  "image": "YAPPET",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAPPET.VXL",
+   "id": "0x1A2A104E",
+   "found": false
+  },
+  "hva": {
+   "name": "YAPPET.HVA",
+   "id": "0xCA45F0CA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALOND04",
+  "image": "CALOND04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALOND04.VXL",
+   "id": "0x571F860E",
+   "found": false
+  },
+  "hva": {
+   "name": "CALOND04.HVA",
+   "id": "0xA1955947",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALOND05",
+  "image": "CALOND05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALOND05.VXL",
+   "id": "0x6A7FAFBE",
+   "found": false
+  },
+  "hva": {
+   "name": "CALOND05.HVA",
+   "id": "0x9CF570F7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALOND06",
+  "image": "CALOND06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALOND06.VXL",
+   "id": "0x2DDFD56E",
+   "found": false
+  },
+  "hva": {
+   "name": "CALOND06.HVA",
+   "id": "0xDB550A27",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMOON01",
+  "image": "CAMOON01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMOON01.VXL",
+   "id": "0x18E73D90",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMOON01.HVA",
+   "id": "0xEE6DE2D9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATRAN03",
+  "image": "CATRAN03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATRAN03.VXL",
+   "id": "0xF19973C6",
+   "found": false
+  },
+  "hva": {
+   "name": "CATRAN03.HVA",
+   "id": "0x0713AC8F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEAST01",
+  "image": "CAEAST01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEAST01.VXL",
+   "id": "0x2B484112",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEAST01.HVA",
+   "id": "0xDDC29E5B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEGYP01",
+  "image": "CAEGYP01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEGYP01.VXL",
+   "id": "0x3DDD0043",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEGYP01.HVA",
+   "id": "0xCB57DF0A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEGYP02",
+  "image": "CAEGYP02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEGYP02.VXL",
+   "id": "0x7A7D7A93",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEGYP02.HVA",
+   "id": "0x8CF7A5DA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEGYP03",
+  "image": "CAEGYP03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEGYP03.VXL",
+   "id": "0x471D5323",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEGYP03.HVA",
+   "id": "0xB1978C6A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA01",
+  "image": "CALA01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA01.VXL",
+   "id": "0x4712DE31",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA01.HVA",
+   "id": "0x977D3EB5",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA02",
+  "image": "CALA02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA02.VXL",
+   "id": "0x76FAC4AC",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA02.HVA",
+   "id": "0xA6952428",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA03",
+  "image": "CALA03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA03.VXL",
+   "id": "0xD08DCF18",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA03.HVA",
+   "id": "0x00E22F9C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA04",
+  "image": "CALA04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA04.VXL",
+   "id": "0x152AF196",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA04.HVA",
+   "id": "0xC5451112",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA05",
+  "image": "CALA05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA05.VXL",
+   "id": "0xB35DFA22",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA05.HVA",
+   "id": "0x63321AA6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALOND01",
+  "image": "CALOND01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALOND01.VXL",
+   "id": "0x9FFF097E",
+   "found": false
+  },
+  "hva": {
+   "name": "CALOND01.HVA",
+   "id": "0x6975D637",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALOND02",
+  "image": "CALOND02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALOND02.VXL",
+   "id": "0xD85F73AE",
+   "found": false
+  },
+  "hva": {
+   "name": "CALOND02.HVA",
+   "id": "0x2ED5ACE7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALOND03",
+  "image": "CALOND03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALOND03.VXL",
+   "id": "0xE53F5A1E",
+   "found": false
+  },
+  "hva": {
+   "name": "CALOND03.HVA",
+   "id": "0x13B58557",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR01",
+  "image": "CAMORR01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR01.VXL",
+   "id": "0x5F27EFD0",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR01.HVA",
+   "id": "0xA9AD3099",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR02",
+  "image": "CAMORR02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR02.VXL",
+   "id": "0x18879500",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR02.HVA",
+   "id": "0xEE0D4A49",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR03",
+  "image": "CAMORR03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR03.VXL",
+   "id": "0x25E7BCB0",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR03.HVA",
+   "id": "0xD36D63F9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF01",
+  "image": "CASANF01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF01.VXL",
+   "id": "0x160719A0",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF01.HVA",
+   "id": "0xE08DC6E9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF02",
+  "image": "CASANF02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF02.VXL",
+   "id": "0x51A76370",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF02.HVA",
+   "id": "0xA72DBC39",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF03",
+  "image": "CASANF03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF03.VXL",
+   "id": "0x6CC74AC0",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF03.HVA",
+   "id": "0x9A4D9589",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF04",
+  "image": "CASANF04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF04.VXL",
+   "id": "0xDEE796D0",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF04.HVA",
+   "id": "0x286D4999",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF05",
+  "image": "CASANF05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF05.VXL",
+   "id": "0xE387BF60",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF05.HVA",
+   "id": "0x150D6029",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASEAT01",
+  "image": "CASEAT01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASEAT01.VXL",
+   "id": "0x628AD7E7",
+   "found": false
+  },
+  "hva": {
+   "name": "CASEAT01.HVA",
+   "id": "0x940008AE",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NATBNK",
+  "image": "NATBNK",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NATBNK.VXL",
+   "id": "0x258B2EC1",
+   "found": false
+  },
+  "hva": {
+   "name": "NATBNK.HVA",
+   "id": "0xF5E4CE45",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAGATE_A",
+  "image": "GAGATE_A",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAGATE_A.VXL",
+   "id": "0xE7A76973",
+   "found": false
+  },
+  "hva": {
+   "name": "GAGATE_A.HVA",
+   "id": "0x112DB63A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF09",
+  "image": "CASANF09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF09.VXL",
+   "id": "0x26775261",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF09.HVA",
+   "id": "0xD0FD8D28",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF10",
+  "image": "CASANF10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF10.VXL",
+   "id": "0xE03BE3B5",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF10.HVA",
+   "id": "0x16B13CFC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF11",
+  "image": "CASANF11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF11.VXL",
+   "id": "0xDD5BCA05",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF11.HVA",
+   "id": "0x2BD1154C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF12",
+  "image": "CASANF12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF12.VXL",
+   "id": "0x9AFBB0D5",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF12.HVA",
+   "id": "0x6C716F9C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF13",
+  "image": "CASANF13",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF13.VXL",
+   "id": "0xA79B9965",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF13.HVA",
+   "id": "0x5111462C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF14",
+  "image": "CASANF14",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF14.VXL",
+   "id": "0x15BB4575",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF14.HVA",
+   "id": "0xE3319A3C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF06",
+  "image": "CASANF06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF06.VXL",
+   "id": "0xA427C5B0",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF06.HVA",
+   "id": "0x52AD1AF9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF07",
+  "image": "CASANF07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF07.VXL",
+   "id": "0x9947EC00",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF07.HVA",
+   "id": "0x6FCD3349",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF08",
+  "image": "CASANF08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF08.VXL",
+   "id": "0x1B177BD1",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF08.HVA",
+   "id": "0xED9DA498",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASEAT02",
+  "image": "CASEAT02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASEAT02.VXL",
+   "id": "0x252AAD37",
+   "found": false
+  },
+  "hva": {
+   "name": "CASEAT02.HVA",
+   "id": "0xD3A0727E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YACOMD",
+  "image": "YACOMD",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YACOMD.VXL",
+   "id": "0x11F1207E",
+   "found": false
+  },
+  "hva": {
+   "name": "YACOMD.HVA",
+   "id": "0xC19EC0FA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAPPPT",
+  "image": "YAPPPT",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAPPPT.VXL",
+   "id": "0x2E712F01",
+   "found": false
+  },
+  "hva": {
+   "name": "YAPPPT.HVA",
+   "id": "0xFE1ECF85",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "GAROBO",
+  "image": "GAROBO",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "GAROBO.VXL",
+   "id": "0xE793B21C",
+   "found": false
+  },
+  "hva": {
+   "name": "GAROBO.HVA",
+   "id": "0x37FC5298",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "YAREFN",
+  "image": "YAREFN",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "YAREFN.VXL",
+   "id": "0xB5A9032E",
+   "found": false
+  },
+  "hva": {
+   "name": "YAREFN.HVA",
+   "id": "0x65C6E3AA",
+   "found": false
+  },
+  "turret_part": {
+   "name": "YAREFNTUR.VXL",
+   "id": "0x96975B9A",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "YAREFNBARL.VXL",
+   "id": "0xDA7ABDE4",
+   "found": false
+  },
+  "flh": "120,0,185"
+ },
+ {
+  "unit": "YAROCK",
+  "image": "YAROCK",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "YAROCK.VXL",
+   "id": "0x3A5FA873",
+   "found": false
+  },
+  "hva": {
+   "name": "YAROCK.HVA",
+   "id": "0xEA3048F7",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "NABNKR",
+  "image": "NABNKR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "NABNKR.VXL",
+   "id": "0x53A9FB03",
+   "found": false
+  },
+  "hva": {
+   "name": "NABNKR.HVA",
+   "id": "0x83C61B87",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF15",
+  "image": "CASANF15",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF15.VXL",
+   "id": "0x28DB6CC5",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF15.HVA",
+   "id": "0xDE51B38C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF16",
+  "image": "CASANF16",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF16.VXL",
+   "id": "0x6F7B1615",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF16.HVA",
+   "id": "0x99F1C95C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF17",
+  "image": "CASANF17",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF17.VXL",
+   "id": "0x521B3FA5",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF17.HVA",
+   "id": "0xA491E0EC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASANF18",
+  "image": "CASANF18",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASANF18.VXL",
+   "id": "0xD04BA874",
+   "found": false
+  },
+  "hva": {
+   "name": "CASANF18.HVA",
+   "id": "0x26C1773D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASIN03E",
+  "image": "CASIN03E",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASIN03E.VXL",
+   "id": "0xA8A16A08",
+   "found": false
+  },
+  "hva": {
+   "name": "CASIN03E.HVA",
+   "id": "0x5E2BB541",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CASIN03S",
+  "image": "CASIN03S",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CASIN03S.VXL",
+   "id": "0x4701082A",
+   "found": false
+  },
+  "hva": {
+   "name": "CASIN03S.HVA",
+   "id": "0xB18BD763",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAURB01",
+  "image": "CAURB01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAURB01.VXL",
+   "id": "0x13771AD6",
+   "found": false
+  },
+  "hva": {
+   "name": "CAURB01.HVA",
+   "id": "0x1C81693D",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAURB02",
+  "image": "CAURB02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAURB02.VXL",
+   "id": "0x95E36878",
+   "found": false
+  },
+  "hva": {
+   "name": "CAURB02.HVA",
+   "id": "0x9A151B93",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAURB03",
+  "image": "CAURB03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAURB03.VXL",
+   "id": "0x5EBFBBDD",
+   "found": false
+  },
+  "hva": {
+   "name": "CAURB03.HVA",
+   "id": "0x5149C836",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPOWR",
+  "image": "CAPOWR",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPOWR.VXL",
+   "id": "0xD2329B1F",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPOWR.HVA",
+   "id": "0x025D7B9B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA07",
+  "image": "CALA07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA07.VXL",
+   "id": "0x24C2EB0B",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA07.HVA",
+   "id": "0xF4AD0B8F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEGYP06",
+  "image": "CAEGYP06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEGYP06.VXL",
+   "id": "0x8FFDDC53",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEGYP06.HVA",
+   "id": "0x7977031A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA08",
+  "image": "CALA08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA08.VXL",
+   "id": "0xD28A9BE2",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA08.HVA",
+   "id": "0x02E57B66",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEAST02",
+  "image": "CAEAST02",
+  "voxel": false,
+  "turret": true,
+  "body": {
+   "name": "CAEAST02.VXL",
+   "id": "0x6CE83BC2",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEAST02.HVA",
+   "id": "0x9A62E48B",
+   "found": false
+  },
+  "turret_part": {
+   "name": "CAEAST02TUR.VXL",
+   "id": "0x0080493C",
+   "found": false
+  },
+  "barrel_part": {
+   "name": "CAEAST02BARL.VXL",
+   "id": "0xA6EFC34D",
+   "found": false
+  }
+ },
+ {
+  "unit": "CABARR01",
+  "image": "CABARR01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABARR01.VXL",
+   "id": "0x66EE6FCF",
+   "found": false
+  },
+  "hva": {
+   "name": "CABARR01.HVA",
+   "id": "0x9064B086",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABARR02",
+  "image": "CABARR02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABARR02.VXL",
+   "id": "0x214E151F",
+   "found": false
+  },
+  "hva": {
+   "name": "CABARR02.HVA",
+   "id": "0xD7C4CA56",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR04",
+  "image": "CAMORR04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR04.VXL",
+   "id": "0x97C760A0",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR04.HVA",
+   "id": "0x614DBFE9",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR05",
+  "image": "CAMORR05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR05.VXL",
+   "id": "0xAAA74910",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR05.HVA",
+   "id": "0x5C2D9659",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA09",
+  "image": "CALA09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA09.VXL",
+   "id": "0x74FD9056",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA09.HVA",
+   "id": "0xA49270D2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEGYP04",
+  "image": "CAEGYP04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEGYP04.VXL",
+   "id": "0xF53D8F33",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEGYP04.HVA",
+   "id": "0x03B7507A",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAEGYP05",
+  "image": "CAEGYP05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAEGYP05.VXL",
+   "id": "0xC85DA683",
+   "found": false
+  },
+  "hva": {
+   "name": "CAEGYP05.HVA",
+   "id": "0x3ED779CA",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA06",
+  "image": "CALA06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA06.VXL",
+   "id": "0x82B5E0BF",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA06.HVA",
+   "id": "0x52DA003B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR06",
+  "image": "CAMORR06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR06.VXL",
+   "id": "0xED0733C0",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR06.HVA",
+   "id": "0x1B8DEC89",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR07",
+  "image": "CAMORR07",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR07.VXL",
+   "id": "0xD0671A70",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR07.HVA",
+   "id": "0x26EDC539",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR08",
+  "image": "CAMORR08",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR08.VXL",
+   "id": "0x52378DA1",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR08.HVA",
+   "id": "0xA4BD52E8",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR09",
+  "image": "CAMORR09",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR09.VXL",
+   "id": "0x6F57A411",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR09.HVA",
+   "id": "0x99DD7B58",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAMORR10",
+  "image": "CAMORR10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAMORR10.VXL",
+   "id": "0xA91B15C5",
+   "found": false
+  },
+  "hva": {
+   "name": "CAMORR10.HVA",
+   "id": "0x5F91CA8C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATIME01",
+  "image": "CATIME01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATIME01.VXL",
+   "id": "0xF064BDBF",
+   "found": false
+  },
+  "hva": {
+   "name": "CATIME01.HVA",
+   "id": "0x06EE62F6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CATIME02",
+  "image": "CATIME02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CATIME02.VXL",
+   "id": "0xB7C4C76F",
+   "found": false
+  },
+  "hva": {
+   "name": "CATIME02.HVA",
+   "id": "0x414E1826",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA10",
+  "image": "CALA10",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA10.VXL",
+   "id": "0x2DCFD51B",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA10.HVA",
+   "id": "0xFDA0359F",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA11",
+  "image": "CALA11",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA11.VXL",
+   "id": "0x8BB8DEAF",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA11.HVA",
+   "id": "0x5BD73E2B",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA12",
+  "image": "CALA12",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA12.VXL",
+   "id": "0xBA50C432",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA12.HVA",
+   "id": "0x6A3F24B6",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA13",
+  "image": "CALA13",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA13.VXL",
+   "id": "0x1C27CF86",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA13.HVA",
+   "id": "0xCC482F02",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARK04",
+  "image": "CAPARK04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARK04.VXL",
+   "id": "0x7F136877",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARK04.HVA",
+   "id": "0x8999B73E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARK05",
+  "image": "CAPARK05",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARK05.VXL",
+   "id": "0x427341C7",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARK05.HVA",
+   "id": "0xB4F99E8E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CAPARK06",
+  "image": "CAPARK06",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CAPARK06.VXL",
+   "id": "0x05D33B17",
+   "found": false
+  },
+  "hva": {
+   "name": "CAPARK06.HVA",
+   "id": "0xF359E45E",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA14",
+  "image": "CALA14",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA14.VXL",
+   "id": "0xD980F108",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA14.HVA",
+   "id": "0x09EF118C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALA15",
+  "image": "CALA15",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALA15.VXL",
+   "id": "0x7FF7FABC",
+   "found": false
+  },
+  "hva": {
+   "name": "CALA15.HVA",
+   "id": "0xAF981A38",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABUNK03",
+  "image": "CABUNK03",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABUNK03.VXL",
+   "id": "0x3450D2AB",
+   "found": false
+  },
+  "hva": {
+   "name": "CABUNK03.HVA",
+   "id": "0xC2DA0DE2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CABUNK04",
+  "image": "CABUNK04",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CABUNK04.VXL",
+   "id": "0x86700EBB",
+   "found": false
+  },
+  "hva": {
+   "name": "CABUNK04.HVA",
+   "id": "0x70FAD1F2",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALUNR01",
+  "image": "CALUNR01",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALUNR01.VXL",
+   "id": "0xA21F6865",
+   "found": false
+  },
+  "hva": {
+   "name": "CALUNR01.HVA",
+   "id": "0x5495B72C",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ },
+ {
+  "unit": "CALUNR02",
+  "image": "CALUNR02",
+  "voxel": false,
+  "turret": false,
+  "body": {
+   "name": "CALUNR02.VXL",
+   "id": "0xE5BF12B5",
+   "found": false
+  },
+  "hva": {
+   "name": "CALUNR02.HVA",
+   "id": "0x1335CDFC",
+   "found": false
+  },
+  "turret_part": null,
+  "barrel_part": null
+ }
+]

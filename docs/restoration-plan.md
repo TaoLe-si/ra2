@@ -211,15 +211,76 @@ OK   0x9B570683 800x600 planes=3 bpl=800 内嵌调色板=无
 两个必须记住的点：**z 是增量**（列[53] 第二段写 02 而不是 03），
 **n 在数据前后各写一次**（把这一条写错，多 span 列会整片错位）。
 
+**肢体局部原点不是索引 (0,0,0)**（2026-09-15 第二次修正，最容易踩且最晚才发现）：
+`min_bounds`/`max_bounds` 就是**该肢体体素在局部坐标系下的 AABB**，而局部原点
+落在 AABB 中心 —— 13 根肢体的 `(min+max)/2` 实测都 ≤1.8，BODY 是
+`(0.000,-0.164,0.345)`。所以体素索引必须先平移再套变换：
+
+```
+world = R · (index + min_bounds) + T
+```
+
+把索引直接喂变换的后果（先前的错误版本）：单肢模型（184 个里的 180 个）
+因为整体平移、归一化后看不出问题，多肢模型立刻散架 ——
+
+| 模型 | `world = R·index + T`（错） | `world = R·(index+min_bounds)+T`（对） |
+|---|---|---|
+| JEEP 车身 | z 6.96–18.96（悬空 7 格） | z 0.09–12.30（落地） |
+| JEEP 车顶机枪 GUN01 | 嵌在车身中部，看不见 | z 11.96–14.58，正压车顶 12.30 |
+| 四足机甲（13 肢）脚 | z 0.83–5.9，与小腿断 3.3 格 | z 0.15–5.03，**正好踩地** |
+| 四足机甲 车体中心 | (32.0, 15.5)，四足重心在 (7.4, 6.7) | (6.0, 0.5)，与髋部 ±12.4/±6.6 对齐 |
+| SHAD DUMMY01 | — | z 0.11–25.61（落地） |
+
+用 `(N-1)/2` 当枢轴只能算近似，会差 0.5~3.6 格：GUN01 会被整个埋进车身里。
+用 `+min_bounds` 是唯一能**精确复现文件自带的 AABB** 的做法。
+
+**HVA 接渲染的两条单位规则**（3 组肢体名唯一的配对 / 18 根肢体实测）：
+- `3×3` 部分两边**完全相同**（最大差 0.000000），直接复用；
+- 平移 `T_vxl == T_hva × det`，det 恒 `1/12`，所以 HVA 的平移要乘 det；
+- **det 只乘平移**。写成 `world = det×(R·v + T)` 会把体素坐标缩 12 倍而平移不变，
+  13 根肢体立刻散成天上的一堆小方块（实测踩过）。
+- 配对判据：肢数相同 + 每根肢体 f0 的 `R` 与 `T·det` 都对上，要求**唯一命中**，
+  不唯一就不用（宁可静态也不要配错）。多肢模型的**肢体名也完全一致**
+  （WALKER 13/13、SHAD 3/3、NARTURNTA 2/2），可作额外确认。
+
+**炮塔和炮管是独立 VXL**：`MTNK.VXL` 只有 1 根肢体 DUMMY01（整个车体），
+炮塔在 `<名>TUR.VXL`、炮管在 `<名>BARL.VXL`（实测 MTNKTUR=0x17F0096E、
+HTNKTUR=0x8F537E7E、GTNKTUR=0xFDC7E10F、SREFTUR=0x13C3E16F、
+MTNKBARL=0xB19F831F、FVTUR=0x1529B889、RTNKTUR=0x697C7BE3、JEEPTUR=0xDA65DCB1
+全在 ra2.mix 里）。ra2.mix 里只有 4 个 VXL 是多肢的（JEEP 2、SHAD 3、
+NAR TURNTA 2、四足机甲 13），所以"没炮塔"≠ 解码错，是**要按数据层拼装**。
+
+拼装规则（`GTNK` 实测，三个文件**共享同一模型空间原点**，`T` 完全相同
+`(0.377,-0.052,-0.555)`）：
+
+| 文件 | 世界 AABB | 说明 |
+|---|---|---|
+| `GTNK.VXL` 车体 | z 0.01–11.01 | 落地，顶面 11.01 |
+| `GTNKTUR.VXL` 炮塔 | z **11.02**–17.02 | 底面**正好压**在车体顶面 |
+| `GTNKBARL.VXL` 炮管 | x 7.85–32.85, z 11.18–14.18 | 从炮塔内部穿出，向前伸 |
+
+所以数据层只要：`hull + TUR(绕 Z 转炮塔朝向) + BARL(绕 X 抬炮口)`，
+再叠 art.ini 的 `TurretOffset=` 微调即可 —— 不需要额外坐标换算。
+
 调色板坑：VXL 内嵌调色板常被说成"6 位值要 <<2"，实测**是错的** ——
 184 个样本的 768 个分量**全部** ≡ 3 (mod 4)，即存的已经是 `(v6<<2)|(v6>>4)`
 展开好的 8 位值。再 <<2 会把炮塔渲成一片青紫洋红（实测踩过）。
 另外 0..15 号恒为品红 (255,0,255) "无此色"标记，16..31 是御主色渐变。
 
-**文件名反查的增益有限但有用**：VXL/HVA 无魔数，只能靠
-`UnitClass"的 Image 名 + ".VXL"/".HVA"` → Westwood CRC 查表。所以接下来
-应当把 `db/mix-names.txt` 里 92 个 `Voxel=yes` 的名字全部算 CRC 存成表。
-| 文件名反查补齐 | `db/mix-names.txt` | 命中率从 45% 提到 80%+ | 🟡 |
+**文件名反查**：VXL/HVA 无魔数，只能靠 `名字 + ".VXL"/".HVA"` → Westwood CRC 查表。
+`tools/vxlname.py` 用"INI 节名 + token + 后缀(TUR/BARL/WO)"的全量 CRC 扫描，
+把 ra2.mix 的 184 个 VXL 命名到 **115 个**（全部同时命中 `.HVA` 的 CRC，
+等于双重证据）。`tools/mixnames.py` 也补了两轮：**INI 节名也要当候选**
+（`[ZEP]` 就是基洛夫，只扫 `key=value` 会整个漏掉）和**已命中名 + 后缀扩展**，
+命中率 **8.7% → 26.0%**（11233 个叶子 ID），见 `db/mix-names.txt`。
+
+仍未命名的（ra2.mix 里 69 个 VXL，含 `0xDF94FB26` 那台四足机甲）：INI 里
+查不到任何对应名字，exe 字符串里也没有 —— 判为**未使用的遗留素材**。
+游戏本身是按 CRC 查表的，所以不影响还原。
+
+`ra2view.exe` 的命令行参数上限原来是 8，加上炮塔那组开关（`--turret` /
+`--barrel` / `--turretyaw` / `--barrelpitch`）就溢出，超出的参数被**静默丢弃**
+（表现是 `--offscreen` 消失、开了个窗口等按键）。已提到 32 并加截断告警。
 
 **P0 曾经的关键卡点：SHP flags=0x3。** 已解决 —— 结论是它和 0x02 共用同一套
 RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必须逐行裁剪。
@@ -274,6 +335,76 @@ RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必�
 - `ai.ini`、`sound.ini`、`theme.ini`
 
 **验收**：打表出 500+ 个 TechnoType，属性与原版一致（可用 XCC Mixer 导出的数据对拍）。
+
+#### P2 第一步（已完成）：单位名 → 体素模型组成
+
+先做"最小可用的一跳"：**给单位名，自动推出它由哪几个 VXL/HVA 组成**。
+这一跳打通，"给单位名出图"才算真的连上（之前是手写三个 0xID）。
+
+**INI 里怎么摆（实测，`tools/iniprobe.py` 四个文件全扫）**
+
+| 键 | 落在哪 | 说明 |
+|---|---|---|
+| `Voxel=yes` | `art(md).ini` 的 `[Image]` 段 | rules 里**一处都没有** |
+| `Turret=yes` | `rules(md).ini` 的 `[单位]` 段 | art 里**一处都没有** |
+| `Image=` | `rules(md).ini` 的 `[单位]` 段 | 缺省 = 单位名本身 |
+| `PrimaryFireFLH=` | `art(md).ini` 的 `[Image]` 段 | 炮口位置 |
+| `TurretOffset=` | `art(md).ini` 的 `[Image]` 段 | |
+
+也就是说**同一个单位的信息被拆在 rules 和 art 两个文件里**，只认一个必然错：
+实测 `[MTNK]` 写的是 `Image=GTNK`（灰熊坦克的美术名），不查 rules 就找不着模型。
+
+**文件名怎么拼**（MIX 里没名字、只有 CRC，而 CRC 大小写不敏感，统一用大写）：
+
+```
+<IMAGE>.VXL      车体（必需）
+<IMAGE>.HVA      车体动画
+<IMAGE>TUR.VXL   炮塔   ← Turret=yes 且文件在包里时
+<IMAGE>BARL.VXL  炮管   ← 文件在包里时
+```
+
+**炮塔不是一定有独立文件**：18 个 `Turret=yes` 的单位里 17 个有 `TUR.VXL`，
+只有 `SCHP`（苏联攻城直升机）没有 —— 它的炮塔是车体 VXL 里的肢体
+（`CYLINDER19`/`CYLINDER57`/`DUMMY01`）。所以判据是**文件在不在 MIX 里**，
+不是 `Turret=yes` 没有。反过来也有一个特例：`GTGCAN` 有 `TUR.VXL`+`BARL.VXL`
+却没有车体 VXL、art 里也没 `Voxel=yes` —— 判定为**废弃素材**。
+
+**载入顺序与合并语义（踩过的坑）**
+
+- rules 在 `ra2.mix`（`RULES.INI`）、rulesmd 在 `ra2md.mix`（`RULESMD.INI`），
+  **一人一份**，只挂一个包就只有一半：单挂 ra2.mix 是 1191 段 / 59 个体素单位，
+  两个一起才是 1482 段 / 86 个体素单位。
+- md 覆盖 base，而且是**覆盖在位**（Westwood `INIClass::Load` 的语义），
+  不是"追加后取第一个"。反例很实在：`[BuildingTypes]` 是编号列表，
+  rules.ini 有 301 项、rulesmd.ini 有 403 项；用"追加 + 取第一个"的写法，
+  两份的 1..301 会**并存**，单位总数变成 565 —— 比真实的 559 多出 6 个
+  （`CAARMR`/`NAHPAD`/`NAWAST`/`GARADR`/`CAEURO01`/`CAIRSFGL`，只在老列表里）。
+- 落地：`IniFile::Merge(data, size, overwrite)`（`src/data/Ini.h`），
+  `Load` 保持原语义不动（`--inidump` 的逐行回归依赖它）。
+
+**落地与验收**
+
+- `src/data/UnitModel.{h,cpp}`：`UnitModelDB::Load(悬挂的 MIX 数组)` +
+  `Resolve(单位名)`。为了不逐个 `Read_Deep` 解 Blowfish，
+  先用 `MixFileClass::Collect_Leaf_IDs()` 把全部条目 ID 摊平成一张集合。
+- `ra2core.exe --unitdb <mix...> [--dump out.txt]`：全量解析 + 自检
+  （**车体缺失必须是 0**，缺一个就说明 Image= / CRC 大小写 / 段合并有一处写错）。
+- `ra2view.exe <mix> --addmix <mix2> --unit MTNK ...`：单位模式，
+  车体/炮塔/炮管/HVA 全自动，其余开关（`--turretyaw` 等）照旧可用。
+- `tools/unitvxl.py`（Python 参考实现）+ `tools/unitvxl_check.py`（逐行对账）。
+- **实测结果**：段 rules=1482 / art=1594（与 Python 完全一致）；单位 559；
+  体素单位 **86**，车体命中 **86/86**，炮塔 17，炮管 7，车体缺失 **0**；
+  C++ vs Python **559 个单位 × 9 个字段全部一致**。
+- 端到端（`tools/unitrender.py`）：
+  `--unit MTNK` → GTNK.VXL + GTNKTUR + GTNKBARL 三件套自动拼出灰熊坦克；
+  `--unit YTNK --yaw 40` → 加特林坦克，双管炮塔转 40°；
+  `--unit ZEP/APOC/LTNK/DISK/HARV/SREF/AMCV/V3` 全部出图。
+
+#### P2 后续（未开始）
+
+- 把 INI 全量填进 TechnoTypeClass 表（不止"模型组成"这一跳）。
+- `ai.ini` / `sound(md).ini` / `theme.ini`。
+- 属性对拍（与 XCC 导出的原版数据比）。
 
 ### P3 — 逻辑层：还原对象模型与游戏循环
 
@@ -337,7 +468,9 @@ AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 Ty
 1. ~~SHP flags=0x3 解码未定~~ —— **已解**：它和 0x02 共用同一套 RLE，6373 帧全过。
 2. **字段偏移基本未知** —— RTTI 只给类名和槽位。P3 的主要工作量在这。
 3. **静态对象池类的 sizeof** —— 不走 `operator new`，现有扫描法拿不到，需要换思路。
-4. **文件名反查只有 45%** —— 不阻塞（游戏按 CRC 查），但影响可调试性。
+4. **文件名反查 26.0%**（11233 个叶子 ID / 2926 个命中，原 8.7%）—— 不阻塞
+   （游戏按 CRC 查）。补齐的关键是"INI 节名也算候选名 + 后缀扩展"两轮，
+   见 `db/mix-names.txt`。
 5. **工作量** —— 949 个类、12717 个虚表槽位、4 MB `.text`。
    目前手写代码约 3000 行（不含自动生成的 3794 行）。这是以季度计的工程，
    建议严格按 P0→P5 顺序推进，每阶段都要有能跑的验收。
@@ -351,9 +484,27 @@ AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 Ty
   素材层到此**没有未解格式**。
 - **P1 部分完成**：DX12 设备/交换链/离屏/调色板纹理/地形渲染 ✅、
   **体素渲染 ✅**（软件等距光栅化 → R8 索引纹理 → 查表着色），精灵批渲染 ⬜。
-- 刚刚跑通的端到端链路：
-  `ra2view.exe ra2.mix --vxl 0x8C848DEE --offscreen`
-  → MIX 解密 → VXL 体素解码 → 等距光栅化 → DX12 上传 → 调色板查表 → 回读 PNG。
-- 下一个里程碑：**VXL + HVA 一起动** —— 把 HVA 的每帧每肢矩阵接进
-  `Render_Isometric`（现在只用 VXL 肢体尾的静态变换），让 Rhino 的炮塔真的转起来。
-- 再往后：P2 数据层（INI → TypeClass），P3 逻辑层，P4 锁步，P5 多核并行。
+- 端到端链路（五档，全绿）：
+  1. `ra2view.exe ra2.mix --vxl 0x8C848DEE --offscreen` → 基洛夫（ZEP），静态姿态正确；
+  2. `ra2view.exe ra2.mix --vxl 0x891E5F6E` → JEEP，**带车顶机枪、轮子落地**；
+  3. `ra2view.exe ra2.mix --vxl 0xDF94FB26 --hvaframe0/8` → 13 肢四足机甲，
+     **四脚踩地、车体骑在腿上，f0/f8 腿姿不同**（HVA 动画真的在驱动）；
+  4. `--vxl 0xAE458B95 --turret 0xFDC7E10F --barrel 0x5BA86B7E` → GTNK 坦克，
+     **圆炮塔压在车体顶、炮管从炮塔穿出**；
+  5. 同一条命令加 `--turretyaw 40 --barrelpitch 25` → **炮塔转、炮口抬**，
+     炮管绕自身耳轴俯仰（枢轴取炮管 AABB 尾端中点）。
+  外加回归：`--vxlhash` / `--hvahash` / `--tmphash` / `--initest` / 路径并行 全过，
+  184+37 个 VXL 结构失败 0，239309 列 / 856623 体素异常 0，
+  C++ vs Python VXL 哈希 184/184、37/37 差异 0。
+- **P2 数据层第一步完成**：`Image=` / `Voxel=yes` / `Turret=yes` / `PrimaryFireFLH=`
+  已接起来，`--unit <单位名>` 自动推出 `<名>.VXL + <名>TUR.VXL + <名>BARL.VXL`
+  （+ 同名 HVA），不再手写 0xID。端到端链路扩展到**六档**：
+  6. `ra2view.exe ra2.mix --addmix ra2md.mix --unit YTNK --turretyaw 40 --offscreen`
+     → INI 解析 → 名字拼装 → 三段 CRC → MIX 递归取件 → VXL 解码 → HVA 姿态
+     → 等距光栅化（含附加层）→ R8 索引纹理 → 调色板查表 → 回读 PNG，
+     画出加特林坦克的双管炮塔转 40°。
+  自检：86 个体素单位车体命中 **86/86**，车体缺失 **0**；
+  C++ vs Python **559 单位 × 9 字段零差异**。
+- 再往后：P2 剩余（全量 TechnoTypeClass 打表）、P3 逻辑层、P4 锁步、P5 多核并行。
+- **代码尚未提交**：本轮的 `UnitModel.*`、`Ini::Merge`、`Collect_Leaf_IDs`、
+  `ViewerMain --unit/--addmix`、新脚本都在工作区里没 commit（git push 也没通）。

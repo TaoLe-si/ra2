@@ -425,6 +425,27 @@ std::vector<uint8_t> MixFileClass::Read_Deep_By_ID(uint32_t id, int max_depth) c
     return {};
 }
 
+int MixFileClass::Collect_Leaf_IDs(std::vector<uint32_t>* out, int max_depth) const {
+    if (!out) {
+        return 0;
+    }
+    const int before = static_cast<int>(out->size());
+    for (const auto& e : entries_) {
+        out->push_back(e.id);
+    }
+    if (max_depth <= 0) {
+        return static_cast<int>(out->size()) - before;
+    }
+    for (const auto& e : entries_) {
+        auto sub = Open_Sub(e);
+        if (!sub) {
+            continue;
+        }
+        sub->Collect_Leaf_IDs(out, max_depth - 1);
+    }
+    return static_cast<int>(out->size()) - before;
+}
+
 std::vector<uint8_t> MixFileClass::Read_Deep(const char* filename, int max_depth) const {
     return Read_Deep_By_ID(CRC_Of(filename), max_depth);
 }

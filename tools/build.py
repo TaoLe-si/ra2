@@ -39,6 +39,7 @@ CORE_SOURCES = [
     "src/gfx/HvaFile.cpp",
     "src/gfx/VxlFile.cpp",
     "src/data/Ini.cpp",
+    "src/data/UnitModel.cpp",
     "src/core/Subsystems.cpp",
 ]
 
@@ -54,6 +55,8 @@ VIEW_SOURCES = [
     "src/gfx/HvaFile.cpp",
     "src/gfx/VxlFile.cpp",
     "src/gfx/dx12/Dx12Renderer.cpp",
+    "src/data/Ini.cpp",
+    "src/data/UnitModel.cpp",
 ]
 
 # 只有查看器需要这些库；ra2core 保持零系统依赖。

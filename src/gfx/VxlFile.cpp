@@ -258,9 +258,30 @@ bool VxlFile::Decode_Limb(int limb, std::vector<VxlVoxel>* out, bool strict) con
     return true;
 }
 
+namespace {
+
+/// 3×4 行主序矩阵相乘：先 c = a·b（与 VxlAttach 的语义一致：a 叠在 b 之前）。
+void Mat34_Mul(const float* a, const float* b, float* c) {
+    for (int r = 0; r < 3; ++r) {
+        for (int col = 0; col < 3; ++col) {
+            c[r * 4 + col] = a[r * 4 + 0] * b[0 * 4 + col] +
+                             a[r * 4 + 1] * b[1 * 4 + col] +
+                             a[r * 4 + 2] * b[2 * 4 + col];
+        }
+        c[r * 4 + 3] = a[r * 4 + 0] * b[3] + a[r * 4 + 1] * b[7] +
+                       a[r * 4 + 2] * b[11] + a[r * 4 + 3];
+    }
+}
+
+}  // namespace
+
 bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
-                               float scale) const {
+                               float scale, const float* pose, const VxlAttach* attach,
+                               int attach_count) const {
     if (indexed == nullptr || out_w == nullptr || out_h == nullptr || scale <= 0.0f) {
+        return false;
+    }
+    if (attach_count < 0 || (attach_count > 0 && attach == nullptr)) {
         return false;
     }
     struct Pt {
@@ -269,24 +290,92 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
     };
     std::vector<Pt> pts;
     std::vector<VxlVoxel> vox;
-    for (int l = 0; l < limb_count_; ++l) {
-        const VxlLimbTailer& t = tailers_[static_cast<size_t>(l)];
-        vox.clear();
-        if (!Decode_Limb(l, &vox)) {
-            return false;
+
+    // 把一个 VXL 的体素全投影成 (sx, sy, depth, colour) 追加到 pts。
+    //
+    // pre 是**前置**变换（附加层用，比如绕 Z 转炮塔）；pose 是 HVA 姿态；
+    // pre 为空时针就等价于只有 pose 或静态肢体尾。
+    auto add_model = [&](const VxlFile& f, const float* m_pose, const float* pre) -> bool {
+        for (int l = 0; l < f.limb_count_; ++l) {
+            const VxlLimbTailer& t = f.tailers_[static_cast<size_t>(l)];
+            vox.clear();
+            if (!f.Decode_Limb(l, &vox)) {
+                return false;
+            }
+            // 统一到"体素坐标那一套单位"的 R|T。
+            //
+            // 【det 用在哪，实测踩过】det 只乘**平移**，绝不能乘体素坐标。
+            // 曾经写成 world = det×(R·v + T)，结果体素坐标被缩小 12 倍而平移没变，
+            // 四足机甲的 13 根肢体被拆成散落在天上的一堆小方块。
+            // 判据是静态姿态：VXL 肢体尾直接当 R|T 用时，13 根肢体的位置是自洽的 ——
+            // 四只脚 z≈0.85、小腿 z≈9.5、大腿 z≈16.6、车体 z≈20.1，四脚分居四角。
+            // 而 HVA 的平移是同一槽位的 12 倍（T_vxl = T_hva × det），所以把
+            // HVA 的平移乘上 det 就和 VXL 肢体尾同单位了。
+            float m[12];
+            if (m_pose != nullptr) {
+                for (int i = 0; i < 12; ++i) {
+                    m[i] = m_pose[static_cast<size_t>(l) * 12 + i];
+                }
+                const float d = (t.det != 0.0f) ? t.det : 1.0f;
+                m[3] *= d;
+                m[7] *= d;
+                m[11] *= d;
+            } else {
+                std::memcpy(m, t.transform, sizeof(float) * 12);
+            }
+            if (pre != nullptr) {
+                float mm[12];
+                Mat34_Mul(pre, m, mm);
+                std::memcpy(m, mm, sizeof(mm));
+            }
+            // 【肢体局部原点不是索引 (0,0,0)】实测踩过：把体素索引直接喂给变换，
+            // 单肢模型（占 184 个里的 180 个）看不出问题，多肢模型立刻散架 ——
+            // JEEP 的 GUN01 会嵌进车身中部，四足机甲的"车体"会挪到四足重心前面
+            // 24.6 格远的位置。
+            //
+            // 正确读法是读肢体尾自带的 min_bounds/max_bounds：它们是**该肢体体素
+            // 在局部坐标系下的 AABB**，而局部原点在 AABB 中心（实测 13 根肢体的
+            // (min+max)/2 都 ≤1.8，BODY 是 (0.000,-0.164,0.345)）。也就是说
+            // 局部坐标 = 体素索引 + min_bounds，再套 R|T：
+            //     world = R · (index + min_bounds) + T
+            // 三条独立佐证（都要求"落地/相接触"）：
+            //   * JEEP  车身 z 0.09..12.30（落地），GUN01 z 11.96..14.58 正压车顶；
+            //   * 四足机甲 脚 z 0.15..5.03（踩地），小腿/大腿/车体依次叠上去；
+            //   * SHAD  DUMMY01 z 0.11..25.61（落地）。
+            // 用 (N-1)/2 当枢轴会差 0.5~3.6 格：GUN01 会被整个埋进车身里看不到。
+            const float lox = t.min_bounds[0];
+            const float loy = t.min_bounds[1];
+            const float loz = t.min_bounds[2];
+            for (const VxlVoxel& v : vox) {
+                const float lx = static_cast<float>(v.x) + lox;
+                const float ly = static_cast<float>(v.y) + loy;
+                const float lz = static_cast<float>(v.z) + loz;
+                const float px = m[0] * lx + m[1] * ly + m[2] * lz + m[3];
+                const float py = m[4] * lx + m[5] * ly + m[6] * lz + m[7];
+                const float pz = m[8] * lx + m[9] * ly + m[10] * lz + m[11];
+                const float k = 0.70710678f;
+                Pt p;
+                p.sx = (px - py) * k;
+                p.sy = (px + py) * k * 0.5f - pz;
+                p.depth = px + py + pz;
+                p.c = v.colour;
+                pts.push_back(p);
+            }
         }
-        const float* m = t.transform;
-        for (const VxlVoxel& v : vox) {
-            const float px = m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3];
-            const float py = m[4] * v.x + m[5] * v.y + m[6] * v.z + m[7];
-            const float pz = m[8] * v.x + m[9] * v.y + m[10] * v.z + m[11];
-            const float k = 0.70710678f;
-            Pt p;
-            p.sx = (px - py) * k;
-            p.sy = (px + py) * k * 0.5f - pz;
-            p.depth = px + py + pz;
-            p.c = v.colour;
-            pts.push_back(p);
+        return true;
+    };
+
+    if (!add_model(*this, pose, nullptr)) {
+        return false;
+    }
+    for (int a = 0; a < attach_count; ++a) {
+        if (attach[a].file == nullptr) {
+            continue;
+        }
+        // 附加层：炮塔/炮管没有自己的 HVA 动画帧（实测都是 1×1 的静态 HVA），
+        // 所以这里固定用静态肢体尾，只叠 attach 的变换。
+        if (!add_model(*attach[a].file, nullptr, attach[a].transform)) {
+            return false;
         }
     }
     if (pts.empty()) {

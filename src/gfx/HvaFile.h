@@ -37,6 +37,8 @@
 #include <string>
 #include <vector>
 
+#include "gfx/VxlFile.h"
+
 namespace ra2 {
 
 /// 一根肢体在某一帧的 3×4 变换矩阵（行主序）。
@@ -77,5 +79,25 @@ private:
     std::vector<std::string> limb_names_;
     std::vector<HvaMatrix> matrices_;   ///< [frame * limb_count + limb]
 };
+
+/// 判断一份 HVA 是不是某个 VXL 的动画。
+///
+/// 为什么需要"用内容认人"：MIX 里**没有文件名**，游戏是按
+/// `模型名 + ".HVA"` 拼字符串算 Westwood CRC 去查的，而我们手上只有 CRC。
+/// 好在有一个极强的指纹可用 —— **HVA 第 0 帧的矩阵就是 VXL 肢体尾的姿态**：
+/// 实测（肢体名唯一的 3 组配对 / 18 根肢体）3×3 部分完全相同（最大差 0），
+/// 平移则满足 `T_hva = T_vxl / det`（det 恒 1/12）。
+///
+/// 所以配对规则：肢数相同 + 每根肢体第 frame 帧的 R 与 T·det 都对得上。
+/// 再叠加肢体名逐一相同作为确认（单肢模型名字普遍是 DUMMY01，撞车，只能当辅助）。
+///
+/// 【肢体名实测也是全等的】3 组多肢配对（ra2.mix 里多肢 VXL 只有 4 个）：
+///   WALKER    13/13（FOOT R REAR … BODY）
+///   SHAD       3/3（CYLINDER18 / CYLINDER09 / DUMMY01）
+///   NAR TURNTA 2/2（SONICTUR.VXL）
+/// 所以名字对不上基本可以断定配错，但它不是必需判据 —— 因为单肢模型的
+/// 名字（DUMMY01 / BODY / MAIN BODY）在 183 个 HVA 里大面积撞车。
+bool Hva_Matches_Vxl(const HvaFile& hva, const VxlFile& vxl, int frame = 0,
+                     float eps_r = 1e-3f, float eps_t = 2e-2f);
 
 }  // namespace ra2

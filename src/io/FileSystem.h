@@ -193,6 +193,13 @@ public:
     std::vector<uint8_t> Read_Deep(const char* filename, int max_depth = 4) const;
     std::vector<uint8_t> Read_Deep_By_ID(uint32_t id, int max_depth = 4) const;
 
+    /// 递归收集本归档与所有子归档里的条目 ID（**不去重**，由调用方处理）。
+    ///
+    /// 为什么需要：判断"GTNKTUR.VXL 在不在包里"如果逐个 Read_Deep，
+    /// 每次都要把 25 个顶层条目各解一次 Blowfish 头，几百次下来很慢。
+    /// 一次摊平再查表，代价只有一遍。返回本次新增的个数。
+    int Collect_Leaf_IDs(std::vector<uint32_t>* out, int max_depth = 4) const;
+
     /// 校验：把所有条目 ID 累积成一个 CRC，用于联机一致性检查。
     /// 原引擎有大量 "*** CRCs" 日志，这里沿用同样的思路。
     uint32_t Compute_CRC() const;

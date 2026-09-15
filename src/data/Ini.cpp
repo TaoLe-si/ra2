@@ -89,6 +89,17 @@ void IniFile::Clear() {
 
 bool IniFile::Load(const uint8_t* data, size_t size) {
     Clear();
+    return Parse(data, size);
+}
+
+bool IniFile::Merge(const uint8_t* data, size_t size, bool overwrite) {
+    merge_overwrite_ = overwrite;
+    const bool r = Parse(data, size);
+    merge_overwrite_ = false;
+    return r;
+}
+
+bool IniFile::Parse(const uint8_t* data, size_t size) {
     if (data == nullptr || size == 0) {
         return false;
     }
@@ -188,11 +199,17 @@ bool IniFile::Load(const uint8_t* data, size_t size) {
         }
 
         const std::string lower_key = To_Lower(kb, ke);
-        // 段内重复键保留全部顺序，索引只记第一次出现（按名取值返回第一个）。
-        if (cur->index.find(lower_key) == cur->index.end()) {
+        auto eit = cur->index.find(lower_key);
+        if (eit == cur->index.end()) {
+            // 段内重复键保留全部顺序，索引只记第一次出现（按名取值返回第一个）。
             cur->index.emplace(lower_key, static_cast<int>(cur->entries.size()));
+            cur->entries.push_back(IniEntry{std::string(kb, ke), std::string(vb, ve)});
+        } else if (merge_overwrite_) {
+            // 覆盖在位：值换掉，位置和键名都不动（见 Ini.h 里 [BuildingTypes] 的例子）。
+            cur->entries[static_cast<size_t>(eit->second)].value.assign(vb, ve);
+        } else {
+            cur->entries.push_back(IniEntry{std::string(kb, ke), std::string(vb, ve)});
         }
-        cur->entries.push_back(IniEntry{std::string(kb, ke), std::string(vb, ve)});
     }
     return !sections_.empty();
 }

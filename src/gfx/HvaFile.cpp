@@ -1,5 +1,6 @@
 #include "gfx/HvaFile.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace ra2 {
@@ -115,5 +116,37 @@ HvaMatrix HvaFile::Matrix(int frame, int limb) const {
 }
 
 std::string HvaFile::Source_Path() const { return source_path_; }
+
+bool Hva_Matches_Vxl(const HvaFile& hva, const VxlFile& vxl, int frame, float eps_r,
+                     float eps_t) {
+    if (vxl.Limb_Count() <= 0 || hva.Limb_Count() != vxl.Limb_Count()) {
+        return false;
+    }
+    if (frame < 0 || frame >= hva.Frame_Count()) {
+        return false;
+    }
+    for (int l = 0; l < vxl.Limb_Count(); ++l) {
+        const HvaMatrix hm = hva.Matrix(frame, l);
+        const VxlLimbTailer& t = vxl.Tailer(l);
+        // 3×3 部分必须一致（实测完全相等，所以给的容差很小）。
+        const int rot[9] = {0, 1, 2, 4, 5, 6, 8, 9, 10};
+        for (int i = 0; i < 9; ++i) {
+            if (std::fabs(hm.m[rot[i]] - t.transform[rot[i]]) > eps_r) {
+                return false;
+            }
+        }
+        // 平移：T_vxl == T_hva * det。
+        const float det = (t.det != 0.0f) ? t.det : 1.0f;
+        const float tv[3] = {t.transform[3], t.transform[7], t.transform[11]};
+        const float hv[3] = {hm.m[3], hm.m[7], hm.m[11]};
+        for (int i = 0; i < 3; ++i) {
+            if (std::fabs(tv[i] - hv[i] * det) > eps_t) {
+                return false;
+            }
+        }
+    }
+    // 肢体名逐一相同 —— 单肢模型名字会撞车，所以只当加分项，对不上不算失败。
+    return true;
+}
 
 }  // namespace ra2

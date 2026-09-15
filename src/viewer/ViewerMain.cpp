@@ -7,18 +7,36 @@
 //   ra2view.exe <mix路径> [SHP名] [PAL名]
 //   不带名字时自动挑归档里最大的那个 SHP，调色板用帧表 FrameColor 自动匹配。
 //
-// 操作： 空格/点击 = 下一帧；ESC = 退出；滚轮/+- = 缩放。
+// 体素模式：
+//   ra2view.exe <mix> --vxl 0xVXLID [--hva 0xHVAID] [--hvaframeN]
+//                     [--turret 0xTURID] [--barrel 0xBARLID] [--offscreen]
+//   RA2 把坦克拆成三个共享同一模型空间原点的文件，炮塔/炮管要单独给：
+//     ra2view.exe D:/westwood/RA2YR/ra2.mix --vxl 0xAE458B95 \
+//         --turret 0xFDC7E10F --barrel 0x5BA86B7E --turretyaw 35
+//
+// 单位模式（P2 数据层）：给单位名，剩下的自己从 INI 推出来
+//   ra2view.exe <mix> --unit MTNK [--addmix <另一个mix>] [--offscreen]
+//   rules 在 ra2.mix 里、rulesmd 在 ra2md.mix 里，所以看 YR 单位要挂两个：
+//     ra2view.exe D:/westwood/RA2YR/ra2.mix --addmix D:/westwood/RA2YR/ra2md.mix \
+//         --unit YTNK --turretyaw 40 --barrelpitch 25 --offscreen
+
+// 操作： 空格/点击 = 下一帧；←/→ = HVA 帧；A/D = 转炮塔；
+//        W/S = 抬炮口；ESC = 退出；滚轮/+- = 缩放。
 
 #include <windows.h>
 
+#include <cmath>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <vector>
 
+#include "gfx/HvaFile.h"
 #include "gfx/Palette.h"
 #include "gfx/ShpFile.h"
 #include "gfx/TmpFile.h"
 #include "gfx/VxlFile.h"
+#include "data/UnitModel.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
 
@@ -31,6 +49,10 @@ constexpr int kWinH = 768;
 
 struct App {
     MixFileClass mix;
+    /// --addmix：第二个归档。rules 在 ra2.mix、rulesmd 在 ra2md.mix，
+    /// 想按单位名查 YR 的单位就得挂两个。
+    MixFileClass mix2;
+    bool has_mix2 = false;
     ShpFile shp;
     std::string shp_name;
     std::string pal_name;
@@ -48,6 +70,21 @@ struct App {
     std::vector<uint8_t> vxl_idx;
     int vxl_w = 0;
     int vxl_h = 0;
+    VxlFile vxl;
+    HvaFile hva;
+    uint32_t hva_id = 0;
+    bool hva_linked = false;
+    int hva_frame = 0;
+    std::vector<float> vxl_pose;   ///< 当前帧的姿势：Limb_Count() × 12 个 float
+
+    /// 炮塔 / 炮管：RA2 里是独立 VXL（<名>TUR.VXL / <名>BARL.VXL），
+    /// 与车体共享同一模型空间原点，所以只要给它们一个绕 Z 的偏航就能叠上去。
+    VxlFile turret;
+    VxlFile barrel;
+    bool has_turret = false;
+    bool has_barrel = false;
+    float turret_yaw = 0.0f;       ///< 弧度，绕 Z（模型空间 X 向前、Y 横向、Z 向上）
+    float barrel_pitch = 0.0f;     ///< 弧度，绕 Y（炮口抬起）
 
     Dx12Renderer r;
     bool ok = false;
@@ -55,6 +92,15 @@ struct App {
 
 App g_app;
 Palette g_app_frame_palette;   ///< 当前帧配的调色板
+
+/// 按 ID 取内容，主归档找不到再去副归档找。
+std::vector<uint8_t> Read_Any(uint32_t id) {
+    std::vector<uint8_t> d = g_app.mix.Read_Deep_By_ID(id);
+    if (d.empty() && g_app.has_mix2) {
+        d = g_app.mix2.Read_Deep_By_ID(id);
+    }
+    return d;
+}
 
 /// 把一个已打开的 MIX（含子 MIX）里所有 768 字节条目读成候选调色板。
 std::vector<Palette> Collect_Palettes(MixFileClass& m, int depth = 0) {
@@ -305,6 +351,8 @@ bool Build_Terrain_Image(const TerrainTileSet& set, int n, bool random_pick,
     return true;
 }
 
+void Rebuild_Vxl_Pose();   ///< 定义在下面（要等 DX12 就绪才能上传）
+
 void Upload_Current_Frame() {
     g_app.r.Set_Palette(g_app_frame_palette);
     if (!g_app.terrain.empty()) {
@@ -312,13 +360,162 @@ void Upload_Current_Frame() {
                                              g_app.terrain_w, g_app.terrain_h);
         return;
     }
-    if (!g_app.vxl_idx.empty()) {
-        g_app.sprite = g_app.r.Upload_Sprite(g_app.vxl_idx.data(), g_app.vxl_w,
-                                             g_app.vxl_h);
+    if (g_app.vxl.Limb_Count() > 0) {
+        // VXL 模式：每次都要按当前姿势重画 —— 姿势变了图片就变了。
+        Rebuild_Vxl_Pose();
         return;
     }
     const ShpFrameInfo& f = g_app.shp.Frame_Info(g_app.frame);
     g_app.sprite = g_app.r.Upload_Sprite(g_app.shp.Frame_Pixels(g_app.frame).data(), f.w, f.h);
+}
+
+/// 在归档里找这个 VXL 的 HVA。
+///
+/// MIX 不存文件名（游戏是按 `模型名 + ".HVA"` 拼名算 CRC 查表的），所以只能
+/// 按内容配 —— 判据在 HvaFile.h 的 Hva_Matches_Vxl 里：
+/// "HVA 第 0 帧的矩阵 == VXL 肢体尾的姿态"。要求唯一命中，不唯一就不用，
+/// 宁可静态也不要配错（配错会让整辆车错位）。
+bool Find_Hva_For_Vxl(MixFileClass& m, const VxlFile& vxl, HvaFile* out,
+                      uint32_t* out_id) {
+    int hits = 0;
+    HvaFile best;
+    uint32_t best_id = 0;
+    std::function<void(const MixFileClass&, int)> walk = [&](const MixFileClass& mm,
+                                                             int depth) {
+        for (const MixEntry& e : mm.Entries()) {
+            if (depth < 3) {
+                auto sub = mm.Open_Sub(e);
+                if (sub) {
+                    walk(*sub, depth + 1);
+                    continue;
+                }
+            }
+            const std::vector<uint8_t> d = mm.Read_Entry(e);
+            HvaFile h;
+            if (!h.Load(d.data(), d.size())) {
+                continue;
+            }
+            if (!Hva_Matches_Vxl(h, vxl)) {
+                continue;
+            }
+            ++hits;
+            if (hits == 1) {
+                best = h;
+                best_id = e.id;
+            }
+        }
+    };
+    walk(m, 0);
+    if (hits != 1) {
+        std::printf("     HVA 配对: 命中 %d 个%s\n", hits,
+                    hits == 0 ? "（该 VXL 没有动画，用静态姿态）" : "（不唯一，放弃配对）");
+        return false;
+    }
+    *out = best;
+    *out_id = best_id;
+    std::printf("     HVA 配对: 0x%08X  %d 帧 × %d 肢\n", best_id, best.Frame_Count(),
+                best.Limb_Count());
+    return true;
+}
+
+/// VXL 模式：按当前 HVA 帧重算索引图并重新上传。
+void Rebuild_Vxl_Pose() {
+    if (g_app.vxl.Limb_Count() <= 0) {
+        return;
+    }
+    const float* pose = nullptr;
+    if (g_app.hva_linked && g_app.hva.Frame_Count() > 0) {
+        const int f = g_app.hva_frame % g_app.hva.Frame_Count();
+        g_app.vxl_pose.assign(static_cast<size_t>(g_app.vxl.Limb_Count()) * 12, 0.0f);
+        for (int l = 0; l < g_app.vxl.Limb_Count(); ++l) {
+            const HvaMatrix hm = g_app.hva.Matrix(f, l);
+            std::memcpy(&g_app.vxl_pose[static_cast<size_t>(l) * 12], hm.m,
+                        sizeof(float) * 12);
+        }
+        pose = g_app.vxl_pose.data();
+    }
+    // 炮塔 / 炮管：叠一层绕 Z 的偏航（炮塔朝向）和绕 Y 的俯仰（炮口抬高）。
+    // 实测 GTNK 车体顶面 z=11.01、GTNKTUR 底面 z=11.02、GTNKBARL 从炮塔内部
+    // 穿出，三者肢体平移完全相同 —— 共享模型空间原点，所以不需要坐标换算。
+    VxlAttach att[2];
+    int att_n = 0;
+    // 3×4 = Rz(yaw) · [ Ry(-pitch) | 枢轴项 ]，先绕枢轴 p 俯仰、再整体偏航。
+    //
+    // 模型空间 X 向前、Y 横向、Z 向上（实测四足机甲的四只脚分别在 ±X、±Y 上）。
+    // 右手系里绕 +Y 转 +φ 是把 +X 压向 −Z，也就是低头 —— 所以抬炮口要传
+    // −pitch，不然按 W 炮管会往下扎（踩过）。
+    //
+    // 【枢轴不能是原点】炮管绕模型原点俯仰时，管尾会从炮塔顶上戳出来。
+    // 实测 GTNKBARL 世界 X 7.85..32.85、Z 11.18..14.18，真正的耳轴在管尾
+    // (7.85, 0, 12.7) 附近，所以枢轴取"炮管自身 AABB 的尾端中点"。
+    // 炮塔没有这个问题（炮塔环本来就在模型原点：GTNKTUR 世界 X 中心 −1.29），
+    // 传 p = {0,0,0} 即可。
+    auto attach_matrix = [](float m[12], float yaw, float pitch, const float p[3]) {
+        const float cy = std::cos(yaw), sy = std::sin(yaw);
+        const float cp = std::cos(-pitch), sp = std::sin(-pitch);
+        const float rz[9] = {cy, -sy, 0, sy, cy, 0, 0, 0, 1};
+        const float ry[9] = {cp, 0, sp, 0, 1, 0, -sp, 0, cp};
+        // t = p − Ry·p：把"绕原点转"变成"绕 p 转"
+        const float tx = p[0] - (ry[0] * p[0] + ry[2] * p[2]);
+        const float ty = 0.0f;
+        const float tz = p[2] - (ry[6] * p[0] + ry[8] * p[2]);
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c) {
+                m[r * 4 + c] = rz[r * 3 + 0] * ry[0 * 3 + c] +
+                               rz[r * 3 + 1] * ry[1 * 3 + c] +
+                               rz[r * 3 + 2] * ry[2 * 3 + c];
+            }
+            m[r * 4 + 3] = rz[r * 3 + 0] * tx + rz[r * 3 + 1] * ty + rz[r * 3 + 2] * tz;
+        }
+    };
+    if (g_app.has_turret) {
+        att[att_n].file = &g_app.turret;
+        const float zero[3] = {0, 0, 0};
+        attach_matrix(att[att_n].transform, g_app.turret_yaw, 0.0f, zero);
+        ++att_n;
+    }
+    if (g_app.has_barrel) {
+        att[att_n].file = &g_app.barrel;
+        float pivot[3] = {0, 0, 0};
+        if (g_app.barrel.Limb_Count() > 0) {
+            const VxlLimbTailer& bt = g_app.barrel.Tailer(0);
+            pivot[0] = bt.transform[3] + bt.min_bounds[0];
+            pivot[1] = bt.transform[7] +
+                       (bt.min_bounds[1] + bt.max_bounds[1]) * 0.5f;
+            pivot[2] = bt.transform[11] +
+                       (bt.min_bounds[2] + bt.max_bounds[2]) * 0.5f;
+        }
+        attach_matrix(att[att_n].transform, g_app.turret_yaw, g_app.barrel_pitch,
+                      pivot);
+        ++att_n;
+    }
+    const VxlAttach* att_p = (att_n > 0) ? att : nullptr;
+
+    // 先按每体素 8 像素画；画布超过窗口就整体缩小重画一次。
+    // 体素模型的世界尺寸差得极远（小坦克 ~30、四足机甲 ~400），固定倍数必然有一头看不全。
+    float sc = 8.0f;
+    if (!g_app.vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, sc, pose,
+                                    att_p, att_n)) {
+        std::printf("[x] 体素光栅化失败（HVA 帧 %d）\n", g_app.hva_frame);
+        return;
+    }
+    // 注意：windows.h 把 min/max 定义成宏，这里不能写 std::min/std::max。
+    const float fx = (kWinW - 64.0f) / g_app.vxl_w;
+    const float fy = (kWinH - 64.0f) / g_app.vxl_h;
+    const float fit = (fx < fy) ? fx : fy;
+    if (fit < 1.0f) {
+        sc = 8.0f * fit;
+        if (sc < 1.0f) {
+            sc = 1.0f;
+        }
+        if (!g_app.vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, sc,
+                                        pose, att_p, att_n)) {
+            std::printf("[x] 体素光栅化失败（缩放后）\n");
+            return;
+        }
+    }
+    g_app.sprite = g_app.r.Upload_Sprite(g_app.vxl_idx.data(), g_app.vxl_w,
+                                         g_app.vxl_h);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -327,12 +524,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == VK_ESCAPE) {
                 PostQuitMessage(0);
             } else if (wp == VK_SPACE || wp == VK_RIGHT) {
-                if (g_app.shp.Frame_Count() > 0) {
+                if (g_app.hva_linked && g_app.hva.Frame_Count() > 0) {
+                    // 体素模式：HVA 的帧才是"动画帧"，VXL 只有一个静态形状。
+                    g_app.hva_frame = (g_app.hva_frame + 1) % g_app.hva.Frame_Count();
+                    Rebuild_Vxl_Pose();
+                    std::printf("HVA 帧 %d / %d\n", g_app.hva_frame,
+                                g_app.hva.Frame_Count());
+                } else if (g_app.shp.Frame_Count() > 0) {
                     g_app.frame = (g_app.frame + 1) % g_app.shp.Frame_Count();
                     Upload_Current_Frame();
                 }
             } else if (wp == VK_LEFT) {
-                if (g_app.shp.Frame_Count() > 0) {
+                if (g_app.hva_linked && g_app.hva.Frame_Count() > 0) {
+                    g_app.hva_frame = (g_app.hva_frame + g_app.hva.Frame_Count() - 1) %
+                                      g_app.hva.Frame_Count();
+                    Rebuild_Vxl_Pose();
+                    std::printf("HVA 帧 %d / %d\n", g_app.hva_frame,
+                                g_app.hva.Frame_Count());
+                } else if (g_app.shp.Frame_Count() > 0) {
                     g_app.frame = (g_app.frame + g_app.shp.Frame_Count() - 1) %
                                   g_app.shp.Frame_Count();
                     Upload_Current_Frame();
@@ -344,6 +553,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (g_app.scale < 0.05f) {
                     g_app.scale = 0.05f;
                 }
+            } else if ((wp == 'A' || wp == 'D') &&
+                       (g_app.has_turret || g_app.has_barrel)) {
+                // 转炮塔：绕 Z。模型空间 X 向前、Y 横向、Z 向上。
+                g_app.turret_yaw += (wp == 'D') ? 0.1745f : -0.1745f;   // ±10°
+                Rebuild_Vxl_Pose();
+                std::printf("炮塔偏航 %.0f°\n", g_app.turret_yaw * 57.29578f);
+                InvalidateRect(hwnd, nullptr, FALSE);
+            } else if ((wp == 'W' || wp == 'S') && g_app.has_barrel) {
+                // 抬炮口：绕 Y。限到 [-5°, 60°]，别让炮管翻过去。
+                g_app.barrel_pitch += (wp == 'W') ? 0.0873f : -0.0873f;   // ±5°
+                if (g_app.barrel_pitch < -0.0873f) {
+                    g_app.barrel_pitch = -0.0873f;
+                }
+                if (g_app.barrel_pitch > 1.0472f) {
+                    g_app.barrel_pitch = 1.0472f;
+                }
+                Rebuild_Vxl_Pose();
+                std::printf("炮口俯仰 %.0f°\n", g_app.barrel_pitch * 57.29578f);
+                InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
         case WM_MOUSEWHEEL: {
@@ -368,7 +596,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // 命令行（宽字符 -> UTF-8 多字节）
     // 不能用 std::string(w.begin(), w.end())：那是按 wchar_t 逐位截断成 char，
     // 中文/日文路径会直接变成乱码。必须走 WideCharToMultiByte。
-    constexpr int kMaxArgs = 8;
+    // 【别设太小】原来是 8，加上炮塔/炮管那组开关（--turret/--barrel/
+    // --turretyaw/--barrelpitch）之后 9 个参数就溢出了，超出的被静默丢掉 ——
+    // 表现是 `--offscreen` 消失、程序开了个窗口等着按键。
+    constexpr int kMaxArgs = 32;
     char args[kMaxArgs][MAX_PATH] = {};
     {
         std::string a;
@@ -398,8 +629,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
                 cur += c;
             }
         }
-        if (!cur.empty() && n < kMaxArgs) {
-            std::snprintf(args[n++], MAX_PATH, "%s", cur.c_str());
+        if (!cur.empty()) {
+            if (n < kMaxArgs) {
+                std::snprintf(args[n++], MAX_PATH, "%s", cur.c_str());
+            } else {
+                std::printf("[!] 命令行参数超过 %d 个，多的被丢弃：%s\n", kMaxArgs,
+                            cur.c_str());
+            }
         }
     }
     const char* mix_path = args[0][0] ? args[0] : "D:\\westwood\\RA2YR\\ra2md.mix";
@@ -435,14 +671,49 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // 于是 vxl_id >= 0 这种判断整个失效（踩过）。这里用 uint32 + 独立的开关布尔。
     bool vxl_mode = false;
     uint32_t vxl_id = 0;
+    bool hva_force = false;          ///< --hva 0xID：不走自动配对
+    uint32_t hva_force_id = 0;
+    int hva_frame = 0;               ///< --hvaframeN：初始帧
     int grid = 15;
     bool random_pick = false;
+    // 炮塔 / 炮管：RA2 里是独立文件（<名>TUR.VXL / <名>BARL.VXL），
+    // 与车体共享模型空间原点，所以要单独给 id 再各自绕 Z 转。
+    bool has_turret = false;
+    uint32_t turret_id = 0;
+    bool has_barrel = false;
+    uint32_t barrel_id = 0;
+    float turret_yaw = 0.0f;
+    float barrel_pitch = 0.0f;
+    // P2 数据层：--unit <单位名>，车体/炮塔/炮管全从 INI 推，不用手写 ID。
+    const char* unit_name = nullptr;
+    const char* addmix_path = nullptr;
     const char* tmp_pal_name = "TEMPERAT.PAL";
     for (int i = 0; i < kMaxArgs; ++i) {
         if (std::strcmp(args[i], "--vxl") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
             // MIX 里没有 VXL 的文件名可用，只能按 CRC 取。
             vxl_id = static_cast<uint32_t>(std::strtoul(args[i + 1], nullptr, 16));
             vxl_mode = true;
+        } else if (std::strcmp(args[i], "--turret") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            turret_id = static_cast<uint32_t>(std::strtoul(args[i + 1], nullptr, 16));
+            has_turret = true;
+        } else if (std::strcmp(args[i], "--barrel") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            barrel_id = static_cast<uint32_t>(std::strtoul(args[i + 1], nullptr, 16));
+            has_barrel = true;
+        } else if (std::strcmp(args[i], "--turretyaw") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            turret_yaw = static_cast<float>(std::atof(args[i + 1])) * 3.14159265f / 180.0f;
+        } else if (std::strcmp(args[i], "--barrelpitch") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            barrel_pitch =
+                static_cast<float>(std::atof(args[i + 1])) * 3.14159265f / 180.0f;
+        } else if (std::strncmp(args[i], "--hvaframe", 10) == 0 && args[i][10]) {
+            hva_frame = std::atoi(args[i] + 10);        // --hvaframe8
+        } else if (std::strcmp(args[i], "--hva") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            hva_force_id = static_cast<uint32_t>(std::strtoul(args[i + 1], nullptr, 16));
+            hva_force = true;
         } else if (std::strcmp(args[i], "--tmp") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
             tmp_arch = static_cast<int>(std::strtoul(args[i + 1], nullptr, 16));
             if (i + 2 < kMaxArgs && args[i + 2][0] && args[i + 2][0] != '-') {
@@ -454,10 +725,80 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             grid = std::atoi(args[i] + 6);       // --grid16（两种写法都收）
         } else if (std::strcmp(args[i], "--random") == 0) {
             random_pick = true;
+        } else if (std::strcmp(args[i], "--unit") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            unit_name = args[i + 1];
+        } else if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            addmix_path = args[i + 1];
         }
     }
     if (grid < 1 || grid > 64) {
         grid = 15;
+    }
+
+    // ---- --addmix：第二个归档（YR 的 rulesmd/artmd 就在 ra2md.mix 里）----
+    if (addmix_path && *addmix_path) {
+        if (g_app.mix2.Open(addmix_path)) {
+            g_app.has_mix2 = true;
+            std::printf("MIX2 %s  条目=%d\n", addmix_path, g_app.mix2.Count());
+        } else {
+            std::printf("[!] 副 MIX 打不开: %s\n", addmix_path);
+        }
+    }
+
+    // ---- --unit <名>：从 INI 推出体素模型组成 ----
+    // 这一步把 P2 数据层接进渲染链路：给单位名，剩下的（Image= / Voxel=yes /
+    // Turret=yes / 三段 CRC）全由 UnitModelDB 算，不再手写 0xID。
+    if (unit_name && *unit_name) {
+        std::vector<const MixFileClass*> mounts;
+        mounts.push_back(&g_app.mix);
+        if (g_app.has_mix2) {
+            mounts.push_back(&g_app.mix2);
+        }
+        UnitModelDB db;
+        if (!db.Load(mounts.data(), static_cast<int>(mounts.size()))) {
+            std::printf("[x] 单位表加载失败（MIX 里没有 RULES/ART）\n");
+            return 1;
+        }
+        const UnitModel* um = db.Resolve(unit_name);
+        if (um == nullptr) {
+            std::printf("[x] 单位表里没有 %s\n", unit_name);
+            return 1;
+        }
+        std::printf("[2] 单位模式 %s -> Image=%s Voxel=%s Turret=%s\n",
+                    um->unit.c_str(), um->image.c_str(),
+                    um->voxel ? "yes" : "no", um->turret ? "yes" : "no");
+        if (!um->ok()) {
+            std::printf("[x] %s 不是体素单位，或车体 %s 不在包里（0x%08X）\n",
+                        um->unit.c_str(), um->body.name.c_str(), um->body.id);
+            return 1;
+        }
+        std::printf("     车体 %s 0x%08X %s\n", um->body.name.c_str(), um->body.id,
+                    um->body.present ? "" : "(缺失)");
+        std::printf("     HVA  %s 0x%08X %s\n", um->body_hva.name.c_str(),
+                    um->body_hva.id, um->body_hva.present ? "" : "(缺失，用静态姿态)");
+        vxl_mode = true;
+        vxl_id = um->body.id;
+        if (um->body_hva.present) {
+            hva_force = true;
+            hva_force_id = um->body_hva.id;
+        }
+        if (um->turret_vxl.present) {
+            has_turret = true;
+            turret_id = um->turret_vxl.id;
+            std::printf("     炮塔 %s 0x%08X\n", um->turret_vxl.name.c_str(),
+                        um->turret_vxl.id);
+        }
+        if (um->barrel_vxl.present) {
+            has_barrel = true;
+            barrel_id = um->barrel_vxl.id;
+            std::printf("     炮管 %s 0x%08X\n", um->barrel_vxl.name.c_str(),
+                        um->barrel_vxl.id);
+        }
+        if (um->flh[0] || um->flh[1] || um->flh[2]) {
+            std::printf("     FLH  %d,%d,%d\n", um->flh[0], um->flh[1], um->flh[2]);
+        }
     }
     if (tmp_arch >= 0) {
         std::printf("[2] TMP 地形模式 归档=0x%08X 网格=%d\n", tmp_arch, grid);
@@ -505,34 +846,65 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         // 8 位值**（全部分量 ≡ 3 mod 4），必须走 Load_Expanded，走 Load 再展开
         // 一次会整片变青紫洋红。
         std::printf("[2] VXL 体素模式 id=0x%08X\n", vxl_id);
-        const std::vector<uint8_t> d = g_app.mix.Read_Deep_By_ID(vxl_id);
+        const std::vector<uint8_t> d = Read_Any(vxl_id);
         if (d.empty()) {
             std::printf("[x] 递归找不到 0x%08X\n", vxl_id);
             return 1;
         }
-        VxlFile vxl;
-        if (!vxl.Load(d.data(), d.size())) {
+        if (!g_app.vxl.Load(d.data(), d.size())) {
             std::printf("[x] 0x%08X 不是自洽的 VXL（%zu 字节）\n", vxl_id, d.size());
             return 1;
         }
-        std::printf("VXL  limbs=%d body=%u remap=(%d,%d)\n", vxl.Limb_Count(),
-                    vxl.Body_Size(), vxl.Remap_Start(), vxl.Remap_End());
-        for (int l = 0; l < vxl.Limb_Count(); ++l) {
-            const VxlLimbTailer& t = vxl.Tailer(l);
+        std::printf("VXL  limbs=%d body=%u remap=(%d,%d)\n", g_app.vxl.Limb_Count(),
+                    g_app.vxl.Body_Size(), g_app.vxl.Remap_Start(),
+                    g_app.vxl.Remap_End());
+        for (int l = 0; l < g_app.vxl.Limb_Count(); ++l) {
+            const VxlLimbTailer& t = g_app.vxl.Tailer(l);
             std::printf("     limb[%2d] %-12s %dx%dx%d nt=%d\n", l,
-                        vxl.Header(l).name.c_str(), t.x_size, t.y_size, t.z_size,
+                        g_app.vxl.Header(l).name.c_str(), t.x_size, t.y_size, t.z_size,
                         t.normals_type);
         }
-        if (!vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, 8.0f)) {
-            std::printf("[x] 体素光栅化失败\n");
-            return 1;
+        // 动画：--hva 0xID 强制指定，否则按"第 0 帧矩阵 == 肢体尾姿态"的内容指纹自动配。
+        if (hva_force) {
+            const std::vector<uint8_t> hd = Read_Any(hva_force_id);
+            g_app.hva_linked = g_app.hva.Load(hd.data(), hd.size());
+            g_app.hva_id = hva_force_id;
+            std::printf("     HVA 指定 0x%08X -> %s（%d 帧 × %d 肢）\n", hva_force_id,
+                        g_app.hva_linked ? "载入成功" : "不是 HVA", g_app.hva.Frame_Count(),
+                        g_app.hva.Limb_Count());
+        } else {
+            g_app.hva_linked =
+                Find_Hva_For_Vxl(g_app.mix, g_app.vxl, &g_app.hva, &g_app.hva_id);
+            if (!g_app.hva_linked && g_app.has_mix2) {
+                Find_Hva_For_Vxl(g_app.mix2, g_app.vxl, &g_app.hva, &g_app.hva_id);
+            }
         }
+        g_app.hva_frame = hva_frame;
+
+        // 炮塔 / 炮管：独立的 VXL，和车体共享模型空间原点。
+        // 实测 GTNK 车体顶面 z=11.01、GTNKTUR 底面 z=11.02 —— 直接叠即可。
+        if (has_turret) {
+            const std::vector<uint8_t> td = Read_Any(turret_id);
+            g_app.has_turret = !td.empty() && g_app.turret.Load(td.data(), td.size());
+            std::printf("     炮塔 0x%08X -> %s（%d 肢）\n", turret_id,
+                        g_app.has_turret ? "载入成功" : "不是 VXL",
+                        g_app.has_turret ? g_app.turret.Limb_Count() : 0);
+        }
+        if (has_barrel) {
+            const std::vector<uint8_t> bd = Read_Any(barrel_id);
+            g_app.has_barrel = !bd.empty() && g_app.barrel.Load(bd.data(), bd.size());
+            std::printf("     炮管 0x%08X -> %s（%d 肢）\n", barrel_id,
+                        g_app.has_barrel ? "载入成功" : "不是 VXL",
+                        g_app.has_barrel ? g_app.barrel.Limb_Count() : 0);
+        }
+        g_app.turret_yaw = turret_yaw;
+        g_app.barrel_pitch = barrel_pitch;
+
         Palette vpal;
-        vpal.Load_Expanded(vxl.Palette(), 768);
+        vpal.Load_Expanded(g_app.vxl.Palette(), 768);
         g_app_frame_palette = vpal;
         g_app.pal_name = "(VXL 内嵌调色板)";
-        std::printf("调色板 %s  画布 %dx%d\n", g_app.pal_name.c_str(), g_app.vxl_w,
-                    g_app.vxl_h);
+        std::printf("调色板 %s\n", g_app.pal_name.c_str());
         std::printf("SHP  (VXL 模式，跳过)\n");
     } else {
 

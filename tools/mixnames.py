@@ -90,12 +90,20 @@ def candidate_names_from_mix_text(mix_paths, max_bytes=4 << 20):
 
     这是命中率最高的一路：art.ini 用 Image= / Animation= 指向每个 SHP，
     rules.ini 里也是一堆素材名 —— 这些名字 gamemd.exe 里根本没有。
+
+    【节名也不能漏】RA2 的素材名大量直接等于**节名**：`[ZEP]` 就是基洛夫
+    （rulesmd.ini 里 `[ZEP]` 没有 `Image=`，只写 `Name=Kirov Airship`），
+    只扫 `key=value` 会整个漏掉。所以节名也要按常见扩展名展开一遍。
     """
     out = set()
     key_re = re.compile(
         r"(?:Image|Animation|Anim|Voxel|Palette|Sound|Voice|SHP|File|Name|"
         r"Occupy|Overlay|Terrain|Smudge|Building|Weapon|Projectile|Warhead)"
         r"\s*=\s*([A-Za-z0-9_~\-\.]{3,64})", re.IGNORECASE)
+    sec_re = re.compile(r"(?m)^\s*\[([A-Za-z0-9_~\-]{2,24})\]\s*$")
+    # 节名要展开的扩展名：体素/精灵/地形/调色板/音频，覆盖 RA2 的素材类型
+    sec_exts = ("vxl", "hva", "shp", "pal", "pcx", "tem", "sno", "urb",
+                "des", "lun", "wav", "aud", "ini")
     for p in mix_paths:
         m = mixdump.MixFile(p)
         for owner, hid, off, size, depth in mixdump.iter_leaves(m):
@@ -117,6 +125,11 @@ def candidate_names_from_mix_text(mix_paths, max_bytes=4 << 20):
                 else:
                     for ext in ("shp", "SHP", "pcx", "vxl", "hva", "wav", "aud"):
                         out.add("%s.%s" % (v, ext))
+            for mm in sec_re.finditer(text):
+                sec = mm.group(1)
+                for ext in sec_exts:
+                    out.add("%s.%s" % (sec, ext))
+                    out.add("%s.%s" % (sec, ext.upper()))
         m.close()
     return out
 
@@ -139,6 +152,28 @@ def candidate_names_generated():
     for i in range(0, 1000):
         out.add("%03d.MIX" % i)
         out.add("%04d.MIX" % i)
+    return out
+
+
+def candidate_names_suffixed(base_names):
+    """在已经命中的名字上套后缀。
+
+    RA2 把坦克的炮塔和炮管拆成**独立文件**：MTNK.VXL（车体）+
+    MTNKTUR.VXL + MTNKBARL.VXL。INI 里只会写 `Image=MTNK`，TUR/BARL 得自己拼
+    —— 实测 MTNKTUR=0x17F0096E、HTNKTUR=0x8F537E7E、GTNKTUR=0xFDC7E10F、
+    SREFTUR=0x13C3E16F、MTNKBARL=0xB19F831F 全在 ra2.mix 里，
+    而 0xDF94FB26 那类骨架模型的 base 名不在这张表里。
+
+    这一轮只在"前面几轮已经撞上的名字"上扩展，规模小、命中比高。
+    """
+    sufs = ("", "TUR", "BARL", "BBL", "WO", "TURRET", "BARREL", "GUN", "MG")
+    exts = ("vxl", "hva", "shp", "VXL", "HVA", "SHP")
+    out = set()
+    for n in base_names:
+        stem = n.rsplit(".", 1)[0]
+        for s in sufs:
+            for e in exts:
+                out.add("%s%s.%s" % (stem, s, e))
     return out
 
 
@@ -216,6 +251,11 @@ def main() -> None:
     per_round.append(("二进制字符串 + 目录", try_names(cands)))
     if len(table) < len(ids) and paths:
         per_round.append(("MIX 内 INI 文本", try_names(candidate_names_from_mix_text(paths))))
+    # 后缀扩展必须排在 INI 文本**之后**：TUR/BARL 的 base 名正是 INI 里
+    # `Image=MTNK` 这一路抽出来的，放在它前面只能扩到个位数。
+    if len(table) < len(ids):
+        per_round.append(("已命中名 + 后缀扩展(TUR/BARL)",
+                          try_names(candidate_names_suffixed(sorted(table.values())))))
     if len(table) < len(ids):
         per_round.append(("规则生成", try_names(candidate_names_generated())))
 

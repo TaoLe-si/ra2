@@ -66,11 +66,30 @@ struct IniSection {
 /// INI 文档。
 class IniFile {
 public:
-    /// 从内存解析。输入含 '\0' 也没关系（按长度走）。
+    /// 从内存解析。输入含 '\0' 也没关系（按长度走）。会先清空已有内容。
     bool Load(const uint8_t* data, size_t size);
     bool Load(const char* text) { return Load(reinterpret_cast<const uint8_t*>(text),
                                                text ? std::char_traits<char>::length(text) : 0); }
     bool Load_File(const char* path);
+
+    /// 不清空，把另一份 INI 合并进来。同名段合并（大小写不敏感）。
+    ///
+    /// 为什么需要：RA2 的 rules.ini / rulesmd.ini 是"打底 + 覆盖"的关系，
+    /// 光靠 Load 会丢掉其中一份。
+    ///
+    /// overwrite=false：条目**追加**到段尾，按名取值仍返回第一次出现的。
+    /// overwrite=true ：同名键**在原来的位置覆盖值**（键名保持第一次的形态）。
+    ///
+    /// 【为什么要有 overwrite 这种模式】Westwood 的 INIClass::Load 就是覆盖在位的。
+    /// 反例很实在：[BuildingTypes] 是个编号列表，rules.ini 有 301 项、
+    /// rulesmd.ini 有 403 项。用"追加 + 取第一个"的写法，两份的 1..301 会**并存**，
+    /// 于是单位总数变成 565 —— 比真实的 559 多出 6 个（CAARMR / NAHPAD 之类，
+    /// 只在 rules.ini 的老列表里）。覆盖在位才会得到 403 项这一份正确的并集。
+    bool Merge(const uint8_t* data, size_t size, bool overwrite = false);
+    bool Merge(const char* text, bool overwrite = false) {
+        return Merge(reinterpret_cast<const uint8_t*>(text),
+                     text ? std::char_traits<char>::length(text) : 0, overwrite);
+    }
 
     void Clear();
 
@@ -128,6 +147,12 @@ public:
     int Malformed_Lines() const noexcept { return malformed_; }
 
 private:
+    /// Load / Merge 共用的解析主体。Load = Clear + Parse。
+    bool Parse(const uint8_t* data, size_t size);
+
+    /// Merge(overwrite=true) 期间生效：同名键覆盖在位而不追加。
+    bool merge_overwrite_ = false;
+
     std::vector<IniSection> sections_;
     std::unordered_map<std::string, int> section_index_;   ///< 小写段名 -> 下标
     int malformed_ = 0;
