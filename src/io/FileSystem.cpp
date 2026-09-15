@@ -380,6 +380,11 @@ std::unique_ptr<MixFileClass> MixFileClass::Open_Sub(const MixEntry& e) const {
 
 void MixFileClass::Close() {
     file_.Close();
+    // 子归档里存着指向本对象的 parent_ 指针，本对象一变它们就全失效了，
+    // 所以缓存必须跟着清 —— 不清的话下次 Find_Deep 会顺着野指针读。
+    sub_cache_.clear();
+    deep_index_.clear();
+    deep_index_built_ = false;
     entries_.clear();
     path_.clear();
     data_start_ = 0;
@@ -403,26 +408,60 @@ const MixEntry* MixFileClass::Find_By_ID(uint32_t id) const {
     return nullptr;
 }
 
-std::vector<uint8_t> MixFileClass::Read_Deep_By_ID(uint32_t id, int max_depth) const {
-    if (const MixEntry* e = Find_By_ID(id)) {
-        return Read_Entry(*e);
+const MixFileClass* MixFileClass::Sub_At(const MixEntry& e) const {
+    // 键用"条目在本归档里的下标"，不用 (offset,size)：下标一定唯一，
+    // 而且不会因为两条目 offset 巧合相同而互相顶掉。
+    const size_t key = static_cast<size_t>(&e - entries_.data());
+    const auto it = sub_cache_.find(key);
+    if (it != sub_cache_.end()) {
+        return it->second.get();   // 可能是 nullptr = "已试过，不是 MIX"
     }
-    if (max_depth <= 0) {
+    std::unique_ptr<MixFileClass> sub;
+    {
+        auto candidate = std::make_unique<MixFileClass>();
+        if (candidate->Open_Nested(*this, e)) {
+            sub = std::move(candidate);
+        }
+        // 失败就留空 unique_ptr：记住"这条不是 MIX"，下次不再解密一遍
+    }
+    const MixFileClass* raw = sub.get();
+    sub_cache_[key] = std::move(sub);
+    return raw;
+}
+
+void MixFileClass::Build_Deep_Index() const {
+    if (deep_index_built_) {
+        return;
+    }
+    deep_index_built_ = true;
+    // 先收本层的：命中优先级与旧的 Read_Deep_By_ID 一致（浅层优先）
+    for (const auto& e : entries_) {
+        deep_index_.emplace(e.id, Deep_Entry{this, &e});
+    }
+    // 再按条目顺序深度优先往子归档里收
+    for (const auto& e : entries_) {
+        const MixFileClass* sub = Sub_At(e);
+        if (sub != nullptr) {
+            sub->Build_Deep_Index();
+            for (const auto& kv : sub->deep_index_) {
+                deep_index_.emplace(kv.first, kv.second);
+            }
+        }
+    }
+}
+
+const MixFileClass::Deep_Entry* MixFileClass::Find_Deep(uint32_t id) const {
+    Build_Deep_Index();
+    const auto it = deep_index_.find(id);
+    return it == deep_index_.end() ? nullptr : &it->second;
+}
+
+std::vector<uint8_t> MixFileClass::Read_Deep_By_ID(uint32_t id) const {
+    const Deep_Entry* de = Find_Deep(id);
+    if (de == nullptr || de->owner == nullptr || de->entry == nullptr) {
         return {};
     }
-    // 逐个把条目当子 MIX 试开。判据就是"能不能解出索引"——打不开就是普通文件，
-    // 代价仅一次头部解密。ra2md.mix 有 25 个顶层条目，全部试一遍也就几十微秒。
-    for (const auto& e : entries_) {
-        auto sub = Open_Sub(e);
-        if (!sub) {
-            continue;
-        }
-        std::vector<uint8_t> data = sub->Read_Deep_By_ID(id, max_depth - 1);
-        if (!data.empty()) {
-            return data;
-        }
-    }
-    return {};
+    return de->owner->Read_Entry(*de->entry);
 }
 
 int MixFileClass::Collect_Leaf_IDs(std::vector<uint32_t>* out, int max_depth) const {
@@ -437,17 +476,16 @@ int MixFileClass::Collect_Leaf_IDs(std::vector<uint32_t>* out, int max_depth) co
         return static_cast<int>(out->size()) - before;
     }
     for (const auto& e : entries_) {
-        auto sub = Open_Sub(e);
-        if (!sub) {
-            continue;
+        // 用缓存版 Sub_At：挪动过一次之后就不再解密索引了
+        if (const MixFileClass* sub = Sub_At(e)) {
+            sub->Collect_Leaf_IDs(out, max_depth - 1);
         }
-        sub->Collect_Leaf_IDs(out, max_depth - 1);
     }
     return static_cast<int>(out->size()) - before;
 }
 
-std::vector<uint8_t> MixFileClass::Read_Deep(const char* filename, int max_depth) const {
-    return Read_Deep_By_ID(CRC_Of(filename), max_depth);
+std::vector<uint8_t> MixFileClass::Read_Deep(const char* filename) const {
+    return Read_Deep_By_ID(CRC_Of(filename));
 }
 
 std::vector<uint8_t> MixFileClass::Read_Entry(const MixEntry& e) const {

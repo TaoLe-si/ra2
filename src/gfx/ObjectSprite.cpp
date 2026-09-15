@@ -42,6 +42,17 @@ bool SpriteCache::Bind(const std::vector<MixFileClass*>& roots) {
 // 索引图 -> RGBA
 // ---------------------------------------------------------------------------
 
+void SpriteCache::Expand_Pal768(const uint8_t* pal6, uint8_t* out768) {
+    // .PAL 存的是 6 位分量，要展开成 8 位。用 (v<<2)|(v>>4) 而不是 v*4 ——
+    // 后者最大只到 252，整幅会偏暗一档。
+    for (int i = 0; i < 256; ++i) {
+        for (int c = 0; c < 3; ++c) {
+            const uint8_t v = static_cast<uint8_t>(pal6[i * 3 + c] & 0x3F);
+            out768[i * 3 + c] = static_cast<uint8_t>((v << 2) | (v >> 4));
+        }
+    }
+}
+
 void SpriteCache::Index_To_RGBA(const uint8_t* indexed, int n,
                                 const uint8_t* pal768, std::vector<uint8_t>* out) {
     out->assign(static_cast<size_t>(n) * 4, 0);

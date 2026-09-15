@@ -162,6 +162,47 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
                               &terrain_h_, err)) {
         return false;
     }
+    // 战场统计：黑洞（没瓦片 / 瓦片全透明）必须打得出来，不然只能靠眼睛数
+    {
+        int no_tile = 0, total = 0;
+        for (const IsoCell& c : map_.Cells()) {
+            ++total;
+            if (c.tile < 0) {
+                ++no_tile;
+            }
+        }
+        std::printf("  战场 %dx%d：格 %d（无瓦片 %d），画上 %d，"
+                    "取不到瓦片 %d，取到但全空 %d\n",
+                    terrain_w_, terrain_h_, total, no_tile,
+                    map_renderer_.Cells_Drawn(), map_renderer_.Tiles_Missing(),
+                    map_renderer_.Cells_Empty());
+        // 空格的分布图：黑块到底是"地图边界外的空白"（正常）还是"中间破了个洞"
+        // （解析错），看这张图一眼就知道。每个字符代表 2×4 格。
+        const int W = map_.Width(), H = map_.Height();
+        if (W > 0 && H > 0 && no_tile > 0) {
+            std::printf("     空瓦片分布（. 有瓦片 / 空 没有）每格 2x4 单元：\n");
+            for (int cy = 0; cy < H; cy += 4) {
+                std::string line = "     ";
+                for (int cx = 0; cx < W; cx += 2) {
+                    int filled = 0, n = 0;
+                    for (int dy = 0; dy < 4 && cy + dy < H; ++dy) {
+                        for (int dx = 0; dx < 2 && cx + dx < W; ++dx) {
+                            const size_t i =
+                                static_cast<size_t>(cy + dy) * W + cx + dx;
+                            if (i < map_.Cells().size()) {
+                                ++n;
+                                if (map_.Cells()[i].tile >= 0) {
+                                    ++filled;
+                                }
+                            }
+                        }
+                    }
+                    line += (n == 0) ? ' ' : (filled * 2 >= n ? '.' : 'o');
+                }
+                std::printf("%s\n", line.c_str());
+            }
+        }
+    }
     terrain_sprite_ = renderer_.Upload_Sprite_RGBA(
         reinterpret_cast<const uint8_t*>(terrain_rgba_.data()), terrain_w_,
         terrain_h_);
@@ -183,6 +224,42 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
         std::printf("  精灵库就绪（单位模型 %d 个）\n", sprites_.Models().Unit_Count());
     } else {
         std::printf("[!] 精灵库绑定失败，单位退化成色块\n");
+    }
+
+    // 原版界面贴图（侧栏/页签/雷达/资金条）。失败不致命，退回自绘的色块。
+    if (!Load_UI()) {
+        std::printf("[!] 界面贴图载入失败，侧栏退回色块\n");
+    }
+
+    // 小地图底图：把战场图抽稀到雷达显示区大小。不抽的话雷达里只有黑底加点，
+    // 和原版那个能看出街区轮廓的小地图差太远。
+    {
+        int rx = 0, ry = 0, rw = 0, rh = 0;
+        if (Radar_Inner(&rx, &ry, &rw, &rh) && terrain_w_ > 0 && terrain_h_ > 0 &&
+            rw > 0 && rh > 0 &&
+            static_cast<size_t>(terrain_w_) * terrain_h_ == terrain_rgba_.size()) {
+            std::vector<uint8_t> mm(static_cast<size_t>(rw) * rh * 4, 0);
+            for (int y = 0; y < rh; ++y) {
+                const int sy = static_cast<int>(static_cast<float>(y) / rh *
+                                                terrain_h_);
+                for (int x = 0; x < rw; ++x) {
+                    const int sx = static_cast<int>(static_cast<float>(x) / rw *
+                                                    terrain_w_);
+                    const uint32_t px =
+                        terrain_rgba_[static_cast<size_t>(sy) * terrain_w_ + sx];
+                    const size_t o = (static_cast<size_t>(y) * rw + x) * 4;
+                    // 压暗一档：原版小地图比战场暗，不然会抢视线
+                    const float k = 0.55f;
+                    mm[o + 0] = static_cast<uint8_t>((px & 0xFF) * k);
+                    mm[o + 1] = static_cast<uint8_t>(((px >> 8) & 0xFF) * k);
+                    mm[o + 2] = static_cast<uint8_t>(((px >> 16) & 0xFF) * k);
+                    mm[o + 3] = 255;
+                }
+            }
+            minimap_sprite_ = renderer_.Upload_Sprite_RGBA(mm.data(), rw, rh);
+            minimap_w_ = rw;
+            minimap_h_ = rh;
+        }
     }
 
     camera_.Set_World_Size(terrain_w_, terrain_h_);
@@ -444,90 +521,263 @@ void GameShell::Draw_Battlefield() {
                           static_cast<int>(sy), camera_.Scale());
 }
 
+// ---------------------------------------------------------------------------
+// 原版界面贴图
+//
+// 侧栏不是"画几个色块凑个样子"就算复刻的 —— 原版把这些件全放在 MIX 里：
+//   SIDE1(168×69) 头部，下缘自带 4 个页签凹槽
+//   SIDE2(168×50) 建造格一行（两列），SIDE2B 是末行变体
+//   SIDE3(168×26) 收尾装饰（鹰徽）
+//   RADAR(168×110, 33 帧) 雷达外框；第 32 帧中间镂空，就是显示区
+//   CREDITS(168×16) 资金条、POWER(27×30) 电力表
+//   TAB00..03(28×27, 5 帧) 四个页签、BUTTON00..11(52×32) 单位指令按钮
+// 位置也不是猜的：对 SIDE1 第 48~64 行做"蓝色像素游程"扫描量出 4 个凹槽
+// 在 x = 26/55/85/114（28 宽、间隔 29），对 SIDE2 做暗区扫描量出两列凹槽
+// 在 x = 24/86。见 tools/uidump.py。
+// ---------------------------------------------------------------------------
+
+bool GameShell::Load_UI() {
+    if (roots_.empty()) {
+        return false;
+    }
+    std::vector<uint8_t> pal6;
+    for (MixFileClass* m : roots_) {
+        pal6 = m->Read_Deep("SIDEBAR.PAL");
+        if (pal6.size() >= 768) {
+            break;
+        }
+        pal6.clear();
+    }
+    uint8_t pal768[768];
+    if (pal6.size() >= 768) {
+        SpriteCache::Expand_Pal768(pal6.data(), pal768);
+    } else {
+        for (int i = 0; i < 256; ++i) {
+            pal768[i * 3 + 0] = pal768[i * 3 + 1] = pal768[i * 3 + 2] =
+                static_cast<uint8_t>(i);
+        }
+    }
+
+    auto load = [&](const char* name, UiPiece* dst) -> bool {
+        std::vector<uint8_t> data;
+        for (MixFileClass* m : roots_) {
+            data = m->Read_Deep(name);
+            if (!data.empty()) {
+                break;
+            }
+        }
+        if (data.empty()) {
+            return false;
+        }
+        ShpFile shp;
+        if (!shp.Load(data.data(), data.size()) || shp.Frame_Count() <= 0) {
+            return false;
+        }
+        dst->frames = shp.Frame_Count();
+        dst->sprite.clear();
+        for (int f = 0; f < dst->frames; ++f) {
+            const std::vector<uint8_t>& px = shp.Frame_Pixels(f);
+            const ShpFrameInfo& fi = shp.Frame_Info(f);
+            if (fi.w <= 0 || fi.h <= 0 ||
+                px.size() < static_cast<size_t>(fi.w) * fi.h) {
+                dst->sprite.push_back(-1);
+                continue;
+            }
+            if (f == 0) {
+                dst->w = fi.w;
+                dst->h = fi.h;
+            }
+            std::vector<uint8_t> rgba;
+            SpriteCache::Index_To_RGBA(px.data(), fi.w * fi.h, pal768, &rgba);
+            dst->sprite.push_back(
+                renderer_.Upload_Sprite_RGBA(rgba.data(), fi.w, fi.h));
+        }
+        return true;
+    };
+
+    int ok = 0;
+    ok += load("SIDE1.SHP", &ui_side1_) ? 1 : 0;
+    ok += load("SIDE2.SHP", &ui_side2_) ? 1 : 0;
+    ok += load("SIDE2B.SHP", &ui_side2b_) ? 1 : 0;
+    ok += load("SIDE3.SHP", &ui_side3_) ? 1 : 0;
+    ok += load("RADAR.SHP", &ui_radar_) ? 1 : 0;
+    ok += load("CREDITS.SHP", &ui_credits_) ? 1 : 0;
+    ok += load("Power.SHP", &ui_power_) ? 1 : 0;
+    ok += load("SIDEBTTN.SHP", &ui_sidebttn_) ? 1 : 0;
+    for (int i = 0; i < 4; ++i) {
+        char n[24];
+        std::snprintf(n, sizeof(n), "TAB%02d.SHP", i);
+        ok += load(n, &ui_tab_[i]) ? 1 : 0;
+    }
+    for (int i = 0; i < 12; ++i) {
+        char n[24];
+        std::snprintf(n, sizeof(n), "Button%02d.SHP", i);
+        ok += load(n, &ui_btn_[i]) ? 1 : 0;
+    }
+    std::printf("  界面贴图 %d 件就绪（侧栏 %d 宽，头部 %dx%d，雷达 %dx%d）\n", ok,
+                kSidebarW, ui_side1_.w, ui_side1_.h, ui_radar_.w, ui_radar_.h);
+    return ok > 0;
+}
+
+void GameShell::Draw_Ui(const UiPiece& p, int x, int y, int frame) {
+    const int id = p.Frame(frame);
+    if (id >= 0) {
+        renderer_.Draw_Sprite(id, x, y, 1.0f);
+    }
+}
+
+bool GameShell::Radar_Rect(int* x, int* y, int* w, int* h) const {
+    if (!ui_radar_.ok()) {
+        return false;
+    }
+    // 贴着屏幕底边钉死，原版就是这样
+    const int rx = win_w_ - kSidebarW;
+    const int ry = win_h_ - ui_radar_.h;
+    if (x) *x = rx;
+    if (y) *y = ry;
+    if (w) *w = ui_radar_.w;
+    if (h) *h = ui_radar_.h;
+    return true;
+}
+
+bool GameShell::Radar_Inner(int* x, int* y, int* w, int* h) const {
+    int rx = 0, ry = 0, rw = 0, rh = 0;
+    if (!Radar_Rect(&rx, &ry, &rw, &rh)) {
+        return false;
+    }
+    // RADAR.SHP 第 32 帧量出来的镂空区：x 12..153, y 1..108
+    if (x) *x = rx + 13;
+    if (y) *y = ry + 2;
+    if (w) *w = 140;
+    if (h) *h = 105;
+    return true;
+}
+
 void GameShell::Draw_Top_Bar() {
-    renderer_.Draw_Rect(0, 0, win_w_, kTopBarH, kUiTopBar);
-    renderer_.Draw_Rect(0, kTopBarH - 1, win_w_, 1, kUiEdge);
-    // 资金条：先画一个占位色块，等字体/数字精灵接进来换成真数字。
-    renderer_.Draw_Rect(12, 8, 96, 16, kUiGold);
-    // 电力条：右侧
-    renderer_.Draw_Rect(win_w_ - kSidebarW - 140, 8, 128, 16, kUiSlot);
+    // 原版没有顶部资源条：资金/电力都在侧栏里。这里留着函数是为了不改
+    // 调用点（Render 里那一串），但什么都不画。
 }
 
 void GameShell::Draw_Sidebar() {
-    const int x = win_w_ - kSidebarW;
-    renderer_.Draw_Rect(x, kTopBarH, kSidebarW, win_h_ - kTopBarH, kUiBackdrop);
-    renderer_.Draw_Rect(x, kTopBarH, 1, win_h_ - kTopBarH, kUiEdge);
+    const int sx = win_w_ - kSidebarW;
+    // 先铺一层底：贴图没到的地方不能露出战场的花地
+    renderer_.Draw_Rect(sx, 0, kSidebarW, win_h_, kUiBackdrop);
+    renderer_.Draw_Rect(sx, 0, 1, win_h_, kUiEdge);
 
-    // 四个页签（Q/W/E/R）。原版是 PCX 贴图，这里先画色块 + 高亮当前页。
-    static const float* kTabColor[4] = {kObjBuilding, kObjBuilding,
-                                        kObjInfantry, kObjVehicle};
-    const int pad = 8;
-    const int tab_w = (kSidebarW - pad * 2 - 6) / 4;
+    // 头部 + 页签。页签凹槽位置是从 SIDE1 实测的（见文件头注释）
+    const int head_h = ui_side1_.ok() ? ui_side1_.h : 69;
+    if (ui_side1_.ok()) {
+        Draw_Ui(ui_side1_, sx, 0);
+    }
     for (int i = 0; i < 4; ++i) {
-        const int bx = x + pad + i * (tab_w + 2);
-        const int by = kTopBarH + pad;
-        renderer_.Draw_Rect(bx, by, tab_w, 14,
-                            (i == sidebar_tab_) ? kTabColor[i] : kUiSlot);
-        renderer_.Draw_Rect_Outline(bx, by, tab_w, 14, kUiEdge, 1);
+        if (!ui_tab_[i].ok()) {
+            continue;
+        }
+        // 第 1 帧是"选中"态（平均亮度最高，实测 (93,160,204) vs 常态 (56,104,192)）
+        Draw_Ui(ui_tab_[i], sx + 26 + i * 29, 42, (i == sidebar_tab_) ? 1 : 0);
     }
 
-    // 建造按钮：4 列 × 4 行的网格，每格 32×32，间距 4。
-    // 真实按钮列表要从 rules 读可建造项，这里先把骨架和命中区域定下来。
-    const int slot = 32;
-    const int gap = 4;
-    const int cols = 4;
-    const int grid_y = kTopBarH + pad + 14 + gap;
-    for (int i = 0; i < cols * 4; ++i) {
-        const int col = i % cols;
-        const int row = i / cols;
-        const int bx = x + pad + col * (slot + gap);
-        const int by = grid_y + row * (slot + gap);
-        renderer_.Draw_Rect(bx, by, slot, slot, kUiSlot);
-        renderer_.Draw_Rect_Outline(bx, by, slot, slot, kUiEdge, 1);
+    // 底部自下往上钉：雷达 -> 收尾装饰 -> 资金条
+    int by = win_h_;
+    const int radar_h = ui_radar_.ok() ? ui_radar_.h : 110;
+    by -= radar_h;
+    if (ui_radar_.ok()) {
+        // 第 32 帧中间是镂空的显示区；前面的帧是"雷达未上线"的鹰徽动画
+        Draw_Ui(ui_radar_, sx, by, 32);
+    }
+    const int deco_h = ui_side3_.ok() ? ui_side3_.h : 26;
+    by -= deco_h;
+    if (ui_side3_.ok()) {
+        Draw_Ui(ui_side3_, sx, by);
+    }
+    const int cred_h = ui_credits_.ok() ? ui_credits_.h : 16;
+    by -= cred_h;
+    if (ui_credits_.ok()) {
+        Draw_Ui(ui_credits_, sx, by);
+        // 数字精灵还没接（要 SIDEFNT3 位图字体），先用色带占位
+        renderer_.Draw_Rect(sx + 8, by + 5, 60, 6, kUiGold);
+    }
+    // 电力表：独占资金条上面那一条，别压在建造格上（原来直接叠上去，很乱）
+    const int power_h = ui_power_.ok() ? (ui_power_.h + 2) : 0;
+    const int power_y = by - power_h;
+    if (ui_power_.ok()) {
+        // 电力有富余就画第 0 帧，欠费画第 1 帧（原版 2 帧就是这两种状态）
+        Draw_Ui(ui_power_, sx + 4, power_y + 1, power_warn_ ? 1 : 0);
+    }
+
+    // 中间铺建造格：SIDE2 一行 50 像素、两列凹槽在 x = 24 / 86。
+    // 最后一行用 SIDE2B 并**贴着底对齐** —— 否则余数会留出一条黑缝。
+    const int grid_top = head_h;
+    const int grid_bottom = power_y;
+    const int row_h = ui_side2_.ok() ? ui_side2_.h : 50;
+    if (row_h > 0 && grid_bottom > grid_top) {
+        int y = grid_top;
+        while (y + row_h <= grid_bottom) {
+            if (ui_side2_.ok()) {
+                Draw_Ui(ui_side2_, sx, y);
+            } else {
+                renderer_.Draw_Rect(sx + 24, y + 5, 60, 40, kUiSlot);
+                renderer_.Draw_Rect(sx + 86, y + 5, 60, 40, kUiSlot);
+            }
+            y += row_h;
+        }
+        if (y < grid_bottom) {
+            const int tail = grid_bottom - row_h;
+            if (tail >= grid_top) {
+                const UiPiece& row = ui_side2b_.ok() ? ui_side2b_ : ui_side2_;
+                Draw_Ui(row, sx, tail);
+            }
+        }
     }
 
     // 光标命令提示（K 修理 / L 变卖）
     if (cursor_mode_ != 0) {
         const float c[4] = {1.0f, 0.3f, 0.3f, 1.0f};
-        renderer_.Draw_Rect(x + pad, grid_y + 4 * (slot + gap) + 4, kSidebarW - pad * 2,
-                            12, c);
+        renderer_.Draw_Rect(sx + 4, grid_top + 2, kSidebarW - 8, 8, c);
     }
 }
 
 void GameShell::Draw_Radar() {
-    const int x = win_w_ - kSidebarW + 8;
-    const int y = win_h_ - kRadarSize + 8;
-    const int size = kRadarSize - 16;
-    renderer_.Draw_Rect(x, y, size, size, kUiRadarFog);
-    renderer_.Draw_Rect_Outline(x, y, size, size, kUiEdge, 1);
+    int x = 0, y = 0, size = 0, size_h = 0;
+    if (!Radar_Inner(&x, &y, &size, &size_h)) {
+        // 没有雷达贴图就退回自绘（至少别让功能消失）
+        x = win_w_ - kSidebarW + 8;
+        y = win_h_ - kRadarSize + 8;
+        size = kRadarSize - 16;
+        size_h = size;
+        renderer_.Draw_Rect(x, y, size, size_h, kUiRadarFog);
+        renderer_.Draw_Rect_Outline(x, y, size, size_h, kUiEdge, 1);
+    } else {
+        renderer_.Draw_Rect(x, y, size, size_h, kUiRadarFog);
+    }
+
+    // 整张地图等比压进显示区，所以格 -> 点就是线性映射
+    if (map_.Width() <= 0 || map_.Height() <= 0) {
+        return;
+    }
+    const float scalex = static_cast<float>(size) / map_.Width();
+    const float scaley = static_cast<float>(size_h) / map_.Height();
 
     // 当前视口在小地图上的位置
     if (terrain_w_ > 0 && terrain_h_ > 0) {
-        const float vx = camera_.X() / static_cast<float>(terrain_w_);
-        const float vy = camera_.Y() / static_cast<float>(terrain_h_);
-        const float vw = static_cast<float>(win_w_ - kSidebarW) /
-                         camera_.Scale() / static_cast<float>(terrain_w_);
-        const float vh = static_cast<float>(win_h_ - kTopBarH) /
-                         camera_.Scale() / static_cast<float>(terrain_h_);
-        const int rx = x + static_cast<int>(vx * size);
-        const int ry = y + static_cast<int>(vy * size);
-        const int rw = (vw * size < 4.0f) ? 4 : static_cast<int>(vw * size);
-        const int rh = (vh * size < 4.0f) ? 4 : static_cast<int>(vh * size);
+        const float vw = static_cast<float>(win_w_ - kSidebarW) / camera_.Scale();
+        const float vh = static_cast<float>(win_h_ - kTopBarH) / camera_.Scale();
+        const int rx = x + static_cast<int>(camera_.X() / terrain_w_ * size);
+        const int ry = y + static_cast<int>(camera_.Y() / terrain_h_ * size_h);
+        const int rw = (vw / terrain_w_ * size < 4.0f)
+                           ? 4 : static_cast<int>(vw / terrain_w_ * size);
+        const int rh = (vh / terrain_h_ * size_h < 4.0f)
+                           ? 4 : static_cast<int>(vh / terrain_h_ * size_h);
         renderer_.Draw_Rect_Outline(rx, ry, rw, rh, kUiRadarView, 1);
     }
 
-    // 单位点。小地图是"整张地图等比压进 size×size"，所以格 -> 点就是线性映射。
-    if (map_.Width() > 0 && map_.Height() > 0) {
-        for (const Object& o : world_.Objects()) {
-            if (!o.Is_Techno()) {
-                continue;                      // 树和路灯不上小地图
-            }
-            const int dx = x + static_cast<int>(static_cast<float>(o.x) /
-                                                map_.Width() * size);
-            const int dy = y + static_cast<int>(static_cast<float>(o.y) /
-                                                map_.Height() * size);
-            renderer_.Draw_Rect(dx, dy, 2, 2, o.selected ? kUiSelect : kUiRadarDot);
+    for (const Object& o : world_.Objects()) {
+        if (!o.Is_Techno()) {
+            continue;                      // 树和路灯不上小地图
         }
+        const int dx = x + static_cast<int>(static_cast<float>(o.x) * scalex);
+        const int dy = y + static_cast<int>(static_cast<float>(o.y) * scaley);
+        renderer_.Draw_Rect(dx, dy, 2, 2, o.selected ? kUiSelect : kUiRadarDot);
     }
 }
 

@@ -112,6 +112,14 @@ public:
     void Reset_Budget(int per_frame = 4) { budget_left_ = per_frame; }
     int Budget_Left() const noexcept { return budget_left_; }
 
+    /// 索引图 -> RGBA8（索引 0 透明）。界面贴图（SIDE1/TAB/RADAR…）也用它，
+    /// 所以放成公开的 —— 那些件不走精灵缓存，但上色规则必须一致。
+    static void Index_To_RGBA(const uint8_t* indexed, int n,
+                              const uint8_t* pal768, std::vector<uint8_t>* out);
+
+    /// 把一个 .PAL（6 位分量）展开成 768 字节 8 位分量。
+    static void Expand_Pal768(const uint8_t* pal6, uint8_t* out768);
+
     /// 诊断：算过多少张、其中失败多少。
     int Built() const noexcept { return built_; }
     int Failed() const noexcept { return failed_; }
@@ -163,10 +171,6 @@ private:
     bool Build_Voxel_Gpu(const char* type, const UnitModel& um, float yaw,
                          int house_color, ObjectSprite* out);
     bool Build_Shp(const char* image, int house_color, ObjectSprite* out);
-
-    /// 调色板 -> RGBA 查表。remap 已经合进 pal768。
-    static void Index_To_RGBA(const uint8_t* indexed, int n,
-                              const uint8_t* pal768, std::vector<uint8_t>* out);
 
     /// 剧场单位调色板（768 字节，8 位，**还没做 remap**）。
     ///

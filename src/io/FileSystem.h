@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ra2 {
@@ -189,16 +190,35 @@ public:
     std::unique_ptr<MixFileClass> Open_Sub(const MixEntry& e) const;
 
     /// 递归进子 MIX 取文件内容（子归档是临时对象，所以直接回数据而不是指针）。
-    /// 找不到返回空。max_depth 限制递归层数。
-    std::vector<uint8_t> Read_Deep(const char* filename, int max_depth = 4) const;
-    std::vector<uint8_t> Read_Deep_By_ID(uint32_t id, int max_depth = 4) const;
-
-    /// 递归收集本归档与所有子归档里的条目 ID（**不去重**，由调用方处理）。
+    /// 找不到返回空。
     ///
-    /// 为什么需要：判断"GTNKTUR.VXL 在不在包里"如果逐个 Read_Deep，
-    /// 每次都要把 25 个顶层条目各解一次 Blowfish 头，几百次下来很慢。
+    /// 【为什么不再需要 max_depth】原来每层都要现场"把每个条目当子 MIX 试开一次"
+    /// —— 而 Open_Nested 要把整个索引 Blowfish 解密一遍。ra2.mix 有 21 个顶层
+    /// 条目、1366 个叶子，一次查不到的查找就是几千次索引解密，实测**每次几百毫秒**
+    /// 到几秒。现在改成懒建一张全局 ID 平表（见 Build_Deep_Index），命中是 O(1)。
+    /// 平表天然覆盖所有层级，所以深度参数没了意义。
+    std::vector<uint8_t> Read_Deep(const char* filename) const;
+    std::vector<uint8_t> Read_Deep_By_ID(uint32_t id) const;
+
+    /// 递归收集所有子归档里的条目 ID（**不去重**，由调用方处理）。
     /// 一次摊平再查表，代价只有一遍。返回本次新增的个数。
     int Collect_Leaf_IDs(std::vector<uint32_t>* out, int max_depth = 4) const;
+
+    /// 建"全局 ID -> (所属归档, 条目)"的平表，只做一次。
+    ///
+    /// 顺手把每个子归档对象缓存下来 —— 它们才是真正的开销所在：
+    /// 索引解密一次是毫秒级，而原来每查一次就要把它们全部重解一遍。
+    /// 命中优先级与旧行为一致：先本归档，再按条目顺序深度优先。
+    void Build_Deep_Index() const;
+
+    /// 内层条目的定位结果。entry 指向 owner 的 entries_ 数组，稳定。
+    struct Deep_Entry {
+        const MixFileClass* owner = nullptr;
+        const MixEntry* entry = nullptr;
+    };
+
+    /// 直接查平表；没建过就建。找不到返回 nullptr。
+    const Deep_Entry* Find_Deep(uint32_t id) const;
 
     /// 校验：把所有条目 ID 累积成一个 CRC，用于联机一致性检查。
     /// 原引擎有大量 "*** CRCs" 日志，这里沿用同样的思路。
@@ -239,6 +259,14 @@ private:
 
     std::vector<uint8_t> mem_;              ///< Open_Memory() 用的内存镜像
     mutable RawFileClass file_;
+
+    // ---- 深层查找缓存（mutable：Read_Deep 是 const 的，建表是懒加载）----
+    /// 取一个子归档；**每个条目只解一次**，不是 MIX 的记成空指针。
+    /// 键是条目在本归档里的下标（offset 可能重复，下标一定唯一）。
+    const MixFileClass* Sub_At(const MixEntry& e) const;
+    mutable std::unordered_map<size_t, std::unique_ptr<MixFileClass>> sub_cache_;
+    mutable std::unordered_map<uint32_t, Deep_Entry> deep_index_;
+    mutable bool deep_index_built_ = false;
 };
 
 /// 把若干 MIX 挂成一个虚拟文件系统。

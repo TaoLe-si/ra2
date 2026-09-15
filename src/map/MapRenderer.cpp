@@ -276,14 +276,41 @@ bool MapRenderer::Render(const MapFile& map, int rect_x, int rect_y, int rect_w,
     const int x1 = clip ? rect_x + rect_w : W;
     const int y1 = clip ? rect_y + rect_h : H;
 
-    int drawn = 0;
-    for (const IsoCell& c : map.Cells()) {
+    // 【画家序】等距投影下屏幕 y = 15*(cx+cy)，所以必须按 (cx+cy) 升序落格，
+    // 同一条对角线上再按 cx 升序（同一斜列的格子不重叠，但外扩 64 像素会碰到）。
+    //
+    // Cells() 是按 (cy, cx) **行优先**存的，直接顺序遍历会出事：
+    // (5,0)（cx+cy=5，靠前）会排在 (0,1)（cx+cy=1，靠后）**之前**画，
+    // 于是远处的格子后画、把近处的盖掉 —— 地图整片错乱。
+    // 这不是观感问题，是"谁该压住谁"的硬错误。
+    std::vector<int> order;
+    order.reserve(map.Cells().size());
+    for (size_t i = 0; i < map.Cells().size(); ++i) {
+        const IsoCell& c = map.Cells()[i];
         if (c.tile < 0) {
             continue;
         }
         if (c.cx < x0 || c.cx >= x1 || c.cy < y0 || c.cy >= y1) {
             continue;
         }
+        order.push_back(static_cast<int>(i));
+    }
+    const std::vector<IsoCell>& all = map.Cells();
+    std::sort(order.begin(), order.end(), [&all](int a, int b) {
+        const int sa = all[a].cx + all[a].cy;
+        const int sb = all[b].cx + all[b].cy;
+        if (sa != sb) {
+            return sa < sb;
+        }
+        if (all[a].level != all[b].level) {
+            return all[a].level < all[b].level;   // 同一斜列里高的后画
+        }
+        return all[a].cx < all[b].cx;
+    });
+
+    int drawn = 0;
+    for (int idx : order) {
+        const IsoCell& c = all[idx];
         const TerrainTileRGBA* img = Tile_RGBA(c.tile, c.sub);
         if (img == nullptr) {
             continue;

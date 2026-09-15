@@ -12,7 +12,9 @@
 
 #include <windows.h>
 
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -29,9 +31,17 @@ int Run_Offscreen(ra2::GameShell& game, const char* out_path, int warm_frames) {
     // 精灵是"用到才烘"的，每帧只补几张（见 SpriteCache::Reset_Budget）。
     // 只渲一帧的话画面上绝大多数单位还是占位色块，出不了能看的截图。
     // 所以先空跑几帧把精灵补齐，再取帧。
+    const auto t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < warm_frames; ++i) {
         game.Update(1.0f / 60.0f);
         game.Render();
+    }
+    if (warm_frames > 0) {
+        const double ms =
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - t0).count();
+        std::printf("[perf] 预热 %d 帧共 %.1f ms（%.1f ms/帧）\n", warm_frames, ms,
+                    ms / warm_frames);
     }
     if (!game.Offscreen_Frame(&rgba, &w, &h)) {
         std::printf("[x] 离屏取帧失败\n");

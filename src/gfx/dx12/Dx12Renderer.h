@@ -220,6 +220,10 @@ private:
     ComPtr<ID3D12Resource> bake_depth_;      ///< 画家序用的深度缓冲（512²）
     ComPtr<ID3D12Resource> normals_tex_;     ///< 体素法线表 256×4（RGBA32F）
     ComPtr<ID3D12Resource> voxel_palette_;   ///< 体素调色板 256×1，每烘一张重写一次
+    /// 调色板的上传缓冲，**常驻 + 常驻映射**：一次烘焙里 4 次 fence 往返太贵，
+    /// 改成"CPU 直接写进常驻映射内存，整条命令列表只提交一次"。
+    ComPtr<ID3D12Resource> voxel_palette_up_;
+    void* voxel_palette_up_ptr_ = nullptr;
     std::vector<GpuVoxelGeom> voxel_geoms_;
     D3D12_GPU_DESCRIPTOR_HANDLE normals_srv_ = {};
     D3D12_GPU_DESCRIPTOR_HANDLE voxel_palette_srv_ = {};

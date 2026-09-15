@@ -327,7 +327,15 @@ bool MapFile::Decode_Iso_Pack(const std::string& b64, std::string* err) {
         // 见 MapFile.h 顶部：cx/cy 的指派靠对象段定下来的，别随手对调。
         c.cx = (y - 1 - (x - w)) / 2;
         c.cy = (x + y - 1 - w) / 2;
-        c.tile = (tile == 0xFFFF || tile < 0) ? -1 : tile;
+        // 【0xFFFF 不是"空格子"】实测 Arena 里恰好 834 条记录的 TileIndex 是
+        // 65535，和画面上 834 个散布全图的黑色菱形洞**数目完全吻合**。
+        // 它的语义是"这一格没存瓦片"，原版会拿剧场的默认 Clear 瓦片补上
+        // （和"裁剪地图省略 Clear 瓦片"是同一条规则，见上面的预填）。
+        // 之前写成 tile = -1（什么都不画），于是黑地上还压着建筑 —— 一眼就假。
+        //
+        // 判据：把 0xFFFF 当空格子时，黑洞散布全图；当 Clear 补上时，
+        // 覆盖率 6400/6400，且与 Python 参考实现（tools/mapcellstat.py）一致。
+        c.tile = (tile == 0xFFFF || tile < 0) ? 0 : tile;
         c.sub = p[8];
         c.level = p[9];
         c.ice = p[10];

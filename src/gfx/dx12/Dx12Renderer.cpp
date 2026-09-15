@@ -863,6 +863,30 @@ bool Dx12Renderer::Create_Voxel_Resources() {
             return false;
         }
         voxel_palette_srv_ = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
+
+        // 常驻上传缓冲（256×4 = 1KB，256 字节对齐）。烘焙时 CPU 直接写这里，
+        // 不再为一次调色板更新单独起一段命令列表等 GPU。
+        D3D12_HEAP_PROPERTIES uhp = {};
+        uhp.Type = D3D12_HEAP_TYPE_UPLOAD;
+        D3D12_RESOURCE_DESC urd = {};
+        urd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        urd.Width = 256 * 4;
+        urd.Height = 1;
+        urd.DepthOrArraySize = 1;
+        urd.MipLevels = 1;
+        urd.SampleDesc.Count = 1;
+        urd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (FAILED(device_->CreateCommittedResource(
+                &uhp, D3D12_HEAP_FLAG_NONE, &urd,
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                IID_PPV_ARGS(&voxel_palette_up_)))) {
+            Fail("创建调色板上传缓冲失败");
+            return false;
+        }
+        if (FAILED(voxel_palette_up_->Map(0, nullptr, &voxel_palette_up_ptr_))) {
+            Fail("映射调色板上传缓冲失败");
+            return false;
+        }
     }
 
     // 3) 烘焙用的临时渲染目标 + 深度缓冲。
@@ -1089,24 +1113,9 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
         pal[i * 4 + 2] = p.pal768[i * 3 + 2];
         pal[i * 4 + 3] = (i == 0) ? 0 : 255;
     }
-    {
-        D3D12_RESOURCE_BARRIER to_copy =
-            Transition(voxel_palette_.Get(),
-                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                       D3D12_RESOURCE_STATE_COPY_DEST);
-        alloc_->Reset();
-        cmd_->Reset(alloc_.Get(), nullptr);
-        cmd_->ResourceBarrier(1, &to_copy);
-        cmd_->Close();
-        ID3D12CommandList* lists[] = {cmd_.Get()};
-        queue_->ExecuteCommandLists(1, lists);
-        Wait_Queue(queue_.Get(), fence_.Get(), fence_event_, fence_value_);
-        if (!Upload_Texture_Data(voxel_palette_.Get(), pal, 256, 1,
-                                 DXGI_FORMAT_R8G8B8A8_UNORM, 4,
-                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)) {
-            Fail("体素调色板上传失败");
-            return -1;
-        }
+    // 写进常驻映射的上传缓冲：不需要单独一段命令列表，也就少一次等 GPU。
+    if (voxel_palette_up_ptr_ != nullptr) {
+        std::memcpy(voxel_palette_up_ptr_, pal, sizeof(pal));
     }
     if (Debug_Trace_On()) {
         std::fprintf(stderr,
@@ -1165,6 +1174,32 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
 
     alloc_->Reset();
     cmd_->Reset(alloc_.Get(), nullptr);
+    // 调色板：NON_PIXEL_SHADER_RESOURCE -> COPY_DEST -> 拷 -> 转回可读。
+    // 以前这三步各自开一段命令列表、各等一次 GPU（一次烘焙 4 次 fence 往返），
+    // 现在全塞进这一段里，只等一次。
+    {
+        D3D12_RESOURCE_BARRIER b =
+            Transition(voxel_palette_.Get(),
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                       D3D12_RESOURCE_STATE_COPY_DEST);
+        cmd_->ResourceBarrier(1, &b);
+        D3D12_TEXTURE_COPY_LOCATION pd = {};
+        pd.pResource = voxel_palette_.Get();
+        pd.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        D3D12_TEXTURE_COPY_LOCATION ps = {};
+        ps.pResource = voxel_palette_up_.Get();
+        ps.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        ps.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        ps.PlacedFootprint.Footprint.Width = 256;
+        ps.PlacedFootprint.Footprint.Height = 1;
+        ps.PlacedFootprint.Footprint.Depth = 1;
+        ps.PlacedFootprint.Footprint.RowPitch = 256 * 4;
+        cmd_->CopyTextureRegion(&pd, 0, 0, 0, &ps, nullptr);
+        D3D12_RESOURCE_BARRIER b2 =
+            Transition(voxel_palette_.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        cmd_->ResourceBarrier(1, &b2);
+    }
     const float clear[4] = {0, 0, 0, 0};
     cmd_->ClearRenderTargetView(rtv, clear, 0, nullptr);
     cmd_->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
