@@ -161,6 +161,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     bool offscreen = false;
     bool selftest = false;
     bool vxlgpu = false;
+    bool grid_debug = false;
+    std::string dump_map_path;
     int warm_frames = 0;
     std::string out_path = "build/game.raw";
     for (int i = 0; i < argc; ++i) {
@@ -180,6 +182,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             out_path = args[++i];
         } else if (std::strcmp(args[i], "--frames") == 0 && i + 1 < argc) {
             warm_frames = std::atoi(args[++i]);
+        } else if (std::strcmp(args[i], "--grid") == 0) {
+            grid_debug = true;
+        } else if (std::strcmp(args[i], "--dumptmap") == 0 && i + 1 < argc) {
+            dump_map_path = args[++i];
         } else if (args[i][0] == '-') {
             // 未知开关，忽略
         } else {
@@ -196,6 +202,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         if (!game.Init(nullptr, 1024, 768)) {
             return 1;
         }
+        game.Set_Grid_Debug(grid_debug);
         if (map_path.empty()) {
             std::printf("[x] 离屏模式要给 --map（还没有内置地图列表）\n");
             return 1;
@@ -204,6 +211,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         if (!game.Load_Map(mixes, map_path.c_str(), &err)) {
             std::printf("[x] 载入失败: %s\n", err.c_str());
             return 1;
+        }
+        if (!dump_map_path.empty()) {
+            game.Dump_Terrain_RGBA(dump_map_path.c_str());
         }
         if (vxlgpu) {
             return game.Self_Test_Voxel_GPU() ? 0 : 1;

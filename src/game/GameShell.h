@@ -162,10 +162,21 @@ public:
     int Cursor_Mode() const noexcept { return cursor_mode_; }
     int Objects_Drawn() const noexcept { return objects_drawn_; }
 
+    /// 诊断：把格子中心网和对象落点画出来（`--grid`）。
+    /// "对象摆放位置乱"这种问题光看成品图分不清是坐标错还是压盖顺序错，
+    /// 把格心画出来一眼就能对。
+    void Set_Grid_Debug(bool v) noexcept { grid_debug_ = v; }
+
+    /// 把整张战场画布落盘成 RGBA（`--dumptmap <路径>`）。
+    /// 只截屏局部的话，"大片黑楔形"到底是地图边界还是漏画，看不出比例。
+    bool Dump_Terrain_RGBA(const char* path) const;
+
 private:
     void Update_Camera(float dt);
     /// 帧外准备精灵（体素烘焙 + SHP 上传）。见 Render 里为什么要放在帧外。
     void Warm_Sprites();
+    /// 对象的下标按画家序排好（等距投影：远的先画）。
+    std::vector<int> Objects_In_Painter_Order() const;
     /// 载入原版界面贴图（SIDE1/SIDE2/SIDE3/TAB/RADAR/CREDITS/POWER…）。
     bool Load_UI();
     /// 画一件界面贴图（贴图缺失时静默跳过）。
@@ -175,6 +186,7 @@ private:
     /// 雷达**显示区**在屏幕上的矩形（外框里镂空的那块，实测自 RADAR.SHP 第 32 帧）。
     bool Radar_Inner(int* x, int* y, int* w, int* h) const;
     void Draw_Battlefield();
+    void Draw_Grid_Debug();
     /// 画一个单位的真精灵（体素/SHP）。返回 false = 没有素材，退成色块。
     bool Draw_Object_Sprite(const Object& o, int sx, int sy, float scale);
     void Draw_Objects();
@@ -218,6 +230,7 @@ private:
     int cursor_mode_ = 0;    ///< 0=普通 1=修理 2=变卖
     bool follow_ = false;    ///< F：镜头跟随选中的单位
     bool power_warn_ = false;  ///< 电力欠费（表盘画第 1 帧）
+    bool grid_debug_ = false;  ///< --grid：画格子中心网 + 对象落点十字
     int objects_drawn_ = 0;  ///< 自检用：这一帧画了几个对象
 
     // 状态

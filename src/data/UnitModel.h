@@ -65,6 +65,22 @@ struct UnitModel {
     int flh[3] = {0, 0, 0};   ///< art[image].PrimaryFireFLH = "x,y,z"
     int turret_offset = 0;    ///< art[image].TurretOffset
 
+    // ---- 建造相关（全部来自 rules.ini 的 [单位] 段）----
+    // 侧栏能不能建、多少钱、多久、多少电，都由这几项决定。
+    int cost = 0;            ///< Cost=
+    int tech_level = 0;      ///< TechLevel=（-1 表示没写 = 永远可建）
+    int power = 0;           ///< Power=：正数发电、负数耗电
+    int strength = 0;        ///< Strength=（血量上限）
+    int speed = 0;           ///< Speed=：0..10，越大越快
+    int build_time = 1;      ///< BuildTime= 倍率（缺省 1）
+    bool has_weapon = false; ///< Primary= 非空 —— 用来把建筑分成"结构/防御"
+    bool wall = false;       ///< Wall=yes（围墙也算防御类）
+    std::vector<std::string> owners;  ///< Owner=，决定哪个阵营能建
+    std::vector<std::string> prereq;  ///< Prerequisite=，建它之前要先有什么
+
+    /// 侧栏页签：0=建筑 1=防御 2=步兵 3=载具。四个列表之外的类型是 -1。
+    int category = -1;
+
     /// 能拿出一个可渲染的体素模型。
     bool ok() const noexcept { return voxel && body.present; }
 };
@@ -114,6 +130,22 @@ public:
     /// 打印一张全量表（--unitdb 用）。only_voxel 只列体素单位。
     void Dump(bool only_voxel = true) const;
 
+    // ---- 侧栏建造列表 ----
+
+    /// 开局资金（[General] 的 StartCredits，缺省 10000 —— 原版就是这个数）。
+    int Start_Credits() const noexcept { return start_credits_; }
+    /// 开局科技等级（[General] 的 TechLevel=，缺省 10 表示全开）。
+    int Start_Tech_Level() const noexcept { return start_tech_; }
+
+    /// 某个页签的**原始**名单（未过滤）。tab: 0=建筑 1=防御 2=步兵 3=载具。
+    const std::vector<std::string>& Tab_Units(int tab) const;
+
+    /// 按 Owner + TechLevel 过滤出某页签"现在能建"的东西，写进 out。
+    /// owner 是阵营名（Russians / Americans…），大小写不敏感；空 = 不过滤。
+    /// tech_level < 0 = 不过滤。返回写入的个数。
+    int Buildable(int tab, const char* owner, int tech_level,
+                  std::vector<std::string>* out) const;
+
 private:
     void Collect_Units();
     bool Have(uint32_t id) const { return ids_.find(id) != ids_.end(); }
@@ -125,6 +157,10 @@ private:
     std::unordered_set<uint32_t> ids_;
     std::unordered_map<std::string, UnitModel> cache_;
     std::vector<std::string> units_;
+    std::vector<std::string> tabs_[4];   ///< 侧栏四页签的名单
+    std::unordered_map<std::string, int> category_;  ///< 单位名 -> 页签
+    int start_credits_ = 10000;
+    int start_tech_ = 10;
     Stats stats_;
     bool loaded_ = false;
 };

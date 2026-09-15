@@ -2,6 +2,8 @@
 
 #include "game/GameShell.h"
 
+#include <algorithm>
+
 #include <cmath>
 #include <cstdio>
 
@@ -445,6 +447,35 @@ void GameShell::Warm_Sprites() {
     warm(false);
 }
 
+std::vector<int> GameShell::Objects_In_Painter_Order() const {
+    // 【为什么对象也要排序】地图对象是按文件里的段顺序来的（Terrain 段在前、
+    // 然后是 Units/Structures…），跟屏幕上的远近毫无关系。
+    // 直接照这个顺序画，会出现"近处的树被远处的楼盖住"、
+    // "同一格的兵和车谁压谁随机" —— 看着就是"摆放位置乱"。
+    //
+    // 等距投影下屏幕 y = 15*(cx+cy)，所以按 (cx+cy) 升序；同一斜列里
+    // 再按 level 升序、cx 升序，和地形用的是同一套画家序。
+    std::vector<int> order;
+    const std::vector<Object>& objs = world_.Objects();
+    order.reserve(objs.size());
+    for (size_t i = 0; i < objs.size(); ++i) {
+        order.push_back(static_cast<int>(i));
+    }
+    const std::vector<Object>& o = objs;
+    std::sort(order.begin(), order.end(), [&o](int a, int b) {
+        const int sa = static_cast<int>(o[a].x) + static_cast<int>(o[a].y);
+        const int sb = static_cast<int>(o[b].x) + static_cast<int>(o[b].y);
+        if (sa != sb) {
+            return sa < sb;
+        }
+        if (static_cast<int>(o[a].x) != static_cast<int>(o[b].x)) {
+            return static_cast<int>(o[a].x) < static_cast<int>(o[b].x);
+        }
+        return o[a].id < o[b].id;
+    });
+    return order;
+}
+
 /// 画一个单位的真精灵。返回 false 表示没有可用素材（调用方退成色块）。
 ///
 /// 精灵本体已经在显存里（sprite_id）：体素是 GPU 光栅化烘出来的，
@@ -469,7 +500,14 @@ void GameShell::Draw_Objects() {
     sprites_ok_ = 0;
     sprites_miss_ = 0;
     const int view_w = win_w_ - kSidebarW;
-    for (const Object& o : world_.Objects()) {
+    // 按画家序画：近处的对象后画才会盖住远处的（见 Objects_In_Painter_Order）
+    const std::vector<int> order = Objects_In_Painter_Order();
+    const std::vector<Object>& objs = world_.Objects();
+    for (int idx : order) {
+        if (idx < 0 || idx >= static_cast<int>(objs.size())) {
+            continue;
+        }
+        const Object& o = objs[static_cast<size_t>(idx)];
         float sx = 0.0f, sy = 0.0f;
         Cell_To_Screen(o.x, o.y, &sx, &sy);
         // 视口裁剪（留一格余量，免得贴边的突然消失）
@@ -519,6 +557,60 @@ void GameShell::Draw_Battlefield() {
     camera_.World_To_Screen(0.0f, 0.0f, &sx, &sy);
     renderer_.Draw_Sprite(terrain_sprite_, static_cast<int>(sx),
                           static_cast<int>(sy), camera_.Scale());
+    if (grid_debug_) {
+        Draw_Grid_Debug();
+    }
+}
+
+bool GameShell::Dump_Terrain_RGBA(const char* path) const {
+    if (path == nullptr || terrain_rgba_.empty() || terrain_w_ <= 0 ||
+        terrain_h_ <= 0) {
+        return false;
+    }
+    FILE* f = std::fopen(path, "wb");
+    if (f == nullptr) {
+        return false;
+    }
+    std::fwrite(terrain_rgba_.data(), 4,
+                static_cast<size_t>(terrain_w_) * terrain_h_, f);
+    std::fclose(f);
+    std::printf("[OK] 战场画布 %dx%d -> %s\n", terrain_w_, terrain_h_, path);
+    return true;
+}
+
+/// 诊断层：格子中心网（灰点）+ 对象落点（黄十字）。
+///
+/// "对象摆放位置乱"有两种可能：坐标换算错了（十字不落在格心），
+/// 或者坐标对但压盖顺序错了（十字对得上、图被别的盖住）。
+/// 把格心画出来就能把这两种分开。
+void GameShell::Draw_Grid_Debug() {
+    const float dot[4] = {0.35f, 0.35f, 0.45f, 1.0f};
+    const float mark[4] = {1.0f, 0.95f, 0.2f, 1.0f};
+    const float cx[4] = {0.9f, 0.3f, 0.9f, 1.0f};
+    for (int cy = 0; cy < map_.Height(); cy += 2) {
+        for (int cxi = 0; cxi < map_.Width(); cxi += 2) {
+            float px = 0.0f, py = 0.0f;
+            Cell_To_Screen(static_cast<float>(cxi), static_cast<float>(cy), &px, &py);
+            if (px < -8 || px > win_w_ - kSidebarW + 8 || py < -8 || py > win_h_ + 8) {
+                continue;
+            }
+            renderer_.Draw_Rect(static_cast<int>(px), static_cast<int>(py), 2, 2, dot);
+        }
+    }
+    for (const Object& o : world_.Objects()) {
+        if (!o.Is_Techno()) {
+            continue;
+        }
+        float px = 0.0f, py = 0.0f;
+        Cell_To_Screen(o.x, o.y, &px, &py);
+        if (px < -8 || px > win_w_ - kSidebarW + 8 || py < -8 || py > win_h_ + 8) {
+            continue;
+        }
+        const int ix = static_cast<int>(px);
+        const int iy = static_cast<int>(py);
+        renderer_.Draw_Rect(ix - 6, iy, 13, 1, mark);
+        renderer_.Draw_Rect(ix, iy - 6, 1, 13, mark);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -677,53 +769,53 @@ void GameShell::Draw_Sidebar() {
         Draw_Ui(ui_tab_[i], sx + 26 + i * 29, 42, (i == sidebar_tab_) ? 1 : 0);
     }
 
-    // 底部自下往上钉：雷达 -> 收尾装饰 -> 资金条
-    int by = win_h_;
-    const int radar_h = ui_radar_.ok() ? ui_radar_.h : 110;
-    by -= radar_h;
-    if (ui_radar_.ok()) {
-        // 第 32 帧中间是镂空的显示区；前面的帧是"雷达未上线"的鹰徽动画
-        Draw_Ui(ui_radar_, sx, by, 32);
-    }
-    const int deco_h = ui_side3_.ok() ? ui_side3_.h : 26;
-    by -= deco_h;
-    if (ui_side3_.ok()) {
-        Draw_Ui(ui_side3_, sx, by);
-    }
-    const int cred_h = ui_credits_.ok() ? ui_credits_.h : 16;
-    by -= cred_h;
+    // ---- 纵向顺序（自上而下，和原版一致）----
+    //   SIDE1    头部：蓝色面板 + 4 个页签
+    //   CREDITS  资金条（原版资金就在页签正下方，不在屏幕底部）
+    //   SIDE2    建造格，两列一行，一直铺到电力带
+    //   SIDE3    电力/鹰徽带（原版电力表在雷达正上方）
+    //   RADAR    贴屏幕底边
+    int y = head_h;
+
     if (ui_credits_.ok()) {
-        Draw_Ui(ui_credits_, sx, by);
+        Draw_Ui(ui_credits_, sx, y);
         // 数字精灵还没接（要 SIDEFNT3 位图字体），先用色带占位
-        renderer_.Draw_Rect(sx + 8, by + 5, 60, 6, kUiGold);
-    }
-    // 电力表：独占资金条上面那一条，别压在建造格上（原来直接叠上去，很乱）
-    const int power_h = ui_power_.ok() ? (ui_power_.h + 2) : 0;
-    const int power_y = by - power_h;
-    if (ui_power_.ok()) {
-        // 电力有富余就画第 0 帧，欠费画第 1 帧（原版 2 帧就是这两种状态）
-        Draw_Ui(ui_power_, sx + 4, power_y + 1, power_warn_ ? 1 : 0);
+        renderer_.Draw_Rect(sx + 8, y + 5, 60, 6, kUiGold);
+        y += ui_credits_.h;
     }
 
-    // 中间铺建造格：SIDE2 一行 50 像素、两列凹槽在 x = 24 / 86。
-    // 最后一行用 SIDE2B 并**贴着底对齐** —— 否则余数会留出一条黑缝。
-    const int grid_top = head_h;
-    const int grid_bottom = power_y;
+    // 底部自下往上钉死：雷达 -> 电力带
+    const int radar_h = ui_radar_.ok() ? ui_radar_.h : 110;
+    const int radar_y = win_h_ - radar_h;
+    const int band_h = ui_side3_.ok() ? ui_side3_.h : 26;
+    const int band_y = radar_y - band_h;
+    if (ui_side3_.ok()) {
+        Draw_Ui(ui_side3_, sx, band_y);
+    }
+    // 电力表画在电力带的左侧蓝底上（原版电力表就长这样）
+    if (ui_power_.ok()) {
+        // 有富余画第 0 帧、欠费画第 1 帧（原版这 2 帧就是这两种状态）
+        Draw_Ui(ui_power_, sx + 4, band_y + (band_h - ui_power_.h) / 2,
+                power_warn_ ? 1 : 0);
+    }
+
+    // 中间铺建造格：一行 50 像素、两列凹槽在 x = 24 / 86。
+    // 最后一行**贴着电力带对齐**，否则余数会留出一条黑缝。
     const int row_h = ui_side2_.ok() ? ui_side2_.h : 50;
-    if (row_h > 0 && grid_bottom > grid_top) {
-        int y = grid_top;
-        while (y + row_h <= grid_bottom) {
+    if (row_h > 0 && band_y > y) {
+        int gy = y;
+        while (gy + row_h <= band_y) {
             if (ui_side2_.ok()) {
-                Draw_Ui(ui_side2_, sx, y);
+                Draw_Ui(ui_side2_, sx, gy);
             } else {
-                renderer_.Draw_Rect(sx + 24, y + 5, 60, 40, kUiSlot);
-                renderer_.Draw_Rect(sx + 86, y + 5, 60, 40, kUiSlot);
+                renderer_.Draw_Rect(sx + 24, gy + 5, 60, 40, kUiSlot);
+                renderer_.Draw_Rect(sx + 86, gy + 5, 60, 40, kUiSlot);
             }
-            y += row_h;
+            gy += row_h;
         }
-        if (y < grid_bottom) {
-            const int tail = grid_bottom - row_h;
-            if (tail >= grid_top) {
+        if (gy < band_y) {
+            const int tail = band_y - row_h;
+            if (tail >= y) {
                 const UiPiece& row = ui_side2b_.ok() ? ui_side2b_ : ui_side2_;
                 Draw_Ui(row, sx, tail);
             }
@@ -733,7 +825,7 @@ void GameShell::Draw_Sidebar() {
     // 光标命令提示（K 修理 / L 变卖）
     if (cursor_mode_ != 0) {
         const float c[4] = {1.0f, 0.3f, 0.3f, 1.0f};
-        renderer_.Draw_Rect(sx + 4, grid_top + 2, kSidebarW - 8, 8, c);
+        renderer_.Draw_Rect(sx + 4, y + 2, kSidebarW - 8, 8, c);
     }
 }
 

@@ -99,25 +99,118 @@ bool UnitModelDB::Load(const MixFileClass* const* mixes, int count) {
     for (const std::string& u : units_) {
         Resolve(u.c_str());
     }
+
+    // 页签要在**全部解完之后**才定：建筑的"结构 / 防御"之分要看
+    // Resolve 读出来的 Primary= / Wall=（见 Collect_Units 的注释）。
+    for (const std::string& u : units_) {
+        auto it = cache_.find(u);
+        if (it == cache_.end()) {
+            continue;
+        }
+        UnitModel& m = it->second;
+        int tab = m.category;
+        if (tab == 0 && (m.has_weapon || m.wall)) {
+            tab = 1;
+        }
+        m.category = tab;
+        if (tab >= 0 && tab < 4) {
+            tabs_[tab].push_back(u);
+        }
+    }
     return true;
+}
+
+const std::vector<std::string>& UnitModelDB::Tab_Units(int tab) const {
+    static const std::vector<std::string> kEmpty;
+    if (tab < 0 || tab > 3) {
+        return kEmpty;
+    }
+    return tabs_[tab];
+}
+
+int UnitModelDB::Buildable(int tab, const char* owner, int tech_level,
+                           std::vector<std::string>* out) const {
+    if (out == nullptr) {
+        return 0;
+    }
+    out->clear();
+    if (tab < 0 || tab > 3) {
+        return 0;
+    }
+    const std::string own = Upper(Trim(owner != nullptr ? owner : ""));
+    for (const std::string& id : tabs_[tab]) {
+        const auto it = cache_.find(id);
+        if (it == cache_.end()) {
+            continue;
+        }
+        const UnitModel& m = it->second;
+        // Owner= 里没写的（少数通用件）谁都建得了；写了就得命中。
+        if (!own.empty() && !m.owners.empty()) {
+            bool hit = false;
+            for (const std::string& o : m.owners) {
+                if (Upper(Trim(o)) == own) {
+                    hit = true;
+                    break;
+                }
+            }
+            if (!hit) {
+                continue;
+            }
+        }
+        // TechLevel = -1 是"没写"，不是"1 级"——写漏了会把它当高级货滤掉。
+        if (tech_level >= 0 && m.tech_level >= 0 && m.tech_level > tech_level) {
+            continue;
+        }
+        out->push_back(id);
+    }
+    return static_cast<int>(out->size());
 }
 
 void UnitModelDB::Collect_Units() {
     units_.clear();
+    tabs_[0].clear();
+    tabs_[1].clear();
+    tabs_[2].clear();
+    tabs_[3].clear();
+    category_.clear();
     std::unordered_set<std::string> seen;
+    // 原始四张列表 -> 侧栏页签的落位规则：
+    //   InfantryTypes -> 步兵页(2)；VehicleTypes / AircraftTypes -> 载具页(3)；
+    //   BuildingTypes 要**再分一次**：有武器或有 Wall=yes 的算"防御"(1)，
+    //   其余算"建筑"(0)。
+    // 【为什么靠 Primary= 判防御】原版没有单独的"防御列表"，而实测
+    // 哨戒炮/高炮/光棱塔/爱国者全都写了 Primary=，围墙写了 Wall=yes，
+    // 而电厂/兵营/矿厂一个武器都没有 —— 这条分界线在原版数据上是干净的。
+    // 具体归类要等 Resolve 读出 Primary= 才能定，这里先把候选分好。
     for (const char* list : kTypeLists) {
         std::vector<std::string> names;
         rules_.Read_Numbered_List(list, &names);
+        const std::string ls = list;
+        int tab = 3;
+        if (ls == "InfantryTypes") {
+            tab = 2;
+        } else if (ls == "BuildingTypes") {
+            tab = 0;   // 待定，Resolve 之后再改到 1
+        }
         for (const std::string& raw : names) {
             const std::string n = Upper(Trim(raw));
-            if (n.empty() || seen.find(n) != seen.end()) {
+            if (n.empty()) {
                 continue;
             }
-            seen.insert(n);
-            units_.push_back(n);
+            if (seen.find(n) == seen.end()) {
+                seen.insert(n);
+                units_.push_back(n);
+            }
+            if (category_.find(n) == category_.end()) {
+                category_[n] = tab;
+            }
         }
     }
     stats_.units = static_cast<int>(units_.size());
+
+    // 开局资金 / 科技等级
+    start_credits_ = rules_.Get_Int("General", "StartCredits", 10000);
+    start_tech_ = rules_.Get_Int("General", "TechLevel", 10);
 }
 
 UnitModelPart UnitModelDB::Make_Part(const std::string& image, const char* suffix,
@@ -175,6 +268,23 @@ const UnitModel* UnitModelDB::Resolve(const char* unit) {
         m.flh[2] = flh[2];
     }
     m.turret_offset = art_.Get_Int(m.image.c_str(), "TurretOffset", 0);
+
+    // ---- 建造字段（侧栏/生产要用）----
+    const char* k = key.c_str();
+    m.cost = rules_.Get_Int(k, "Cost", 0);
+    m.tech_level = rules_.Get_Int(k, "TechLevel", -1);
+    m.power = rules_.Get_Int(k, "Power", 0);
+    m.strength = rules_.Get_Int(k, "Strength", 0);
+    m.speed = rules_.Get_Int(k, "Speed", 0);
+    m.build_time = rules_.Get_Int(k, "BuildTime", 1);
+    m.has_weapon = !Trim(rules_.Get_String(k, "Primary", "")).empty();
+    m.wall = rules_.Get_Bool(k, "Wall", false);
+    rules_.Get_String_List(k, "Owner", &m.owners);
+    rules_.Get_String_List(k, "Prerequisite", &m.prereq);
+    {
+        const auto cit = category_.find(key);
+        m.category = (cit != category_.end()) ? cit->second : -1;
+    }
 
     // ---- 统计只在首次解析时累加 ----
     if (m.voxel) {
