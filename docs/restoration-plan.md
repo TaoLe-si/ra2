@@ -137,6 +137,25 @@ OK   0x9B570683 800x600 planes=3 bpl=800 内嵌调色板=无
 分布：180 个是 (1 帧, 1 肢)；另有 (17,13)、(2,3)、(1,2) 各 1 个。
 坑：有 4 个 SHP 因为巧合也能解出"合法"的 F/L，必须靠 `48*F*L` 算术拦掉。
 
+**反汇编锚点**（`tools/query.py --string` 追出来的，下一步从这里进）：
+
+```
+0x00531680  Init_VoxLib()      561B/133 指令
+    push "DPOD.VXL" -> CRC名 -> operator new(0x1C=28) -> 0x00755CD0
+        结果存 [0xA8ECD8] = VoxLib 指针
+    push "DPOD.HVA" -> operator new(0x10=16) -> 0x005BD570
+        结果存 [0xA8ECDC] = MotLib（HVA）指针
+    operator new 是 0x007C8E17，释放是 0x007C8B3D
+0x00755CD0  VXL 装载包装（清零 28 字节对象，转调 0x00755DB0）
+0x005BD570  HVA 装载包装（清零 16 字节对象，转调 0x005BD5C0）
+0x005BD5C0  HVA 真装载器：call [file+0x1c](1) 打开 ->
+            `push 0x18` / `call [edx+0x24]` 即 Read(24)
+            ★ 正好是 24 字节头，**独立印证了下面 HVA 的字段布局**
+0x0052BA60  引用 "voxels.vpl"（VPL 体素调色板加载器）
+0x0074B050  引用 "VoxelIndex"
+0x005F92D0  引用 "Voxel"（art.ini 里读 Voxel=yes）
+```
+
 **VXL 头部已破**（`+0` 16 字节 `"Voxel Animation"`，注意这个串**不在 exe 里**，
 说明游戏不比较魔数）：
 
