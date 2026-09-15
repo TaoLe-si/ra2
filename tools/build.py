@@ -75,6 +75,31 @@ VIEW_SOURCES = [
     "src/core/GameVersion.cpp",
 ]
 
+# ra2game：真正的游戏（打开就是原版那个界面）
+GAME_SOURCES = [
+    "src/game/GameMain.cpp",
+    "src/game/GameShell.cpp",
+    "src/io/FileSystem.cpp",
+    "src/io/MixCrypto.cpp",
+    "src/io/Lzo1x.cpp",
+    "src/gfx/Palette.cpp",
+    "src/gfx/ShpFile.cpp",
+    "src/gfx/TmpFile.cpp",
+    "src/gfx/PcxFile.cpp",
+    "src/gfx/HvaFile.cpp",
+    "src/gfx/VxlFile.cpp",
+    "src/gfx/VxlNormals.cpp",
+    "src/gfx/VoxelLight.cpp",
+    "src/gfx/RemapTable.cpp",
+    "src/gfx/dx12/Dx12Renderer.cpp",
+    "src/map/TheaterFile.cpp",
+    "src/map/MapFile.cpp",
+    "src/map/MapRenderer.cpp",
+    "src/data/Ini.cpp",
+    "src/data/UnitModel.cpp",
+    "src/core/GameVersion.cpp",
+]
+
 # 只有查看器需要这些库；ra2core 保持零系统依赖。
 VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib"]
 
@@ -159,11 +184,15 @@ def main() -> None:
     build = os.path.join(ROOT, "build")
     os.makedirs(build, exist_ok=True)
     vobj = os.path.join(build, "view")
+    gobj = os.path.join(build, "game")
     os.makedirs(vobj, exist_ok=True)
+    os.makedirs(gobj, exist_ok=True)
     if a.clean:
         for f in glob.glob(os.path.join(build, "*.obj")):
             os.remove(f)
         for f in glob.glob(os.path.join(vobj, "*.obj")):
+            os.remove(f)
+        for f in glob.glob(os.path.join(gobj, "*.obj")):
             os.remove(f)
 
     env = build_env()
@@ -173,9 +202,11 @@ def main() -> None:
     # 查看器单独放一份 .obj：两个目标都编 FileSystem.cpp 等，
     # 同名 .obj 会互相覆盖，导致链接错版本。
     view = compile_target(env, cl, "ra2view.exe", VIEW_SOURCES, VIEW_LIBS, obj_dir=vobj)
+    game = compile_target(env, cl, "ra2game.exe", GAME_SOURCES, VIEW_LIBS, obj_dir=gobj)
 
     print("[OK] " + core)
     print("[OK] " + view)
+    print("[OK] " + game)
     if a.run:
         sys.exit(subprocess.run([core], cwd=ROOT).returncode)
 

@@ -22,6 +22,7 @@ namespace {
 constexpr const char* kShaderSource = R"(
 cbuffer Xform : register(b0) {
     float4 xform;   // xy = 左上角 NDC, zw = 尺寸 NDC
+    float4 tint;    // 纯色图元的 RGBA；精灵路径恒为 (1,1,1,1)
 };
 
 struct VSOut {
@@ -51,6 +52,12 @@ float4 PSMain(VSOut i) : SV_Target {
 // 真彩精灵（体素）：明暗已经在 CPU 端烘进 RGB，直接采样。
 float4 PSMainRGBA(VSOut i) : SV_Target {
     return indexTex.Sample(samp, i.uv);
+}
+
+// 纯色图元：界面用（侧栏底板、按钮框、框选矩形、血条、小地图网格）。
+// 不采样任何纹理，直接吐 tint —— 配根常量里的第 5..8 个 float 用。
+float4 PSSolid(VSOut i) : SV_Target {
+    return tint;
 }
 )";
 
@@ -339,6 +346,16 @@ bool Dx12Renderer::Create_Pipeline() {
         }
         return false;
     }
+    ComPtr<ID3DBlob> ps_solid;
+    if (FAILED(D3DCompile(kShaderSource, std::strlen(kShaderSource), nullptr, nullptr,
+                          nullptr, "PSSolid", "ps_5_0", flags, 0, &ps_solid, &err))) {
+        if (err) {
+            Fail(static_cast<const char*>(err->GetBufferPointer()));
+        } else {
+            Fail("纯色像素着色器编译失败");
+        }
+        return false;
+    }
 
     // 根签名：t0=索引纹理, t1=调色板, b0=变换常量, s0=静态点采样器
     D3D12_DESCRIPTOR_RANGE r0 = {};
@@ -359,9 +376,12 @@ bool Dx12Renderer::Create_Pipeline() {
     params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     params[1].DescriptorTable.NumDescriptorRanges = 1;
     params[1].DescriptorTable.pDescriptorRanges = &r1;
+    // 8 个常量：前 4 个是 xform（顶点用），后 4 个是 tint（纯色图元的像素用）。
+    // ShaderVisibility 必须是 ALL —— 顶点着色器和 PSSolid 都要读这个 cbuffer，
+    // 写成 VERTEX 的话 PSSolid 里的 tint 读出来全是 0，界面会整片黑（踩过）。
     params[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    params[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-    params[2].Constants.Num32BitValues = 4;
+    params[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    params[2].Constants.Num32BitValues = 8;
     params[2].Constants.ShaderRegister = 0;
 
     D3D12_STATIC_SAMPLER_DESC ss = {};
@@ -416,6 +436,12 @@ bool Dx12Renderer::Create_Pipeline() {
     pd.PS = {ps_rgba->GetBufferPointer(), ps_rgba->GetBufferSize()};
     if (FAILED(device_->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&pso_rgba_)))) {
         Fail("创建真彩 PSO 失败");
+        return false;
+    }
+    // 纯色管线：给界面图元用。
+    pd.PS = {ps_solid->GetBufferPointer(), ps_solid->GetBufferSize()};
+    if (FAILED(device_->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&pso_solid_)))) {
+        Fail("创建纯色 PSO 失败");
         return false;
     }
     return true;
@@ -644,13 +670,40 @@ void Dx12Renderer::Draw_Sprite(int sprite, int dx, int dy, float scale) {
     const float ndc_y = 1.0f - (static_cast<float>(dy) / vp_height_) * 2.0f;
     const float ndc_w = (w / vp_width_) * 2.0f;
     const float ndc_h = (h / vp_height_) * 2.0f;
-    const float xform[4] = {ndc_x, ndc_y, ndc_w, ndc_h};
+    const float xform[8] = {ndc_x, ndc_y, ndc_w, ndc_h, 1.0f, 1.0f, 1.0f, 1.0f};
 
     // 真彩精灵用另一条 PSO（像素着色器不查调色板），其余完全一致。
     cmd_->SetPipelineState(s.rgba ? pso_rgba_.Get() : pso_.Get());
     cmd_->SetGraphicsRootDescriptorTable(0, s.index_srv);
-    cmd_->SetGraphicsRoot32BitConstants(2, 4, xform, 0);
+    cmd_->SetGraphicsRoot32BitConstants(2, 8, xform, 0);
     cmd_->DrawInstanced(6, 1, 0, 0);
+}
+
+void Dx12Renderer::Draw_Rect(int x, int y, int w, int h, const float color[4]) {
+    if (!in_frame_ || w <= 0 || h <= 0) {
+        return;
+    }
+    const float ndc_x = (static_cast<float>(x) / vp_width_) * 2.0f - 1.0f;
+    const float ndc_y = 1.0f - (static_cast<float>(y) / vp_height_) * 2.0f;
+    const float ndc_w = (static_cast<float>(w) / vp_width_) * 2.0f;
+    const float ndc_h = (static_cast<float>(h) / vp_height_) * 2.0f;
+    const float k[8] = {ndc_x, ndc_y, ndc_w, ndc_h, color[0], color[1], color[2],
+                        color[3]};
+    cmd_->SetPipelineState(pso_solid_.Get());
+    cmd_->SetGraphicsRoot32BitConstants(2, 8, k, 0);
+    cmd_->DrawInstanced(6, 1, 0, 0);
+}
+
+void Dx12Renderer::Draw_Rect_Outline(int x, int y, int w, int h,
+                                     const float color[4], int thickness) {
+    // 四条边各一个填充矩形。厚度默认 1 像素，框选时用 2 更接近原版观感。
+    if (thickness < 1) {
+        thickness = 1;
+    }
+    Draw_Rect(x, y, w, thickness, color);                     // 上
+    Draw_Rect(x, y + h - thickness, w, thickness, color);     // 下
+    Draw_Rect(x, y, thickness, h, color);                     // 左
+    Draw_Rect(x + w - thickness, y, thickness, h, color);     // 右
 }
 
 void Dx12Renderer::End_Frame() {

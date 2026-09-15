@@ -813,10 +813,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     const char* pal_name = args[2];
     // 剩下的参数里找开关（--offscreen / --framesN / --frameN）
     bool offscreen = false;
+    bool uitest = false;
     int want_frame = 0;
     for (int i = 0; i < kMaxArgs; ++i) {
         if (std::strncmp(args[i], "--offscreen", 11) == 0) {
             offscreen = true;
+        } else if (std::strncmp(args[i], "--uitest", 8) == 0) {
+            uitest = true;
         } else if (std::strncmp(args[i], "--frame", 7) == 0 && args[i][7] != 's') {
             // --frameN：指定渲第几帧。回归 flags=0x03 要靠它，因为离线路径
             // 只渲一帧，而 flags 各异的帧常常不在 0 号位。
@@ -1246,6 +1249,18 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         g_app.r.Begin_Frame(clear);
         if (g_app.sprite >= 0) {
             g_app.r.Draw_Sprite(g_app.sprite, 8, 8, Map_Draw_Scale());
+        }
+        if (uitest) {
+            // 界面图元自检：三块纯色 + 一个描边框。看 PNG 能确认
+            // root constants 扩到 8 个之后 tint 真的传到了像素着色器。
+            const float red[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+            const float green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+            const float blue[4] = {0.0f, 0.0f, 1.0f, 0.5f};
+            const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+            g_app.r.Draw_Rect(40, 40, 120, 80, red);
+            g_app.r.Draw_Rect(180, 40, 120, 80, green);
+            g_app.r.Draw_Rect(320, 40, 120, 80, blue);    // 半透明，能看出混合生效
+            g_app.r.Draw_Rect_Outline(40, 150, 400, 120, white, 2);
         }
         g_app.r.End_Frame();
         std::vector<uint8_t> rgba;

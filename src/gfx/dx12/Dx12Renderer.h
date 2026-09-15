@@ -69,6 +69,18 @@ public:
     /// 画一帧。dx/dy 是屏幕坐标，scale 是放大倍数。
     void Draw_Sprite(int sprite, int dx, int dy, float scale = 1.0f);
 
+    /// 纯色填充矩形。界面全部靠它：侧栏底板、按钮、血条、小地图格子。
+    ///
+    /// 为什么单开一条 PSO：精灵路径是"索引 -> 查调色板 -> 出颜色"，
+    /// 界面要的是"直接给一个 RGBA"。用 1×1 白精灵 + 缩放也能凑，
+    /// 但那样每次换色都要传一张纹理，白搭一条上传通道。
+    /// color 分量 0..1，走的是和精灵同一套 alpha 混合（SrcAlpha/InvSrcAlpha）。
+    void Draw_Rect(int x, int y, int w, int h, const float color[4]);
+
+    /// 矩形描边（四条边各一个填充矩形）。框选用它。
+    void Draw_Rect_Outline(int x, int y, int w, int h, const float color[4],
+                           int thickness = 1);
+
     /// 清屏 -> 提交所有 Draw_Sprite -> 呈现。
     void Begin_Frame(const float clear_color[4]);
     void End_Frame();
@@ -109,6 +121,7 @@ private:
     ComPtr<ID3D12RootSignature> root_sig_;
     ComPtr<ID3D12PipelineState> pso_;        ///< 索引色 -> 查调色板
     ComPtr<ID3D12PipelineState> pso_rgba_;   ///< 真彩直接采样
+    ComPtr<ID3D12PipelineState> pso_solid_;  ///< 纯色（界面图元）
     ComPtr<ID3D12Resource> backbuffers_[2];
     ComPtr<ID3D12Fence> fence_;
     HANDLE fence_event_ = nullptr;

@@ -55,6 +55,8 @@ bool MapRenderer::Bind(const std::vector<MixFileClass*>& roots, const MapFile& m
     cache_.clear();
     tiles_loaded_ = 0;
     tiles_missing_ = 0;
+    cells_drawn_ = 0;
+    cells_empty_ = 0;
 
     theater_ = map.Theater();
     const TheaterInfo* ti = Find_Theater(theater_);
@@ -264,6 +266,9 @@ bool MapRenderer::Render(const MapFile& map, int rect_x, int rect_y, int rect_w,
     out->assign(static_cast<size_t>(width) * static_cast<size_t>(height), 0u);
     *out_w = width;
     *out_h = height;
+    // 存下来给游戏层做屏幕 <-> 格子换算（鼠标拾取、相机定位都要）
+    origin_x_ = origin_x;
+    origin_y_ = origin_y;
 
     const bool clip = (rect_w > 0 && rect_h > 0);
     const int x0 = clip ? rect_x : 0;
@@ -286,6 +291,7 @@ bool MapRenderer::Render(const MapFile& map, int rect_x, int rect_y, int rect_w,
         const int sx = origin_x + 30 * (c.cx - c.cy) - img->origin_x;
         const int sy = origin_y + 15 * (c.cx + c.cy)
                        - static_cast<int>(c.level) * kLevelHeightPx - img->origin_y;
+        int painted = 0;
         for (int y = 0; y < img->height; ++y) {
             const int dy = sy + y;
             if (dy < 0 || dy >= height) {
@@ -301,10 +307,17 @@ bool MapRenderer::Render(const MapFile& map, int rect_x, int rect_y, int rect_w,
                     continue;
                 }
                 (*out)[static_cast<size_t>(dy) * width + dx] = px;
+                ++painted;
             }
         }
         ++drawn;
+        // 画布上留下菱形黑洞的元凶就是"瓦片取到了、画上去却是空的"，
+        // 所以这里分开记：取到瓦片不算数，真的糊上像素才算。
+        if (painted == 0) {
+            ++cells_empty_;
+        }
     }
+    cells_drawn_ = drawn;
     if (drawn == 0) {
         if (err) *err = "一个瓦片都没画上";
         return false;

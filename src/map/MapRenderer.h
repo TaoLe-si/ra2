@@ -43,6 +43,14 @@ struct TerrainTileRGBA {
 /// cell 位图四边外扩的像素数：extra 常见 ExtraY=-60，64 足够。
 constexpr int kCellPad = 64;
 
+/// 等距菱形的几何。原版 RA2 一格就是 60×30 的菱形，半个格子 30×15。
+/// 高度每升一级，画面向上抬 12 像素。
+constexpr int kCellW = 60;
+constexpr int kCellH = 30;
+constexpr int kCellHalfW = 30;   ///< kCellW / 2
+constexpr int kCellHalfH = 15;   ///< kCellH / 2
+// kLevelHeightPx（每级高度抬升的像素）在 MapFile.h 里，别在这儿重复定义。
+
 class MapRenderer {
 public:
     /// 绑定素材：顶层 MIX 列表 + 已解析的地图。
@@ -71,6 +79,43 @@ public:
     int Tiles_Loaded() const noexcept { return tiles_loaded_; }
     int Tiles_Missing() const noexcept { return tiles_missing_; }
 
+    /// 上一次 Render 的覆盖统计。
+    ///
+    /// 为什么需要：`Tiles_Missing() == 0` 只证明"瓦片都取到了"，
+    /// 证明不了"画布被填满了"。悬崖这类多格模板如果 sub 取错，
+    /// 瓦片明明在、画上去却是空的 —— 画布上会留下一排排菱形黑洞。
+    /// 所以必须独立统计"有多少格真的画上了不透明像素"。
+    int Cells_Drawn() const noexcept { return cells_drawn_; }
+    int Cells_Empty() const noexcept { return cells_empty_; }
+
+    /// ---- 等距几何：给游戏层做"屏幕 <-> 格子"换算用 ----
+    ///
+    /// 上次 Render 用的画布原点（格子 (0,0) 在画布里的像素位置）。
+    /// 游戏层要拿它把鼠标点击换算成格子，所以必须能问出来，不能自己去猜
+    /// kTopMargin 那些内部常量。
+    int Origin_X() const noexcept { return origin_x_; }
+    int Origin_Y() const noexcept { return origin_y_; }
+
+    /// 格子 -> 画布像素（菱形左上角，不含高度抬升）。
+    static void Cell_To_Canvas(int origin_x, int origin_y, int cx, int cy, int level,
+                               int* out_x, int* out_y) {
+        *out_x = origin_x + kCellHalfW * (cx - cy);
+        *out_y = origin_y + kCellHalfH * (cx + cy) - level * kLevelHeightPx;
+    }
+
+    /// 画布像素 -> 格子。反解上面那两个式子：
+    ///   cx - cy = (x - ox) / 30        cx + cy = (y - oy) / 15
+    /// 高度会让格子整体上移，所以严格反解要先知道 level；
+    /// 这里返回 level=0 时的格子，调用方再按实际高度微调（鼠标拾取本来
+    /// 就该从近到远试，见 GameShell 的拾取逻辑）。
+    static void Canvas_To_Cell(int origin_x, int origin_y, int px, int py,
+                               int* out_cx, int* out_cy) {
+        const float a = static_cast<float>(px - origin_x) / kCellHalfW;
+        const float b = static_cast<float>(py - origin_y) / kCellHalfH;
+        *out_cx = static_cast<int>(std::floor((a + b) * 0.5f));
+        *out_cy = static_cast<int>(std::floor((b - a) * 0.5f));
+    }
+
 private:
     struct Sub {
         std::unique_ptr<MixFileClass> mix;
@@ -93,6 +138,10 @@ private:
     std::unordered_map<uint64_t, TerrainTileRGBA> cache_;
     int tiles_loaded_ = 0;
     int tiles_missing_ = 0;
+    int origin_x_ = 0;      ///< 上次 Render 用的画布原点
+    int origin_y_ = 0;
+    int cells_drawn_ = 0;   ///< 上次 Render 里真的画上像素的格数
+    int cells_empty_ = 0;   ///< 取了瓦片但一个不透明像素都没画出来的格数
 };
 
 }  // namespace ra2

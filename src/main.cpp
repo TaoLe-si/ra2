@@ -1271,6 +1271,10 @@ static int Map_Dump(const std::vector<std::string>& mix_paths, const char* map_p
     std::printf("  画布 %dx%d，不透明像素 %ld（%.1f%%），瓦片命中 %d / 缺失 %d\n",
                 w, h, opaque, 100.0 * opaque / double(w) * (1.0 / (h ? h : 1)),
                 mr.Tiles_Loaded(), mr.Tiles_Missing());
+    // "瓦片都在"不等于"画布填满了"：多格模板的 sub 取错时瓦片取到了、
+    // 画上去却是空的，画布上会留下一排排菱形黑洞。所以单列一条判据。
+    std::printf("  贴图格 %d，其中空白格 %d %s\n", mr.Cells_Drawn(), mr.Cells_Empty(),
+                mr.Cells_Empty() == 0 ? "✓" : "✗（有格取到瓦片却画不出像素）");
 
     if (out_path != nullptr) {
         std::FILE* f = std::fopen(out_path, "wb");
