@@ -6,6 +6,7 @@
 // 构建： cmake -B build && cmake --build build
 // 运行： ./build/ra2core
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -25,6 +26,7 @@
 #include "gfx/Palette.h"
 #include "gfx/PcxFile.h"
 #include "gfx/TmpFile.h"
+#include "gfx/VxlFile.h"
 #include "io/FileSystem.h"
 #include "io/MixCrypto.h"
 #include "map/Map.h"
@@ -451,6 +453,189 @@ static int Verify_Hva(const char* path, uint32_t id) {
     return 0;
 }
 
+// ---- VXL ----
+//
+// VXL 有魔数（"Voxel Animation"），过滤比 HVA 省事：先比 15 个字节，再交给
+// Load() 做长度自洽判定。哈希喂的字节序列必须和 tools/vxlhash.py 逐字节一致：
+//
+//   u32 palette_count, num_limbs, num_limb_frames, body_size
+//   u8  remap_start, remap_end
+//   每根肢体：
+//     u32 名字长度 + 名字字节 + i32 number + u32 unk1 + u32 unk2
+//     u32 span_start_ofs, span_end_ofs, span_data_ofs, det(float 原样 4 字节)
+//     u32 × 12 变换矩阵 + u32 × 3 min + u32 × 3 max
+//     u8 x_size, y_size, z_size, normals_type
+//     u32 体素数 + 每个体素 5 字节 (x, y, z, colour, normal)
+//
+// 体素部分才是真正的验收点：外层结构对不对只看长度算术，列内编码错了
+// 体素坐标/颜色就会整片偏掉，哈希立刻对不上。
+
+static void Fnv_U32(uint32_t* h, uint32_t v) {
+    Fnv_Bytes(h, reinterpret_cast<const uint8_t*>(&v), sizeof(v));
+}
+
+static void Fnv_Str(uint32_t* h, const std::string& s) {
+    Fnv_U32(h, static_cast<uint32_t>(s.size()));
+    Fnv_Bytes(h, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+}
+
+static uint32_t Hash_One_Vxl(const VxlFile& v) {
+    uint32_t h = 2166136261u;
+    Fnv_U32(&h, static_cast<uint32_t>(v.Palette_Count()));
+    Fnv_U32(&h, static_cast<uint32_t>(v.Limb_Count()));
+    Fnv_U32(&h, static_cast<uint32_t>(v.Limb_Frame_Count()));
+    Fnv_U32(&h, v.Body_Size());
+    const uint8_t remap[2] = {v.Remap_Start(), v.Remap_End()};
+    Fnv_Bytes(&h, remap, sizeof(remap));
+    Fnv_Bytes(&h, v.Palette(), 768);
+
+    for (int l = 0; l < v.Limb_Count(); ++l) {
+        const VxlLimbHeader& hd = v.Header(l);
+        const VxlLimbTailer& t = v.Tailer(l);
+        Fnv_Str(&h, hd.name);
+        const uint8_t num[12] = {
+            static_cast<uint8_t>(hd.number), static_cast<uint8_t>(hd.number >> 8),
+            static_cast<uint8_t>(hd.number >> 16), static_cast<uint8_t>(hd.number >> 24),
+            static_cast<uint8_t>(hd.unk1), static_cast<uint8_t>(hd.unk1 >> 8),
+            static_cast<uint8_t>(hd.unk1 >> 16), static_cast<uint8_t>(hd.unk1 >> 24),
+            static_cast<uint8_t>(hd.unk2), static_cast<uint8_t>(hd.unk2 >> 8),
+            static_cast<uint8_t>(hd.unk2 >> 16), static_cast<uint8_t>(hd.unk2 >> 24)};
+        Fnv_Bytes(&h, num, sizeof(num));
+        Fnv_U32(&h, t.span_start_ofs);
+        Fnv_U32(&h, t.span_end_ofs);
+        Fnv_U32(&h, t.span_data_ofs);
+        Fnv_Bytes(&h, reinterpret_cast<const uint8_t*>(&t.det), 4);
+        Fnv_Bytes(&h, reinterpret_cast<const uint8_t*>(t.transform), sizeof(t.transform));
+        Fnv_Bytes(&h, reinterpret_cast<const uint8_t*>(t.min_bounds), sizeof(t.min_bounds));
+        Fnv_Bytes(&h, reinterpret_cast<const uint8_t*>(t.max_bounds), sizeof(t.max_bounds));
+        const uint8_t dims[4] = {t.x_size, t.y_size, t.z_size, t.normals_type};
+        Fnv_Bytes(&h, dims, sizeof(dims));
+
+        std::vector<VxlVoxel> vox;
+        if (!v.Decode_Limb(l, &vox)) {
+            Fnv_U32(&h, 0xDEADBEEFu);   // 解码失败也要留下痕迹
+            continue;
+        }
+        Fnv_U32(&h, static_cast<uint32_t>(vox.size()));
+        std::vector<uint8_t> packed(vox.size() * 5);
+        for (size_t i = 0; i < vox.size(); ++i) {
+            packed[i * 5 + 0] = vox[i].x;
+            packed[i * 5 + 1] = vox[i].y;
+            packed[i * 5 + 2] = vox[i].z;
+            packed[i * 5 + 3] = vox[i].colour;
+            packed[i * 5 + 4] = vox[i].normal;
+        }
+        Fnv_Bytes(&h, packed.data(), packed.size());
+    }
+    return h;
+}
+
+static int Hash_Vxl(const char* path, int max_depth = 4) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    std::printf("# mix=%s\n", path);
+
+    int seq = 0, ok = 0, bad = 0;
+    std::function<void(const MixFileClass&, int)> walk = [&](const MixFileClass& m,
+                                                             int depth) {
+        for (const MixEntry& e : m.Entries()) {
+            if (depth < max_depth) {
+                auto sub = m.Open_Sub(e);
+                if (sub) {
+                    walk(*sub, depth + 1);
+                    continue;
+                }
+            }
+            const std::vector<uint8_t> d = m.Read_Entry(e);
+            if (d.size() < 802 || std::memcmp(d.data(), "Voxel Animation", 15) != 0) {
+                continue;
+            }
+            VxlFile v;
+            if (!v.Load(d.data(), d.size())) {
+                ++bad;
+                std::printf("BAD %d 0x%08X %zu\n", seq++, e.id, d.size());
+                continue;
+            }
+            size_t nvox = 0;
+            const bool vox_ok = v.Voxel_Count(&nvox, false);
+            std::printf("%d 0x%08X limbs=%d body=%u vox=%zu%s 0x%08X\n", seq++, e.id,
+                        v.Limb_Count(), v.Body_Size(), nvox, vox_ok ? "" : " 解码异常",
+                        Hash_One_Vxl(v));
+            ++ok;
+        }
+    };
+    walk(mix, 0);
+    std::printf("# 共 %d 个 VXL（结构失败 %d）\n", ok, bad);
+    return bad == 0 ? 0 : 1;
+}
+
+// 把指定 VXL 解出来做成等距投影的 24 位 BMP —— 这是体素链路唯一能靠肉眼
+// 一眼判断对错的验收方式：位置错一列、颜色/法线换序，图上立刻就不像车了。
+static int Verify_Vxl(const char* path, uint32_t id) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    const std::vector<uint8_t> d = mix.Read_Deep_By_ID(id);
+    if (d.empty()) {
+        std::printf("FAIL 递归找不到 0x%08X\n", id);
+        return 1;
+    }
+    VxlFile v;
+    if (!v.Load(d.data(), d.size())) {
+        std::printf("FAIL 0x%08X 不是自洽的 VXL（%zu 字节）\n", id, d.size());
+        return 1;
+    }
+    std::printf("OK   0x%08X limbs=%d body=%u pal=%d remap=(%d,%d)\n", id, v.Limb_Count(),
+                v.Body_Size(), v.Palette_Count(), v.Remap_Start(), v.Remap_End());
+    for (int l = 0; l < v.Limb_Count(); ++l) {
+        const VxlLimbHeader& hd = v.Header(l);
+        const VxlLimbTailer& t = v.Tailer(l);
+        size_t n = 0;
+        std::vector<VxlVoxel> vox;
+        const bool okv = v.Decode_Limb(l, &vox);
+        n = vox.size();
+        std::printf("     limb[%2d] %-12s num=%d unk=(%u,%u) %dx%dx%d nt=%d det=%g "
+                    "span=(%u,%u,%u) 体素=%zu%s\n",
+                    l, hd.name.c_str(), hd.number, hd.unk1, hd.unk2, t.x_size, t.y_size,
+                    t.z_size, t.normals_type, t.det, t.span_start_ofs, t.span_end_ofs,
+                    t.span_data_ofs, n, okv ? "" : " (解码异常)");
+    }
+
+    // 体素 -> 世界坐标（套肢体变换）-> 等距投影 -> 画家算法落索引图。
+    // 光栅化本体放在 VxlFile::Render_Isometric，查看器走的是同一份实现，
+    // 免得"验证台画对了、查看器画错了"这种两边不一致的坑。
+    std::vector<uint8_t> idx;
+    int w = 0, h = 0;
+    if (!v.Render_Isometric(&idx, &w, &h, 8.0f)) {
+        std::printf("FAIL 体素光栅化失败\n");
+        return 1;
+    }
+    // 索引图 -> 24 位 BMP。调色板直接取用：VXL 里存的已经是展开好的 8 位值，
+    // 千万不能 <<2 —— 实测踩过，整个炮塔会变成青紫洋红一片。
+    const uint8_t* pal = v.Palette();
+    std::vector<uint32_t> px(static_cast<size_t>(w) * h, 0u);
+    for (size_t i = 0; i < px.size(); ++i) {
+        const uint8_t c = idx[i];
+        px[i] = pal[c * 3 + 0] | (static_cast<uint32_t>(pal[c * 3 + 1]) << 8) |
+                (static_cast<uint32_t>(pal[c * 3 + 2]) << 16);
+    }
+    std::error_code ec;
+    std::filesystem::create_directories("build/vxl", ec);
+    char out[512];
+    std::snprintf(out, sizeof(out), "build/vxl/0x%08X_%dx%d.bmp", id, w, h);
+    if (!Write_BMP(out, px.data(), w, h)) {
+        std::printf("FAIL 写不出 %s\n", out);
+        return 1;
+    }
+    std::printf("     已写出 %s\n", out);
+    return 0;
+}
+
 // ---- PCX ----
 //
 // 递归剥开所有嵌套 MIX，把每个 PCX 解成 RGBA 后打哈希。
@@ -764,6 +949,22 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Verify_Hva(argv[2],
+                          static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--vxlhash") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --vxlhash <顶层mix> [最大嵌套深度]\n");
+            return 1;
+        }
+        const int d = (argc > 3) ? std::atoi(argv[3]) : 4;
+        return Hash_Vxl(argv[2], d);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--vxl") == 0) {
+        if (argc < 4) {
+            std::printf("用法：ra2core --vxl <顶层mix> <0xVXL的CRC>\n");
+            return 1;
+        }
+        return Verify_Vxl(argv[2],
                           static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
     }
     if (argc > 1 && std::strcmp(argv[1], "--pcxhash") == 0) {

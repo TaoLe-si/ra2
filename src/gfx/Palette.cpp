@@ -37,6 +37,30 @@ bool Palette::Load(const uint8_t* data, size_t size) {
     return loaded_;
 }
 
+bool Palette::Load_Expanded(const uint8_t* data, size_t size) {
+    if (data == nullptr) {
+        loaded_ = false;
+        return false;
+    }
+    const size_t n = size < 768 ? size : 768;
+    for (size_t i = 0; i < 256; ++i) {
+        const size_t o = i * 3;
+        if (o + 2 < n) {
+            colors_[i].r = data[o];
+            colors_[i].g = data[o + 1];
+            colors_[i].b = data[o + 2];
+            colors_[i].a = 255;
+        } else {
+            colors_[i] = Color{};
+        }
+    }
+    // 约定同 Load：索引 0 透明。VXL 里 0..15 恒是品红"无此色"标记，
+    // 正好整段都不该被画出来，这里先只清 0，够用。
+    colors_[0].a = 0;
+    loaded_ = (n >= 768);
+    return loaded_;
+}
+
 void Palette::To_RGBA8(uint8_t* out) const {
     for (int i = 0; i < 256; ++i) {
         out[i * 4 + 0] = colors_[i].r;

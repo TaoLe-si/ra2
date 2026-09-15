@@ -18,6 +18,7 @@
 #include "gfx/Palette.h"
 #include "gfx/ShpFile.h"
 #include "gfx/TmpFile.h"
+#include "gfx/VxlFile.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
 
@@ -41,6 +42,12 @@ struct App {
     std::vector<uint8_t> terrain;
     int terrain_w = 0;
     int terrain_h = 0;
+
+    /// VXL 体素模式：软件等距光栅化出来的索引图，形状和 TMP 那条路一样，
+    /// 所以能直接复用同一个 R8 + 256×1 查表的精灵管线。
+    std::vector<uint8_t> vxl_idx;
+    int vxl_w = 0;
+    int vxl_h = 0;
 
     Dx12Renderer r;
     bool ok = false;
@@ -305,6 +312,11 @@ void Upload_Current_Frame() {
                                              g_app.terrain_w, g_app.terrain_h);
         return;
     }
+    if (!g_app.vxl_idx.empty()) {
+        g_app.sprite = g_app.r.Upload_Sprite(g_app.vxl_idx.data(), g_app.vxl_w,
+                                             g_app.vxl_h);
+        return;
+    }
     const ShpFrameInfo& f = g_app.shp.Frame_Info(g_app.frame);
     g_app.sprite = g_app.r.Upload_Sprite(g_app.shp.Frame_Pixels(g_app.frame).data(), f.w, f.h);
 }
@@ -419,11 +431,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // 地形模式的两个位置参数跟在 --tmp 后面，和 SHP 模式（第 2/3 个位置参数）
     // 是两套，别混用 —— 否则 "--tmp" 会被当成 SHP 名。
     int tmp_arch = -1;
+    // 注意别用 int 存 VXL 的 CRC：0x8C848DEE 这类高位为 1 的 ID 转 int 会变负数，
+    // 于是 vxl_id >= 0 这种判断整个失效（踩过）。这里用 uint32 + 独立的开关布尔。
+    bool vxl_mode = false;
+    uint32_t vxl_id = 0;
     int grid = 15;
     bool random_pick = false;
     const char* tmp_pal_name = "TEMPERAT.PAL";
     for (int i = 0; i < kMaxArgs; ++i) {
-        if (std::strcmp(args[i], "--tmp") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
+        if (std::strcmp(args[i], "--vxl") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
+            // MIX 里没有 VXL 的文件名可用，只能按 CRC 取。
+            vxl_id = static_cast<uint32_t>(std::strtoul(args[i + 1], nullptr, 16));
+            vxl_mode = true;
+        } else if (std::strcmp(args[i], "--tmp") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
             tmp_arch = static_cast<int>(std::strtoul(args[i + 1], nullptr, 16));
             if (i + 2 < kMaxArgs && args[i + 2][0] && args[i + 2][0] != '-') {
                 tmp_pal_name = args[i + 2];
@@ -478,6 +498,42 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             return 1;
         }
         std::printf("SHP  (地形模式，跳过)\n");
+    } else if (vxl_mode) {
+        // ---- VXL 体素模式：--vxl <0xID> ----
+        // 形如：ra2view.exe <mix> --vxl 0x8C848DEE
+        // 调色板不用外部 .PAL —— VXL 自带 768 字节内嵌调色板，而且是**展开好的
+        // 8 位值**（全部分量 ≡ 3 mod 4），必须走 Load_Expanded，走 Load 再展开
+        // 一次会整片变青紫洋红。
+        std::printf("[2] VXL 体素模式 id=0x%08X\n", vxl_id);
+        const std::vector<uint8_t> d = g_app.mix.Read_Deep_By_ID(vxl_id);
+        if (d.empty()) {
+            std::printf("[x] 递归找不到 0x%08X\n", vxl_id);
+            return 1;
+        }
+        VxlFile vxl;
+        if (!vxl.Load(d.data(), d.size())) {
+            std::printf("[x] 0x%08X 不是自洽的 VXL（%zu 字节）\n", vxl_id, d.size());
+            return 1;
+        }
+        std::printf("VXL  limbs=%d body=%u remap=(%d,%d)\n", vxl.Limb_Count(),
+                    vxl.Body_Size(), vxl.Remap_Start(), vxl.Remap_End());
+        for (int l = 0; l < vxl.Limb_Count(); ++l) {
+            const VxlLimbTailer& t = vxl.Tailer(l);
+            std::printf("     limb[%2d] %-12s %dx%dx%d nt=%d\n", l,
+                        vxl.Header(l).name.c_str(), t.x_size, t.y_size, t.z_size,
+                        t.normals_type);
+        }
+        if (!vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, 8.0f)) {
+            std::printf("[x] 体素光栅化失败\n");
+            return 1;
+        }
+        Palette vpal;
+        vpal.Load_Expanded(vxl.Palette(), 768);
+        g_app_frame_palette = vpal;
+        g_app.pal_name = "(VXL 内嵌调色板)";
+        std::printf("调色板 %s  画布 %dx%d\n", g_app.pal_name.c_str(), g_app.vxl_w,
+                    g_app.vxl_h);
+        std::printf("SHP  (VXL 模式，跳过)\n");
     } else {
 
     std::printf("[2] 载入素材\n");
