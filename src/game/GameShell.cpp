@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include "gfx/PcxFile.h"
+
 #include <cmath>
 #include <cstdio>
 
@@ -232,6 +234,9 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
     if (!Load_UI()) {
         std::printf("[!] 界面贴图载入失败，侧栏退回色块\n");
     }
+    // 起手资金来自 rules.ini 的 [General] StartCredits（原版默认 10000）
+    credits_ = sprites_.Models().Start_Credits();
+    std::printf("  起手资金 $%d\n", credits_);
 
     // 小地图底图：把战场图抽稀到雷达显示区大小。不抽的话雷达里只有黑底加点，
     // 和原版那个能看出街区轮廓的小地图差太远。
@@ -706,6 +711,41 @@ bool GameShell::Load_UI() {
         std::snprintf(n, sizeof(n), "Button%02d.SHP", i);
         ok += load(n, &ui_btn_[i]) ? 1 : 0;
     }
+
+    // 资金数字字形。它们是 **PCX**（不是 SHP），走 PcxFile，
+    // 上色用侧栏那套 SIDEFNT3.PAL —— 用 PCX 自带调色板会和侧栏底色对不上。
+    for (int i = 0; i < 10; ++i) {
+        char n[24];
+        std::snprintf(n, sizeof(n), "number%d.pcx", i);
+        std::vector<uint8_t> data;
+        for (MixFileClass* m : roots_) {
+            data = m->Read_Deep(n);
+            if (!data.empty()) {
+                break;
+            }
+        }
+        if (data.empty()) {
+            continue;
+        }
+        PcxFile pcx;
+        if (!pcx.Load(data.data(), data.size()) || pcx.Width() <= 0 ||
+            pcx.Height() <= 0 || !pcx.Is_Indexed()) {
+            continue;
+        }
+        const std::vector<uint8_t>& px = pcx.Indices();
+        if (px.size() < static_cast<size_t>(pcx.Width()) * pcx.Height()) {
+            continue;
+        }
+        std::vector<uint8_t> rgba;
+        SpriteCache::Index_To_RGBA(px.data(), pcx.Width() * pcx.Height(), pal768,
+                                  &rgba);
+        ui_digit_[i].w = pcx.Width();
+        ui_digit_[i].h = pcx.Height();
+        ui_digit_[i].frames = 1;
+        ui_digit_[i].sprite.assign(
+            1, renderer_.Upload_Sprite_RGBA(rgba.data(), pcx.Width(), pcx.Height()));
+        ++ok;
+    }
     std::printf("  界面贴图 %d 件就绪（侧栏 %d 宽，头部 %dx%d，雷达 %dx%d）\n", ok,
                 kSidebarW, ui_side1_.w, ui_side1_.h, ui_radar_.w, ui_radar_.h);
     return ok > 0;
@@ -715,6 +755,34 @@ void GameShell::Draw_Ui(const UiPiece& p, int x, int y, int frame) {
     const int id = p.Frame(frame);
     if (id >= 0) {
         renderer_.Draw_Sprite(id, x, y, 1.0f);
+    }
+}
+
+void GameShell::Draw_Money(int x, int y, int w, int amount) {
+    if (!ui_digit_[0].ok()) {
+        return;
+    }
+    // 负数前面补一个 '-'（原版资金真会到负）。
+    std::string s = std::to_string(amount < 0 ? -amount : amount);
+    if (amount < 0) {
+        s.insert(s.begin(), '-');
+    }
+    const int gw = ui_digit_[0].w + 1;   // 字距 1 像素
+    int cx = x + (w - static_cast<int>(s.size()) * gw) / 2;   // 居中
+    for (char ch : s) {
+        if (ch == '-') {
+            // 横条代替负号：字形里没有负号，画一小段就行
+            renderer_.Draw_Rect(cx + 1, y + ui_digit_[0].h / 2, gw - 2, 2, kUiGold);
+            cx += gw;
+            continue;
+        }
+        const int d = ch - '0';
+        if (d < 0 || d > 9) {
+            cx += gw;
+            continue;
+        }
+        Draw_Ui(ui_digit_[d], cx, y);
+        cx += gw;
     }
 }
 
@@ -764,11 +832,17 @@ void GameShell::Draw_Sidebar() {
     //   SIDE1    头部：上半是蓝面板（资金 + 电力），下缘是 4 个页签凹槽
     //   SIDE2    建造格，两列一行，一直铺到底
     //   SIDE3    收尾装饰（有些图集里它就是底部那条鹰徽带）
+    // 资金条在**最上面**，钱是在这条里**居中显示数字**（不是色带）。
     int y = 0;
+    if (ui_credits_.ok()) {
+        Draw_Ui(ui_credits_, sx, 0);
+        Draw_Money(sx, 0, kSidebarW, credits_);
+        y = ui_credits_.h;
+    }
     if (ui_radar_.ok()) {
         // 第 32 帧中间是显示区；前面的帧是"雷达未上线"的鹰徽动画
-        Draw_Ui(ui_radar_, sx, 0, 32);
-        y = ui_radar_.h;
+        Draw_Ui(ui_radar_, sx, y, 32);
+        y += ui_radar_.h;
     }
     const int head_y = y;
     if (ui_side1_.ok()) {
@@ -776,16 +850,11 @@ void GameShell::Draw_Sidebar() {
         y = head_y + ui_side1_.h;
     }
 
-    // 资金条 + 电力表画在 SIDE1 上半那块蓝面板里（原版就在这儿，不在屏幕底部）
-    if (ui_credits_.ok()) {
-        Draw_Ui(ui_credits_, sx, head_y + 6);
-        // 数字精灵还没接（要 SIDEFNT3 位图字体），先用色带占位
-        renderer_.Draw_Rect(sx + 26, head_y + 12, 70, 7, kUiGold);
-    }
+    // 电力表放在 SIDE1 上半那块蓝面板上
     if (ui_power_.ok()) {
         // 有富余画第 0 帧、欠费画第 1 帧（原版这 2 帧就是这两种状态）
         Draw_Ui(ui_power_, sx + kSidebarW - ui_power_.w - 10,
-                head_y + (ui_side1_.ok() ? 2 : 0), power_warn_ ? 1 : 0);
+                head_y + (ui_side1_.ok() ? 6 : 0), power_warn_ ? 1 : 0);
     }
 
     // 页签叠在 SIDE1 下缘的凹槽上：x = 26 + i*29, y = 42（对 SIDE1 实测）

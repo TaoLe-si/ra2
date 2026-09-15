@@ -181,6 +181,8 @@ private:
     bool Load_UI();
     /// 画一件界面贴图（贴图缺失时静默跳过）。
     void Draw_Ui(const UiPiece& p, int x, int y, int frame = 0);
+    /// 在给定横条里**居中**画资金数字（原版就是这样，不是色带）。
+    void Draw_Money(int x, int y, int w, int amount);
     /// 雷达所在矩形（外框）。返回 false = 没有雷达贴图，调用方退回自绘。
     bool Radar_Rect(int* x, int* y, int* w, int* h) const;
     /// 雷达**显示区**在屏幕上的矩形（外框里镂空的那块，实测自 RADAR.SHP 第 32 帧）。
@@ -261,6 +263,10 @@ private:
     UiPiece ui_tab_[4];     ///< 四个页签（28×27，5 帧）
     UiPiece ui_btn_[12];    ///< 单位指令按钮（52×32，2 帧）
     UiPiece ui_sidebttn_;   ///< 侧栏文字按钮（125×25，3 帧）
+    /// 资金数字字形：number0.pcx..number9.pcx（PCX，索引色 + SIDEFNT3.PAL）。
+    /// 原版的资金是**在条里居中显示数字**，不是一条色带。
+    UiPiece ui_digit_[10];
+    int credits_ = 0;       ///< 当前资金（rules.ini 的 StartCredits 起手）
 
     Dx12Renderer renderer_;
     bool ready_ = false;
