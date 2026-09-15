@@ -46,12 +46,16 @@ Blitter 家族整体作废，不再还原。
 | 继承层次 + 虚表槽位 | ✅ | `src/re/ClassHierarchy.h`，12717 槽位，可运行时 vptr 反查类名 |
 | 关键类 sizeof | 🟡 | 233 个类有实测值；`UnitClass=2280` `InfantryClass=1776` `AircraftClass=1752` |
 | **加密 MIX 解密** | ✅ | RSA(320bit) + Blowfish + Westwood CRC，C++ 与 Python 双实现结果一致 |
+| **明文 MIX** | ✅ | flags 不带 0x00020000；地形归档全是这一类，之前完全看不见 |
 | 嵌套 MIX | ✅ | ra2md.mix → 6 个子 MIX → 400 个叶子条目 |
 | 文件名 CRC 反查 | 🟡 | 392 个 ID 中命中 178 个（45%），源自 `gamemd.exe` 字符串 |
 | SHP(TS) 头/帧表 | ✅ | 8 字节头 + 每帧 24 字节，已由真实文件验证 |
-| SHP 帧数据解码 | 🟡 | flags=0x2（RLE-Zero + 行长）已验证；**flags=0x3 待定** |
-| PAL / PCX / VXL | ⬜ | 未开始 |
-| DX12 渲染器 | ⬜ | 未开始（本机 SDK 齐全：d3d12.h / dxgi1_6.h / fxc.exe / d3d12.lib） |
+| **SHP 帧数据解码** | ✅ | flags=0x0/0x1 未压缩、0x2/0x3 RLE-Zero；6373 帧全量 100% 命中 |
+| **PAL 调色板** | ✅ | 768 字节，6→8 bit 用 `(v<<2)|(v>>4)`，索引 0 透明 |
+| **TMP 等距地形** | ✅ | 660 个模板 / 2626 个 cell 全量对账通过；见 commit 44ac040 |
+| **INI 解析** | ✅ | 4 个真实 INI、63790 行，与参考实现逐行一致；见 `src/data/Ini.{h,cpp}` |
+| PCX / VXL / HVA | ⬜ | 未开始 |
+| **DX12 渲染器** | 🟡 | 设备/交换链/离屏/调色板纹理/精灵上传已通；**地形已出画面**；批渲染未做 |
 | 游戏逻辑 | ⬜ | 未开始 |
 
 实测基准（每次改动后跑，保证不退化）：
@@ -63,6 +67,21 @@ OK   Westwood CRC 通过 4 个实测锚点
 OK   按名找到 LOCALMD.MIX：off=6237216 size=4819480
 OK   嵌套 MIX 打开成功：条目=187 数据区=4817120 越界=0
 OK   递归取出密钥文件（151 字节），开头 = [PublicKey]
+
+ra2core.exe                                    # 不带参数 = 全量冒烟
+OK   INI 自检全部通过（18 项）
+OK  路径 256 条（命中 224），串行 63.18 ms，并行 8.58 ms，加速 7.36x
+
+ra2core.exe --ini D:\westwood\RA2YR\ra2md.mix 0x8218F9F4
+OK   742958 字节 -> 1477 段 / 23379 条目 / 畸形行 2
+     [InfantryTypes   ]   65 项   首=E1 末=YADOG
+     [VehicleTypes    ]   80 项   首=AMCV 末=CIVP
+     [BuildingTypes   ]  403 项   首=GAPOWR 末=CALUNR02
+     [Animations      ]  611 项   首=TWLT100 末=YAPOWR_CD
+
+ra2view.exe D:\westwood\RA2YR\ra2.mix --tmp 0x0F5D1D99 --offscreen
+OK   可用地形模板 327 个，每格 60x30；拼了 225 个地块 -> 索引图 900x570
+OK   离屏渲染 1024x768 -> build/frame.raw
 ```
 
 ---
@@ -71,33 +90,46 @@ OK   递归取出密钥文件（151 字节），开头 = [PublicKey]
 
 ### P0 — 素材层：把字节变成"有语义的数据"
 
-| 任务 | 产出 | 验收标准 |
-|---|---|---|
-| MIX 解密 | `src/io/MixCrypto.cpp` | ✅ 已达成，见上面基准 |
-| **SHP 解码** | `src/gfx/ShpFile.cpp` | 解出的像素数严格等于 `帧宽 × 帧高`；flags=0x3 也要覆盖 |
-| **PAL 调色板** | `src/gfx/Palette.cpp` | 768 字节 → 256 色，第 0 色为透明 |
-| PCX / VXL / HVA / TMP | `src/gfx/` | 能取出像素/体素 |
-| **INI 解析** | `src/data/Ini.cpp` | 能读 `rules.ini`（含 `[...]` 段、`;` 注释、继承 `:` 语法） |
-| 文件名反查补齐 | `db/mix-names.txt` | 命中率从 45% 提到 80%+ |
+| 任务 | 产出 | 验收标准 | 状态 |
+|---|---|---|---|
+| MIX 解密（加密） | `src/io/MixCrypto.cpp` | 索引自洽、嵌套可开、密钥文件可取 | ✅ |
+| MIX 解密（明文） | `src/io/FileSystem.cpp` | 13 个地形大包全部可开 | ✅ |
+| **SHP 解码** | `src/gfx/ShpFile.cpp` | 像素数 = 帧宽×帧高；flags 0/1/2/3 全覆盖 | ✅ 6373 帧 100% |
+| **PAL 调色板** | `src/gfx/Palette.cpp` | 768 字节 → 256 色，第 0 色透明 | ✅ |
+| **TMP 地形** | `src/gfx/TmpFile.cpp` | 2323 个模板与参考实现像素一致 | ✅ |
+| **INI 解析** | `src/data/Ini.cpp` | 4 个真实 INI 逐行对账一致 | ✅ |
+| PCX / VXL / HVA | `src/gfx/` | 能取出像素/体素 | ⬜ |
+| 文件名反查补齐 | `db/mix-names.txt` | 命中率从 45% 提到 80%+ | 🟡 |
 
-**P0 的关键卡点：SHP flags=0x3 的解码。**
-判定办法：不去猜格式，而是**反汇编 `gamemd.exe` 里对应的 blitter 函数**——
-我们手上有 `949 个类名 + 12717 个虚表槽位`，可以直接定位到画 SHP 帧的那个虚函数，
-照着它的分支写解码器。这是本项目"逆向优先于猜测"原则的典型应用。
+**P0 曾经的关键卡点：SHP flags=0x3。** 已解决 —— 结论是它和 0x02 共用同一套
+RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必须逐行裁剪。
+详细证据见 commit `6e1e0bc` 与 `tools/shpcrack.py`。
+
+**本轮（P0 收尾）踩过的坑，值得单独记：**
+- 明文 MIX 之前完全没实现，导致 ra2.mix 顶层 21 个条目里 13 个 10~35MB 的
+  地形包被当成 SHP —— 地形素材整个不可见。
+- TMP 多 cell 模板不是矩形堆叠，而是按 TileX/TileY 等倾铺排；
+  按 `(bx*cw, by*ch)` 堆叠会错 60% 的像素。
+- TMP 的 extra 数据故意画到格子外（126/135 个 1x1 模板的 ExtraY 是负数），
+  所以画布不能把 extra 算进包围盒。
+- INI 的编号列表**不从 0 开始**（[InfantryTypes] 是 1..65，[Animations] 还跳号），
+  按"0,1,2 一直到缺号"读会一个都读不到。
+- 原始 INI 里有 6 行少写了等号（`842-GAWETH_ED` 之类），解析器必须跳过而不是报错。
 
 ### P1 — 渲染层：让第一个 RA2 精灵出现在屏幕上
 
-| 任务 | 产出 |
-|---|---|
-| DX12 设备 + 交换链 + 命令队列 | `src/gfx/dx12/Device.cpp` |
-| 调色板纹理（256×1 RGBA）+ 索引纹理上传 | `src/gfx/dx12/` |
-| 精灵批渲染（一个 draw call 画几千个精灵） | `src/gfx/dx12/SpriteBatch.cpp` |
-| 等距地形渲染（RA2 是 60×30 菱形格） | `src/gfx/dx12/TerrainRenderer.cpp` |
+| 任务 | 产出 | 状态 |
+|---|---|---|
+| DX12 设备 + 交换链 + 命令队列 | `src/gfx/dx12/Dx12Renderer.cpp` | ✅ |
+| 调色板纹理（256×1 RGBA）+ 索引纹理上传 | `src/gfx/dx12/` | ✅ |
+| 等距地形渲染（60×30 菱形格） | `ViewerMain.cpp --tmp` | ✅ 已出画面 |
+| 精灵批渲染（一个 draw call 画几千个精灵） | `src/gfx/dx12/SpriteBatch.cpp` | ⬜ |
 
-**验收标准**：一个窗口里画出真实的 RA2 单位精灵 + 一小块地形，
-截图与原版（用 ddraw 兼容模式跑原版）逐像素比对，调色板映射一致。
+**已达成**：`ra2view.exe <mix> --tmp <0x归档ID> --offscreen` 能从明文 MIX 里
+取出全部 TMP 模板、按等距格点由远及近铺成一张索引图并上屏，
+树冠/岩壁这类 extra 也画出来了（见 `build/terrain_random.png`）。
 
-这一步做完，"全量还原"就从"读字节"变成了"看得见"，是全局士气的分水岭。
+**还差**：批渲染 + 与原版截图逐像素比对。
 
 ### P2 — 数据层：rules.ini / art.ini / ai.ini
 

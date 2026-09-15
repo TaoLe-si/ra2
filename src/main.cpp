@@ -14,6 +14,7 @@
 
 #include "ai/PathFinder.h"
 #include "core/VTableMap.h"
+#include "data/Ini.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/Palette.h"
@@ -353,7 +354,205 @@ static int Hash_Tmp(const char* path, uint32_t arch_id, uint32_t pal_id, bool wi
     return 0;
 }
 
+// INI 解析器的自检。用的样本是**从真实文件里剪出来的行**，
+// 每一条都对应一个实测确认过的方言特征 —— 改解析器时这里挂掉就说明改错了。
+//
+// 语料清单（来源）：
+//   [JumpjetControls] ;gs ...      段头行尾注释            rulesmd 570
+//   [GAFWLL];temp wall for yuri[YAWALL]  段名取到第一个 ]   rulesmd 13553
+//   Burst = 2                      等号两侧空白            rulesmd 22682
+//   LetsDoTheTimeWarpOutAgain = X; 值截到 ';'             rulesmd 737
+//   Report=                        空值（214 处）          rulesmd [CRNeutronRifle]
+//   Report=ChronoLegionAttack      同一段里重复键          rulesmd [CRNeutronRifle]
+//   842-GAWETH_ED                  少了等号的畸形行        rulesmd 2508
+//   // PCG; ...                    // 注释                 rulesmd 911
+//   1=E1 / 2=E2                    编号列表从 1 开始       rulesmd [InfantryTypes]
+//   1=TWLT100 / 3=ELECTRO          编号列表跳号            rulesmd [Animations]
+//   [VIRUS] / [Virus]              段名仅大小写不同        rulesmd 5154/27076
+static int Ini_Self_Test() {
+    static const char kSample[] =
+        "; rifle soldier weapons (multiple shots)\r\n"
+        "[JumpjetControls] ;gs These are now merely defaults\r\n"
+        "  Burst = 2\t\t; two at a time\r\n"
+        "LetsDoTheTimeWarpOutAgain = ChronoScreenSound; sound for tim\r\n"
+        "RefundPercent=50%\r\n"
+        "ParachuteMaxFallRate=-3\r\n"
+        "Verses=100%,80%,80%,50%,25%,25%,75%,50%,25%,200%\r\n"
+        "LegalTargets=infantry,vehicle,building\r\n"
+        "EmptyValue=\r\n"
+        "842-GAWETH_ED\r\n"
+        "// PCG; Provides knobs to tweak\r\n"
+        "[GAFWLL];temp wall for yuri[YAWALL]\r\n"
+        "Strength=100\r\n"
+        "[VIRUS]\r\n"
+        "Report=\r\n"
+        "Report=ChronoLegionAttack\r\n"
+        "[Virus]\r\n"
+        "IsRadBeam=yes\r\n"
+        "[InfantryTypes]\r\n"
+        "1=E1\r\n"
+        "2=E2\r\n"
+        "3=SHK\r\n"
+        "[Animations]\r\n"
+        "1=TWLT100\r\n"
+        "3=ELECTRO\r\n"
+        "12=SMOKEY\r\n";
+
+    int fail = 0;
+    auto check = [&fail](bool ok, const char* what) {
+        std::printf("%s %s\n", ok ? "OK  " : "FAIL", what);
+        if (!ok) {
+            ++fail;
+        }
+    };
+
+    IniFile ini;
+    if (!ini.Load(kSample)) {
+        std::printf("FAIL INI 自检样本解析失败\n");
+        return 1;
+    }
+    check(ini.Malformed_Lines() == 1, "畸形行（少了等号的 842-GAWETH_ED）被跳过并计数");
+    // 段：JumpjetControls / GAFWLL / VIRUS(含 Virus 合并) / InfantryTypes / Animations
+    check(ini.Section_Count() == 5, "段数=5（[Virus] 并入 [VIRUS]，没有多出来）");
+    check(ini.Has_Section("jumpjetcontrols") && ini.Has_Section("JUMPJETCONTROLS"),
+          "段名大小写不敏感");
+    check(ini.Has_Section("gafwll") && !ini.Has_Section("gafwll]temp wall for yuri[yawall"),
+          "段名取到第一个 ']'，后面的注释不进段名");
+
+    check(ini.Get_Int("JumpjetControls", "Burst", 0) == 2, "键两侧空白/TAB 被吃掉");
+    check(ini.Get_String("JumpjetControls", "LetsDoTheTimeWarpOutAgain") == "ChronoScreenSound",
+          "值截断到第一个 ';'");
+    check(ini.Get_Int("JumpjetControls", "RefundPercent", 0) == 50, "百分比按 atoi 语义取整数");
+    check(ini.Get_Double("JumpjetControls", "RefundPercent", 0.0) == 50.0, "小数读取");
+    check(ini.Get_Int("JumpjetControls", "ParachuteMaxFallRate", 0) == -3, "负数值");
+    check(ini.Get_String("JumpjetControls", "EmptyValue", "X").empty(), "空值");
+    check(ini.Get_Int("JumpjetControls", "不存在的键", 77) == 77, "找不到键时返回默认值");
+
+    std::vector<int> verses;
+    ini.Get_Percent_List("JumpjetControls", "Verses", &verses);
+    check(verses.size() == 10 && verses[0] == 100 && verses[8] == 25 && verses[9] == 200,
+          "百分比列表：10 项，含超过 100 的 200%");
+
+    std::vector<std::string> targets;
+    ini.Get_String_List("JumpjetControls", "LegalTargets", &targets);
+    check(targets.size() == 3 && targets[0] == "infantry" && targets[2] == "building",
+          "字符串列表");
+
+    check(ini.Get_String("VIRUS", "Report") == "", "段内重复键：按名取到第一个（空值）");
+    check(ini.Entry_Count("VIRUS") == 3, "段内重复键全部保留（2 个键 + 合并来的 1 个）");
+    check(ini.Get_Bool("VIRUS", "IsRadBeam", false), "[Virus] 的条目并进了 [VIRUS]");
+
+    std::vector<std::string> inf;
+    ini.Read_Numbered_List("InfantryTypes", &inf);
+    check(inf.size() == 3 && inf[0] == "E1" && inf[2] == "SHK",
+          "编号列表从 1 开始也能读全（0 不存在）");
+    std::vector<std::string> anim;
+    ini.Read_Numbered_List("Animations", &anim);
+    check(anim.size() == 3 && anim[0] == "TWLT100" && anim[1] == "ELECTRO" &&
+              anim[2] == "SMOKEY",
+          "编号列表跳号也能读全（1,3,12）");
+
+    if (fail != 0) {
+        std::printf("INI 自检失败 %d 项\n", fail);
+        return 1;
+    }
+    std::printf("OK   INI 自检全部通过\n");
+    return 0;
+}
+
+// 把 INI 解析结果按"规范化文本"打出来，供 tools/inidump.py 逐行对账。
+// 规范化规则必须和参考实现字节一致：
+//   段名 = '[' 与第一个 ']' 之间（trim）
+//   键   = 第一个 '=' 之前（trim）
+//   值   = 第一个 '=' 之后、第一个 ';' 之前（trim）
+// 保留原始大小写 —— 这样对账同时能验出"是不是把大小写弄丢了"。
+static int Dump_Ini(const char* path) {
+    IniFile ini;
+    if (!ini.Load_File(path)) {
+        std::printf("FAIL INI 打不开或为空: %s\n", path);
+        return 1;
+    }
+    std::printf("# sections=%d entries=%d malformed=%d\n", ini.Section_Count(),
+                [&] {
+                    int n = 0;
+                    for (int i = 0; i < ini.Section_Count(); ++i) {
+                        n += static_cast<int>(ini.Section(i)->entries.size());
+                    }
+                    return n;
+                }(),
+                ini.Malformed_Lines());
+    for (int i = 0; i < ini.Section_Count(); ++i) {
+        const IniSection* s = ini.Section(i);
+        std::printf("[%s]\n", s->name.c_str());
+        for (const IniEntry& e : s->entries) {
+            std::printf("%s=%s\n", e.key.c_str(), e.value.c_str());
+        }
+    }
+    return 0;
+}
+
+// 端到端：从 MIX（含嵌套子 MIX）里直接取出 INI 解析。
+//   ra2core.exe --ini <顶层mix> <0xINI的CRC>
+// 这条链路一次压三层：明文/加密 MIX 索引 -> 嵌套归档 -> INI 方言。
+static int Verify_Ini(const char* path, uint32_t ini_id) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    std::vector<uint8_t> data = mix.Read_Deep_By_ID(ini_id);
+    if (data.empty()) {
+        std::printf("FAIL 递归找不到 0x%08X\n", ini_id);
+        return 1;
+    }
+    IniFile ini;
+    if (!ini.Load(data.data(), data.size())) {
+        std::printf("FAIL INI 解析失败（%zu 字节）\n", data.size());
+        return 1;
+    }
+    int entries = 0;
+    for (int i = 0; i < ini.Section_Count(); ++i) {
+        entries += static_cast<int>(ini.Section(i)->entries.size());
+    }
+    std::printf("OK   0x%08X %zu 字节 -> %d 段 / %d 条目 / 畸形行 %d\n",
+                ini_id, data.size(), ini.Section_Count(), entries,
+                ini.Malformed_Lines());
+
+    // 类型表规模：这几个数字就是 P2 数据层要实例化的对象数量。
+    static const char* kLists[] = {"InfantryTypes", "VehicleTypes", "AircraftTypes",
+                                   "BuildingTypes", "TerrainTypes", "SmudgeTypes",
+                                   "OverlayTypes", "Animations", "VoxelAnims",
+                                   "Particles", "Weapons", "Warheads", "SuperWeaponTypes"};
+    for (const char* name : kLists) {
+        std::vector<std::string> list;
+        const int n = ini.Read_Numbered_List(name, &list);
+        if (n > 0) {
+            std::printf("     [%-16s] %4d 项   首=%s 末=%s\n", name, n,
+                        list.front().c_str(), list.back().c_str());
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--ini") == 0) {
+        if (argc < 4) {
+            std::printf("用法：ra2core --ini <顶层mix> <0xINI的CRC>\n");
+            return 1;
+        }
+        return Verify_Ini(argv[2],
+                          static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
+        return Ini_Self_Test();
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--inidump") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --inidump <path.ini>\n");
+            return 1;
+        }
+        return Dump_Ini(argv[2]);
+    }
     if (argc > 1 && std::strcmp(argv[1], "--tmphash") == 0) {
         if (argc < 4) {
             std::printf("用法：ra2core --tmphash <顶层mix> <0x归档ID> [0x调色板ID] [iso]\n");
@@ -383,6 +582,11 @@ int main(int argc, char** argv) {
     }
     if (argc > 1) {
         return Verify_Mix(argv[1]);  // 只做 MIX 校验，不跑下面的基准
+    }
+
+    // 素材层自检：INI 方言的每个坑都在这里钉住（不依赖外部文件）。
+    if (Ini_Self_Test() != 0) {
+        return 1;
     }
 
     // ---- 地图 ----
