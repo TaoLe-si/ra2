@@ -7,7 +7,7 @@ build.py -- 在不依赖 vcvarsall.bat 的前提下调用 MSVC cl.exe 构建 ra2
   效果等价但不需要碰注册表。
 
 用法：
-  python tools/build.py            # Release，输出到 build/ra2core.exe
+  python tools/build.py            # Release，输出到 build/ra2core.exe + build/ra2view.exe
   python tools/build.py --clean
   python tools/build.py --run      # 构建完立刻跑冒烟测试
 """
@@ -22,7 +22,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SOURCES = [
+# ra2core：无窗口的验证台（确定性基准 + MIX 解密回归测试）
+CORE_SOURCES = [
     "src/main.cpp",
     "src/map/Map.cpp",
     "src/ai/PathFinder.cpp",
@@ -31,11 +32,26 @@ SOURCES = [
     "src/threading/TaskSystem.cpp",
     "src/io/FileSystem.cpp",
     "src/io/MixCrypto.cpp",
+    "src/gfx/Palette.cpp",
+    "src/gfx/ShpFile.cpp",
     "src/core/Subsystems.cpp",
 ]
 
+# ra2view：DX12 素材查看器（Win32 窗口）
+VIEW_SOURCES = [
+    "src/viewer/ViewerMain.cpp",
+    "src/io/FileSystem.cpp",
+    "src/io/MixCrypto.cpp",
+    "src/gfx/Palette.cpp",
+    "src/gfx/ShpFile.cpp",
+    "src/gfx/dx12/Dx12Renderer.cpp",
+]
+
+# 只有查看器需要这些库；ra2core 保持零系统依赖。
+VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib"]
+
 CFLAGS = ["/nologo", "/std:c++17", "/EHsc", "/W3", "/O2", "/GL-", "/bigobj",
-          "/D_CRT_SECURE_NO_WARNINGS"]
+          "/D_CRT_SECURE_NO_WARNINGS", "/DUNICODE", "/D_UNICODE"]
 
 
 def find_msvc() -> str:
@@ -87,6 +103,25 @@ def build_env() -> dict:
     return env
 
 
+def compile_target(env, cl, name, sources, extra_libs=(), obj_dir=None) -> str:
+    build = os.path.join(ROOT, "build")
+    odir = obj_dir or build
+    # 注意：cl 的 /Fo /Fe 必须写成 /Fo:xxx 形式；写成 "/Fo" "xxx" 两个参数时
+    # cl 不会把第二个参数当路径，而是当成源文件，报 D9024。
+    cmd = [cl] + CFLAGS + ["/I", os.path.join(ROOT, "src"),
+                           "/Fo:" + odir + os.sep,
+                           "/Fe:" + os.path.join(build, name)]
+    cmd += [os.path.join(ROOT, s) for s in sources]
+    if extra_libs:
+        cmd.append("/link")
+        cmd += list(extra_libs)
+    print("[.] %s ... (%d 个源文件)" % (name, len(sources)))
+    r = subprocess.run(cmd, cwd=ROOT, env=env)
+    if r.returncode != 0:
+        sys.exit("[x] 构建失败：" + name)
+    return os.path.join(build, name)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--clean", action="store_true")
@@ -95,28 +130,26 @@ def main() -> None:
 
     build = os.path.join(ROOT, "build")
     os.makedirs(build, exist_ok=True)
+    vobj = os.path.join(build, "view")
+    os.makedirs(vobj, exist_ok=True)
     if a.clean:
         for f in glob.glob(os.path.join(build, "*.obj")):
+            os.remove(f)
+        for f in glob.glob(os.path.join(vobj, "*.obj")):
             os.remove(f)
 
     env = build_env()
     cl = os.path.join(find_msvc(), "bin", "Hostx64", "x64", "cl.exe")
-    # 注意：cl 的 /Fo /Fe 必须写成 /Fo:xxx 形式；写成 "/Fo" "xxx" 两个参数时
-    # cl 不会把第二个参数当路径，而是当成源文件，报 D9024。
-    cmd = [cl] + CFLAGS + ["/I", os.path.join(ROOT, "src"),
-                           "/Fo:" + build + os.sep,
-                           "/Fe:" + os.path.join(build, "ra2core.exe")]
-    cmd += [os.path.join(ROOT, s) for s in SOURCES]
 
-    print("[.] " + " ".join(cmd[:3]) + " ... (%d 个源文件)" % len(SOURCES))
-    r = subprocess.run(cmd, cwd=ROOT, env=env)
-    if r.returncode != 0:
-        sys.exit("[x] 构建失败")
+    core = compile_target(env, cl, "ra2core.exe", CORE_SOURCES)
+    # 查看器单独放一份 .obj：两个目标都编 FileSystem.cpp 等，
+    # 同名 .obj 会互相覆盖，导致链接错版本。
+    view = compile_target(env, cl, "ra2view.exe", VIEW_SOURCES, VIEW_LIBS, obj_dir=vobj)
 
-    exe = os.path.join(build, "ra2core.exe")
-    print("[OK] " + exe)
+    print("[OK] " + core)
+    print("[OK] " + view)
     if a.run:
-        sys.exit(subprocess.run([exe], cwd=ROOT).returncode)
+        sys.exit(subprocess.run([core], cwd=ROOT).returncode)
 
 
 if __name__ == "__main__":

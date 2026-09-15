@@ -229,7 +229,13 @@ bool MixFileClass::Parse_Header() {
     }
     bf.Decrypt_In_Place(raw.data(), raw.size());
 
+    // 关键的自洽检查：数据区必须装得下。少了这一条，普通文件也会被误判成
+    // 嵌套 MIX（随便 92 字节都能解出个 count），于是 Read_Deep 会往假归档里
+    // 一层层递归 —— 25 × 187 × ... 指数爆炸，实测直接把程序挂死。
     data_start_ = kMixBody + enc_len;
+    if (file_size_ > 0 && data_start_ + data_size_ > file_size_ + 64) {
+        return false;
+    }
     entries_.clear();
     entries_.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
@@ -292,6 +298,12 @@ bool MixFileClass::Open_Nested(const MixFileClass& parent, const MixEntry& e) {
     if (!Parse_Header()) {
         parent_ = nullptr;
         parent_off_ = 0;
+        return false;
+    }
+    // 再过一道：条目必须全部落在数据区内。真归档一定满足，噪声几乎不可能。
+    int bad = 0;
+    if (!Validate_Index(&bad)) {
+        Close();      // 会顺带清掉 parent_ / parent_off_
         return false;
     }
     return true;
@@ -398,7 +410,10 @@ uint32_t MixFileClass::Compute_CRC() const {
 }
 
 bool MixFileClass::Validate_Index(int* out_bad_count) const {
-    if (!file_.Is_Open() || entries_.empty()) {
+    // 注意不能拿 file_.Is_Open() 当前置条件：嵌套归档没有自己的文件句柄，
+    // 数据是从父归档读的。曾经这里写成 `!file_.Is_Open() || entries_.empty()`，
+    // 结果所有子 MIX 都被判成无效，Read_Deep 一层都下不去。
+    if (entries_.empty()) {
         if (out_bad_count) {
             *out_bad_count = 0;
         }
