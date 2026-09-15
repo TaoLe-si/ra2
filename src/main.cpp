@@ -27,6 +27,7 @@
 #include "gfx/HvaFile.h"
 #include "gfx/Palette.h"
 #include "gfx/PcxFile.h"
+#include "gfx/RemapTable.h"
 #include "gfx/TmpFile.h"
 #include "gfx/VxlFile.h"
 #include "gfx/VxlNormals.h"
@@ -1289,6 +1290,142 @@ static int Map_Dump(const std::vector<std::string>& mix_paths, const char* map_p
     return (mr.Tiles_Missing() == 0) ? 0 : 1;
 }
 
+// ---------------------------------------------------------------------------
+// --remap：阵营色（remap）表
+// ---------------------------------------------------------------------------
+static int Remap_Dump(const std::vector<std::string>& mix_paths,
+                      const char* pal_name, const char* out_path) {
+    MixFileSystem fs;
+    for (const std::string& p : mix_paths) {
+        if (!fs.Mount(p.c_str())) {
+            std::printf("[x] 挂载失败 %s\n", p.c_str());
+            return 1;
+        }
+    }
+
+    // 1) [Colors] 从 rules.ini 来
+    std::vector<uint8_t> ini = fs.Read_Deep("rules.ini");
+    if (ini.empty()) ini = fs.Read_Deep("rulesmd.ini");
+    if (ini.empty()) {
+        std::printf("[x] 找不到 rules.ini / rulesmd.ini\n");
+        return 1;
+    }
+    IniFile rules;
+    if (!rules.Load(ini.data(), ini.size())) {
+        std::printf("[x] rules 解析失败\n");
+        return 1;
+    }
+    std::printf("rules.ini %zu 字节，%d 段，畸形行 %d\n",
+                ini.size(), rules.Section_Count(), rules.Malformed_Lines());
+
+    RemapTable remap;
+    const int nc = remap.Load_From_Ini(rules);
+    if (nc == 0) {
+        std::printf("[x] [Colors] 段没解析出颜色\n");
+        return 1;
+    }
+    // 判据 1：RA2/YR 的 [Colors] 是 19 条（17 个玩家色 + AlliedLoad + SovietLoad）
+    std::printf("[Colors] %d 条 %s（RA2/YR 标准 19 条）\n", nc, nc >= 17 ? "✓" : " ✗");
+
+    // 2) 调色板
+    std::vector<uint8_t> pal = fs.Read_Deep(pal_name);
+    if (pal.size() != 768) {
+        std::printf("[x] 找不到 %s（读到 %zu 字节，要 768）\n", pal_name, pal.size());
+        return 1;
+    }
+    // .PAL 是 6 位分量，VXL 内嵌的是 8 位。这里只处理 .PAL。
+    std::printf("调色板 %s 768 字节（6 位分量）\n", pal_name);
+
+    // 3) remap 区间：.PAL 没有自声明，用实测的 16..31（VXL 头也是这两个数）
+    const int kStart = 16, kEnd = 31;
+
+    // 打印占位色本身，证明它是"纯红渐变"
+    std::printf("  占位色 %02X..%02X：" , kStart, kEnd);
+    for (int i = kStart; i <= kEnd; ++i) {
+        const int v = pal[i * 3];
+        std::printf("%d ", (v << 2) | (v >> 4));
+    }
+    std::printf("\n");
+
+    int bad = 0;
+    std::vector<Palette> made;
+    for (int c = 0; c < nc; ++c) {
+        const RemapColor& rc = remap.Color(c);
+        uint8_t tr = 0, tg = 0, tb = 0;
+        RemapTable::Hsv_To_Rgb(rc.h, rc.s, rc.v, &tr, &tg, &tb);
+
+        Palette p = remap.Make_Palette(pal.data(), false, kStart, kEnd, c);
+        made.push_back(p);
+
+        // 判据 2：16 级亮度严格递减（占位色是单调的，缩放后必然单调）
+        double prev = 1e9;
+        bool mono = true;
+        std::string ramp;
+        for (int i = kStart; i <= kEnd; ++i) {
+            const Palette::Color& q = p.Colors()[i];
+            const double l = 0.299 * q.r + 0.587 * q.g + 0.114 * q.b;
+            if (l > prev + 0.5) mono = false;
+            prev = l;
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "%02x%02x%02x ", q.r, q.g, q.b);
+            ramp += buf;
+        }
+        // 判据 3：最亮一级 = 目标色（缩放系数 1.0）
+        const Palette::Color& top = p.Colors()[kStart];
+        const bool top_ok = std::abs(top.r - tr) <= 1 && std::abs(top.g - tg) <= 1 &&
+                            std::abs(top.b - tb) <= 1;
+        if (!mono || !top_ok) ++bad;
+        std::printf("  %-11s HSV(%3d,%3d,%3d) -> #%02x%02x%02x  %s%s\n",
+                    rc.name.c_str(), rc.h, rc.s, rc.v, tr, tg, tb,
+                    mono ? "" : "[亮度非单调!] ", top_ok ? "" : "[首级!=目标色!]");
+        std::printf("      %s\n", ramp.c_str());
+    }
+
+    // 判据 4：区间外逐字节不变
+    int outside_diff = 0;
+    for (int c = 0; c < nc; ++c) {
+        const Palette& p = made[c];
+        for (int i = 0; i < 256; ++i) {
+            if (i >= kStart && i <= kEnd) continue;
+            const int v = pal[i * 3];
+            const uint8_t r = static_cast<uint8_t>((v << 2) | (v >> 4));
+            if (p.Colors()[i].r != r) ++outside_diff;
+        }
+    }
+    std::printf("区间外 240 个颜色在 %d 张调色板上共 %d 处被改 %s\n",
+                nc, outside_diff, outside_diff == 0 ? "✓" : " ✗");
+    if (outside_diff != 0) ++bad;
+
+    // 4) 输出色块图：每行一个阵营色，16 格由亮到暗
+    if (out_path != nullptr) {
+        const int cw = 24, ch = 20;
+        const int w = 16 * cw;
+        const int h = nc * ch;
+        std::FILE* f = std::fopen(out_path, "wb");
+        if (!f) {
+            std::printf("[x] 写不了 %s\n", out_path);
+            return 1;
+        }
+        std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+        for (int c = 0; c < nc; ++c) {
+            for (int y = 0; y < ch; ++y) {
+                for (int i = 0; i < 16; ++i) {
+                    const Palette::Color& q = made[c].Colors()[kStart + i];
+                    for (int x = 0; x < cw; ++x) {
+                        std::fputc(q.r, f);
+                        std::fputc(q.g, f);
+                        std::fputc(q.b, f);
+                    }
+                }
+            }
+        }
+        std::fclose(f);
+        std::printf("  已写出色块图 %s（%dx%d，每行一个阵营色，16 级由亮到暗）\n",
+                    out_path, w, h);
+    }
+    return bad == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--vxlit") == 0) {
         if (argc < 3) {
@@ -1352,6 +1489,28 @@ int main(int argc, char** argv) {
         }
         return Map_Dump(mixes, argv[2], out);
     }
+    if (argc > 1 && std::strcmp(argv[1], "--remap") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --remap <mix> [更多mix...] [--pal 调色板] [--out out.ppm]\n");
+            std::printf("  例：ra2core --remap D:/westwood/RA2YR/ra2.mix"
+                        " D:/westwood/RA2YR/ra2md.mix --pal unittem.pal --out remap.ppm\n");
+            return 1;
+        }
+        std::vector<std::string> mixes;
+        const char* pal = "unittem.pal";
+        const char* out = nullptr;
+        for (int i = 2; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--pal") == 0 && i + 1 < argc) {
+                pal = argv[++i];
+            } else if (std::strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+                out = argv[++i];
+            } else {
+                mixes.push_back(argv[i]);
+            }
+        }
+        return Remap_Dump(mixes, pal, out);
+    }
+
     if (argc > 1 && std::strcmp(argv[1], "--ini") == 0) {
         if (argc < 4) {
             std::printf("用法：ra2core --ini <顶层mix> <0xINI的CRC>\n");

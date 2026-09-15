@@ -34,6 +34,7 @@
 
 #include "gfx/HvaFile.h"
 #include "gfx/Palette.h"
+#include "gfx/RemapTable.h"
 #include "gfx/ShpFile.h"
 #include "gfx/TmpFile.h"
 #include "gfx/VxlFile.h"
@@ -103,6 +104,17 @@ struct App {
     bool has_barrel = false;
     float turret_yaw = 0.0f;       ///< 弧度，绕 Z（模型空间 X 向前、Y 横向、Z 向上）
     float barrel_pitch = 0.0f;     ///< 弧度，绕 Y（炮口抬起）
+
+    /// 阵营色（remap）。
+    ///
+    /// 素材里要显示成阵营色的像素统一用调色板 16..31 这 16 个"占位色"
+    /// （unittem.pal 里就是一组纯红渐变），游戏按所属阵营把这段整段换掉，
+    /// 一份素材渲出 8 个阵营。颜色表来自 rules.ini 的 [Colors]。
+    /// VXL 自己在头里声明了区间（Remap_Start/End，实测 16/31），
+    /// 所以直接用素材报的，不写死。
+    RemapTable remap_table;
+    int remap_index = -1;     ///< [Colors] 下标；-1 = 不 remap
+    std::vector<uint8_t> remap_pal;   ///< remap 后的 768 字节，供打光管线用
 
     Dx12Renderer r;
     bool ok = false;
@@ -386,8 +398,32 @@ float Map_Draw_Scale() {
     return g_app.scale;
 }
 
+/// 把当前帧调色板按阵营色 remap 一份。remap 关着就原样返回。
+///
+/// 区间取素材自己报的：VXL 头里有 Remap_Start/End（实测 16/31），
+/// SHP 没有这个字段，用同一个实测区间 —— unittem.pal 的 0x10..0x1F
+/// 就是那组纯红占位色，各剧场单位调色板布局一致。
+Palette Current_Palette_Remapped() {
+    if (g_app.remap_index < 0 || g_app.remap_table.Color_Count() <= 0) {
+        return g_app_frame_palette;
+    }
+    uint8_t pal8[768];
+    g_app_frame_palette.To_RGB8(pal8);
+    int rs = 16, re = 31;
+    if (g_app.vxl.Limb_Count() > 0) {
+        rs = g_app.vxl.Remap_Start();
+        re = g_app.vxl.Remap_End();
+    }
+    // 原地改写：Make_Palette768 先把 base 整份拷进 out 再动 remap 区，
+    // 同一指针时那次 memcpy 是自拷贝，安全。
+    g_app.remap_table.Make_Palette768(pal8, true, rs, re, g_app.remap_index, pal8);
+    Palette out;
+    out.Load_Expanded(pal8, 768);
+    return out;
+}
+
 void Upload_Current_Frame() {
-    g_app.r.Set_Palette(g_app_frame_palette);
+    g_app.r.Set_Palette(Current_Palette_Remapped());
     if (g_app.map_mode && !g_app.map_rgba.empty()) {
         g_app.sprite = g_app.r.Upload_Sprite_RGBA(
             reinterpret_cast<const uint8_t*>(g_app.map_rgba.data()),
@@ -557,9 +593,24 @@ void Rebuild_Vxl_Pose() {
             return;
         }
     }
+    // 转炮塔 / 翻 HVA 帧会直接调到这里（不走 Upload_Current_Frame），
+    // 所以调色板必须在这里也刷一次，不然换阵营色后要等到下一帧才生效。
+    g_app.r.Set_Palette(Current_Palette_Remapped());
+
     if (g_app.light_on) {
+        // 打光管线吃的是 768 字节调色板，remap 开着时用换过阵营色的那份。
+        const uint8_t* pal768 = g_app.vxl.Palette();
+        if (g_app.remap_index >= 0) {
+            g_app.remap_pal.assign(768, 0);
+            if (g_app.remap_table.Make_Palette768(
+                    g_app.vxl.Palette(), true, g_app.vxl.Remap_Start(),
+                    g_app.vxl.Remap_End(), g_app.remap_index,
+                    g_app.remap_pal.data())) {
+                pal768 = g_app.remap_pal.data();
+            }
+        }
         Shade_To_RGBA(g_app.vxl_idx.data(), g_app.vxl_shade.data(),
-                      g_app.vxl_w * g_app.vxl_h, g_app.vxl.Palette(), g_app.light,
+                      g_app.vxl_w * g_app.vxl_h, pal768, g_app.light,
                       &g_app.vxl_rgba);
         g_app.sprite = g_app.r.Upload_Sprite_RGBA(g_app.vxl_rgba.data(), g_app.vxl_w,
                                                   g_app.vxl_h);
@@ -621,6 +672,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 std::printf("体素光影：%s（环境光 %.2f 漫反射 %.2f 分级 %d）\n",
                             g_app.light_on ? "开" : "关", g_app.light.ambient,
                             g_app.light.diffuse, g_app.light.levels);
+            } else if (wp == 'R') {
+                // 循环阵营色。R 一下换一个，走完回到"不 remap"。
+                if (g_app.remap_table.Color_Count() <= 0) {
+                    std::printf("阵营色表没加载（缺 rules.ini 的 [Colors]）\n");
+                } else {
+                    g_app.remap_index += 1;
+                    if (g_app.remap_index >= g_app.remap_table.Color_Count()) {
+                        g_app.remap_index = -1;
+                    }
+                    if (g_app.remap_index < 0) {
+                        std::printf("阵营色：关（原样占位色）\n");
+                    } else {
+                        const RemapColor& rc = g_app.remap_table.Color(g_app.remap_index);
+                        std::printf("阵营色 [%d/%d] %s\n", g_app.remap_index,
+                                    g_app.remap_table.Color_Count(), rc.name.c_str());
+                    }
+                    Upload_Current_Frame();
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
             } else if (wp == VK_OEM_PLUS || wp == VK_ADD) {
                 g_app.scale *= 1.25f;
             } else if (wp == VK_OEM_MINUS || wp == VK_SUBTRACT) {
@@ -764,6 +834,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     const char* addmix_path = nullptr;
     const char* map_path = nullptr;    ///< --map <地图.mmx/.yro/.map>
     const char* tmp_pal_name = "TEMPERAT.PAL";
+    const char* remap_arg = nullptr;
     for (int i = 0; i < kMaxArgs; ++i) {
         if (std::strcmp(args[i], "--vxl") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
             // MIX 里没有 VXL 的文件名可用，只能按 CRC 取。
@@ -810,6 +881,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < kMaxArgs &&
                    args[i + 1][0]) {
             map_path = args[i + 1];
+        } else if (std::strcmp(args[i], "--remap") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            // 阵营色：[Colors] 的下标，或颜色名（DarkRed / Gold …）。
+            // 表是在 VXL 载入之后才读的，所以这里只把字符串存下来。
+            remap_arg = args[i + 1];
         }
     }
     if (grid < 1 || grid > 64) {
@@ -879,6 +955,48 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             std::printf("     FLH  %d,%d,%d\n", um->flh[0], um->flh[1], um->flh[2]);
         }
     }
+    // ---- 阵营色表：rules.ini 的 [Colors]，按 R 键循环 ----
+    // 放在模式分支之前，VXL / SHP 两条路都要用。
+    // rules.ini 在 ra2.mix 里、rulesmd.ini 在 ra2md.mix 里，两个归档都试。
+    {
+        std::vector<uint8_t> ini = g_app.mix.Read_Deep("rules.ini");
+        if (ini.empty() && g_app.has_mix2) {
+            ini = g_app.mix2.Read_Deep("rules.ini");
+        }
+        if (ini.empty()) {
+            ini = g_app.mix.Read_Deep("rulesmd.ini");
+        }
+        if (ini.empty() && g_app.has_mix2) {
+            ini = g_app.mix2.Read_Deep("rulesmd.ini");
+        }
+        IniFile rules;
+        if (!ini.empty() && rules.Load(ini.data(), ini.size())) {
+            const int n = g_app.remap_table.Load_From_Ini(rules);
+            std::printf("[2] 阵营色表 %d 条（按 R 键循环换阵营色）\n", n);
+            if (remap_arg != nullptr && *remap_arg) {
+                // 先当数字下标，不是数字再按名字找（大小写不敏感）。
+                bool numeric = true;
+                for (const char* p = remap_arg; *p; ++p) {
+                    if (*p < '0' || *p > '9') {
+                        numeric = false;
+                        break;
+                    }
+                }
+                int idx = numeric ? std::atoi(remap_arg)
+                                  : g_app.remap_table.Find_Color(remap_arg);
+                if (idx < 0 || idx >= n) {
+                    std::printf("     [!] 阵营色 \"%s\" 不在 [Colors] 里，忽略\n", remap_arg);
+                } else {
+                    g_app.remap_index = idx;
+                    std::printf("     启用阵营色 [%d] %s\n", idx,
+                                g_app.remap_table.Color(idx).name.c_str());
+                }
+            }
+        } else {
+            std::printf("[2] 阵营色表 未加载（找不到 rules.ini）\n");
+        }
+    }
+
     if (map_path && *map_path) {
         // ---- --map <地图>：铺一整张真实战场 ----
         std::printf("[2] 地图模式 %s\n", map_path);
@@ -1022,6 +1140,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         g_app.pal_name = "(VXL 内嵌调色板)";
         std::printf("调色板 %s\n", g_app.pal_name.c_str());
         std::printf("SHP  (VXL 模式，跳过)\n");
+
+        std::printf("     remap 区间 %d..%d（VXL 头自报）\n", g_app.vxl.Remap_Start(),
+                    g_app.vxl.Remap_End());
     } else {
 
     std::printf("[2] 载入素材\n");

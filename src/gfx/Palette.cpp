@@ -61,6 +61,14 @@ bool Palette::Load_Expanded(const uint8_t* data, size_t size) {
     return loaded_;
 }
 
+void Palette::To_RGB8(uint8_t* out) const {
+    for (int i = 0; i < 256; ++i) {
+        out[i * 3 + 0] = colors_[i].r;
+        out[i * 3 + 1] = colors_[i].g;
+        out[i * 3 + 2] = colors_[i].b;
+    }
+}
+
 void Palette::To_RGBA8(uint8_t* out) const {
     for (int i = 0; i < 256; ++i) {
         out[i * 4 + 0] = colors_[i].r;

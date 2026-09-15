@@ -33,8 +33,20 @@ public:
     const Color* Colors() const noexcept { return colors_; }
     Color Map(uint8_t index) const noexcept { return colors_[index]; }
 
+    /// 直接改写某一色。给 remap 用：阵营色表只替换调色板中间那 16 个索引，
+    /// 其余要原样保留，所以必须有"改单个"而不是"整块重载"。
+    void Set_Color(int index, uint8_t r, uint8_t g, uint8_t b) {
+        if (index < 0 || index > 255) return;
+        colors_[index] = Color{r, g, b, 255};
+    }
+    void Set_Loaded(bool v) noexcept { loaded_ = v; }
+
     /// 打包成 RGBA8 数组，方便直接上传成 256x1 纹理。
     void To_RGBA8(uint8_t* out256x4) const;
+
+    /// 打包成 768 字节 RGB（已经是 8 位分量，不再做 6->8 展开）。
+    /// 给 remap 用：改完再喂回 Load_Expanded 就能拿到 Palette。
+    void To_RGB8(uint8_t* out768) const;
 
     bool Is_Loaded() const noexcept { return loaded_; }
 
