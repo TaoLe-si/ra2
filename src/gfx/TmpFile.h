@@ -139,6 +139,17 @@ public:
     std::vector<uint32_t> Render_Cell_RGBA(int i, const Palette& pal,
                                            bool with_extra = false) const;
 
+    /// 带外扩边距的 cell 渲染 —— 铺地图用这一个。
+    ///
+    /// 为什么需要：135 个带 extra 的 1x1 模板里有 126 个 ExtraY 是负数
+    /// （常见 (0,-15)、(1,-15)、(0,-60)），也就是树冠、岩壁故意画到格子**上方**。
+    /// Render_Cell_RGBA 会把越界部分裁掉，铺出来的树就只剩树桩。
+    /// 这里四边各留 pad 像素，extra 完整保留；ox/oy 回传 cell 左上角在图里的坐标，
+    /// 调用方按 (落点 - ox, 落点 - oy) 贴即可。
+    std::vector<uint32_t> Render_Cell_Padded_RGBA(int i, const Palette& pal, int pad,
+                                                  int* ox = nullptr, int* oy = nullptr,
+                                                  int* w = nullptr, int* h = nullptr) const;
+
     /// 把整张模板拼成 CanvasWidth×CanvasHeight 的 RGBA。extra 同样会被画布裁掉
     /// 越界部分 —— 要看全图的调用方请用 Extra_Origin() 自己往外合成。
     std::vector<uint32_t> Render_Image_RGBA(const Palette& pal,

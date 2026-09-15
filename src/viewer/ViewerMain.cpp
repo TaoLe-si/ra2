@@ -25,6 +25,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -40,6 +41,9 @@
 #include "data/UnitModel.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
+#include "map/MapFile.h"
+#include "map/MapRenderer.h"
+#include "map/TheaterFile.h"
 
 using namespace ra2;
 
@@ -65,6 +69,15 @@ struct App {
     std::vector<uint8_t> terrain;
     int terrain_w = 0;
     int terrain_h = 0;
+
+    /// 真实地图模式（--map）：MIX -> .map -> IsoMapPack5(分块 LZO) -> 剧场 TMP
+    /// -> 一整张等距战场。铺好一次就固定，之后只做平移缩放。
+    std::vector<uint32_t> map_rgba;
+    int map_w = 0;
+    int map_h = 0;
+    bool map_mode = false;
+    float pan_x = 0.0f, pan_y = 0.0f;
+    bool fit_map = true;          ///< 开局缩放到刚好装得下整张图
 
     /// VXL 体素模式：软件等距光栅化出来的索引图，形状和 TMP 那条路一样，
     /// 所以能直接复用同一个 R8 + 256×1 查表的精灵管线。
@@ -358,8 +371,29 @@ bool Build_Terrain_Image(const TerrainTileSet& set, int n, bool random_pick,
 
 void Rebuild_Vxl_Pose();   ///< 定义在下面（要等 DX12 就绪才能上传）
 
+/// 地图模式下的绘制缩放：默认"整张图刚好装进窗口"，按 F 切回手动。
+float Map_Draw_Scale() {
+    if (!g_app.map_mode || g_app.map_w <= 0 || g_app.map_h <= 0) {
+        return g_app.scale;
+    }
+    if (g_app.fit_map) {
+        // 不用 std::min：windows.h 把 min 定义成了宏，会撞。
+        const float sx = (kWinW - 16.0f) / static_cast<float>(g_app.map_w);
+        const float sy = (kWinH - 16.0f) / static_cast<float>(g_app.map_h);
+        const float s = (sx < sy) ? sx : sy;
+        return s > 0.0f ? s : 1.0f;
+    }
+    return g_app.scale;
+}
+
 void Upload_Current_Frame() {
     g_app.r.Set_Palette(g_app_frame_palette);
+    if (g_app.map_mode && !g_app.map_rgba.empty()) {
+        g_app.sprite = g_app.r.Upload_Sprite_RGBA(
+            reinterpret_cast<const uint8_t*>(g_app.map_rgba.data()),
+            g_app.map_w, g_app.map_h);
+        return;
+    }
     if (!g_app.terrain.empty()) {
         g_app.sprite = g_app.r.Upload_Sprite(g_app.terrain.data(),
                                              g_app.terrain_w, g_app.terrain_h);
@@ -538,6 +572,23 @@ void Rebuild_Vxl_Pose() {
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_KEYDOWN:
+            // 地图模式：方向键改成平移，F 切"整图适配/手动缩放"。
+            // 没有帧可以翻，所以这几个键闲着也是闲着。
+            if (g_app.map_mode) {
+                const float step = 160.0f;
+                if (wp == VK_LEFT)  g_app.pan_x += step;
+                if (wp == VK_RIGHT) g_app.pan_x -= step;
+                if (wp == VK_UP)    g_app.pan_y += step;
+                if (wp == VK_DOWN)  g_app.pan_y -= step;
+                if (wp == 'F') {
+                    g_app.fit_map = !g_app.fit_map;
+                    if (!g_app.fit_map) {
+                        g_app.scale = 1.0f;
+                    }
+                    std::printf("整图适配：%s\n", g_app.fit_map ? "开" : "关");
+                }
+                return 0;
+            }
             if (wp == VK_ESCAPE) {
                 PostQuitMessage(0);
             } else if (wp == VK_SPACE || wp == VK_RIGHT) {
@@ -711,6 +762,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // P2 数据层：--unit <单位名>，车体/炮塔/炮管全从 INI 推，不用手写 ID。
     const char* unit_name = nullptr;
     const char* addmix_path = nullptr;
+    const char* map_path = nullptr;    ///< --map <地图.mmx/.yro/.map>
     const char* tmp_pal_name = "TEMPERAT.PAL";
     for (int i = 0; i < kMaxArgs; ++i) {
         if (std::strcmp(args[i], "--vxl") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
@@ -755,6 +807,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         } else if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < kMaxArgs &&
                    args[i + 1][0]) {
             addmix_path = args[i + 1];
+        } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < kMaxArgs &&
+                   args[i + 1][0]) {
+            map_path = args[i + 1];
         }
     }
     if (grid < 1 || grid > 64) {
@@ -824,7 +879,44 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             std::printf("     FLH  %d,%d,%d\n", um->flh[0], um->flh[1], um->flh[2]);
         }
     }
-    if (tmp_arch >= 0) {
+    if (map_path && *map_path) {
+        // ---- --map <地图>：铺一整张真实战场 ----
+        std::printf("[2] 地图模式 %s\n", map_path);
+        MapFile mf;
+        std::string err;
+        if (!mf.Load_Path(map_path, &err)) {
+            std::printf("[x] 地图加载失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("    %s 剧场 %s 尺寸 %dx%d，IsoMapPack5 %zu -> %zu 字节，"
+                    "真单元 %zu\n",
+                    mf.Name().c_str(), mf.Theater().c_str(), mf.Width(), mf.Height(),
+                    mf.Packed_Bytes(), mf.Unpacked_Bytes(), mf.Cells().size());
+
+        std::vector<MixFileClass*> roots;
+        roots.push_back(&g_app.mix);
+        if (g_app.has_mix2) {
+            roots.push_back(&g_app.mix2);
+        }
+        MapRenderer mr;
+        if (!mr.Bind(roots, mf, &err)) {
+            std::printf("[x] 素材绑定失败: %s\n", err.c_str());
+            return 1;
+        }
+        std::printf("    剧场 %s：.%s / %s / %d 个瓦片（下标 0 = %s）\n",
+                    mr.Theater().c_str(), mr.Extension().c_str(),
+                    mr.Palette_Name().c_str(), mr.Tile_Count(),
+                    mr.Tile_File_Name(0).c_str());
+        if (!mr.Render(mf, 0, 0, 0, 0, &g_app.map_rgba, &g_app.map_w, &g_app.map_h,
+                       &err)) {
+            std::printf("[x] 铺图失败: %s\n", err.c_str());
+            return 1;
+        }
+        g_app.map_mode = true;
+        std::printf("    战场画布 %dx%d，瓦片命中 %d 缺失 %d\n",
+                    g_app.map_w, g_app.map_h, mr.Tiles_Loaded(), mr.Tiles_Missing());
+        std::printf("SHP  (地图模式，跳过)\n");
+    } else if (tmp_arch >= 0) {
         std::printf("[2] TMP 地形模式 归档=0x%08X 网格=%d\n", tmp_arch, grid);
         const MixEntry* arch = g_app.mix.Find_By_ID(static_cast<uint32_t>(tmp_arch));
         if (arch == nullptr) {
@@ -962,7 +1054,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         g_app.r.Request_Capture();
         g_app.r.Begin_Frame(clear);
         if (g_app.sprite >= 0) {
-            g_app.r.Draw_Sprite(g_app.sprite, 8, 8, 1.0f);
+            g_app.r.Draw_Sprite(g_app.sprite, 8, 8, Map_Draw_Scale());
         }
         g_app.r.End_Frame();
         std::vector<uint8_t> rgba;
@@ -1041,7 +1133,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         const float clear[4] = {0.05f, 0.05f, 0.08f, 1.0f};
         g_app.r.Begin_Frame(clear);
         if (g_app.sprite >= 0) {
-            g_app.r.Draw_Sprite(g_app.sprite, 8, 8, g_app.scale);
+            g_app.r.Draw_Sprite(g_app.sprite,
+                                8 + static_cast<int>(g_app.pan_x),
+                                8 + static_cast<int>(g_app.pan_y),
+                                Map_Draw_Scale());
         }
         if (max_frames > 0 && drawn + 1 >= max_frames) {
             g_app.r.Request_Capture();   // 最后一帧拷回 CPU

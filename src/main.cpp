@@ -33,7 +33,11 @@
 #include "gfx/VoxelLight.h"
 #include "io/FileSystem.h"
 #include "io/MixCrypto.h"
+#include "io/Lzo1x.h"
 #include "map/Map.h"
+#include "map/MapFile.h"
+#include "map/MapRenderer.h"
+#include "map/TheaterFile.h"
 #include "threading/TaskSystem.h"
 
 using namespace ra2;
@@ -1190,6 +1194,101 @@ static int Vxl_Light(const std::vector<std::string>& mix_paths, const char* unit
     return rc;
 }
 
+// ---------------------------------------------------------------------------
+// 地图：MIX -> .map -> IsoMapPack5(分块 LZO) -> 剧场 TMP -> 等距画布
+// ---------------------------------------------------------------------------
+// 这是"把游戏跑起来"的地基：能铺出一张真实的战场，单位、寻路、光影才有地方放。
+// 自检靠三条硬判据，不靠眼睛：
+//   1. IsoMapPack5 解压后的字节数 == ((W*2-1)*H)*11 + 4
+//   2. X+Y 为奇数的记录条数 == W*H（真单元数）
+//   3. 用到的瓦片下标都能在剧场归档里找到 TMP，且确实画上了像素
+static int Map_Dump(const std::vector<std::string>& mix_paths, const char* map_path,
+                    const char* out_path) {
+    MapFile map;
+    std::string err;
+    if (!map.Load_Path(map_path, &err)) {
+        std::printf("[x] 地图加载失败：%s\n", err.c_str());
+        return 1;
+    }
+    std::printf("地图 %s  剧场 %s  尺寸 %dx%d（可见 %d,%d %dx%d）\n",
+                map.Name().c_str(), map.Theater().c_str(),
+                map.Width(), map.Height(),
+                map.Local_X(), map.Local_Y(), map.Local_Width(), map.Local_Height());
+    // 判据：解压字节数 **不超过** ((W*2-1)*H)*11+4（省掉 0 高度 Clear 瓦片的
+    // 地图包会更小），并且补齐后单元数恰好 W*H。
+    const size_t cap = static_cast<size_t>((map.Width() * 2 - 1) * map.Height() * 11 + 4);
+    std::printf("  IsoMapPack5 %zu -> %zu 字节（上限 %zu = ((%d*2-1)*%d)*11+4）%s\n",
+                map.Packed_Bytes(), map.Unpacked_Bytes(), cap,
+                map.Width(), map.Height(),
+                map.Unpacked_Bytes() <= cap ? "✓" : " ✗");
+    std::printf("  单元 %zu 个 = %dx%d %s；其中记录给出 %zu 个%s；最大瓦片下标 %d\n",
+                map.Cells().size(), map.Width(), map.Height(),
+                map.Cells().size() == static_cast<size_t>(map.Width() * map.Height())
+                    ? "✓"
+                    : " ✗",
+                map.Stored_Cells(),
+                map.Stored_Cells() < map.Cells().size() ? "（裁剪包，缺的按 Clear01 补）"
+                                                        : "",
+                map.Max_Tile_Index());
+    std::printf("  OverlayPack %zu 字节，OverlayDataPack %zu 字节\n",
+                map.Overlay().size(), map.Overlay_Data().size());
+
+    std::vector<MixFileClass> mixes(mix_paths.size());
+    std::vector<MixFileClass*> roots;
+    for (size_t i = 0; i < mix_paths.size(); ++i) {
+        if (!mixes[i].Open(mix_paths[i].c_str())) {
+            std::printf("[x] 打不开 %s\n", mix_paths[i].c_str());
+            return 1;
+        }
+        roots.push_back(&mixes[i]);
+    }
+
+    MapRenderer mr;
+    if (!mr.Bind(roots, map, &err)) {
+        std::printf("[x] 素材绑定失败：%s\n", err.c_str());
+        return 1;
+    }
+    std::printf("  剧场 %s：扩展名 .%s，调色板 %s，瓦片表 %d 项\n",
+                mr.Theater().c_str(), mr.Extension().c_str(),
+                mr.Palette_Name().c_str(), mr.Tile_Count());
+    std::printf("  示例：下标 0 -> %s，下标 %d -> %s\n",
+                mr.Tile_File_Name(0).c_str(), map.Max_Tile_Index(),
+                mr.Tile_File_Name(map.Max_Tile_Index()).c_str());
+
+    std::vector<uint32_t> canvas;
+    int w = 0, h = 0;
+    if (!mr.Render(map, 0, 0, 0, 0, &canvas, &w, &h, &err)) {
+        std::printf("[x] 铺图失败：%s\n", err.c_str());
+        return 1;
+    }
+    long opaque = 0;
+    for (uint32_t p : canvas) {
+        if ((p & 0xFF000000u) != 0) {
+            ++opaque;
+        }
+    }
+    std::printf("  画布 %dx%d，不透明像素 %ld（%.1f%%），瓦片命中 %d / 缺失 %d\n",
+                w, h, opaque, 100.0 * opaque / double(w) * (1.0 / (h ? h : 1)),
+                mr.Tiles_Loaded(), mr.Tiles_Missing());
+
+    if (out_path != nullptr) {
+        std::FILE* f = std::fopen(out_path, "wb");
+        if (!f) {
+            std::printf("[x] 写不了 %s\n", out_path);
+            return 1;
+        }
+        std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+        for (uint32_t p : canvas) {
+            std::fputc(static_cast<int>(p & 0xFF), f);
+            std::fputc(static_cast<int>((p >> 8) & 0xFF), f);
+            std::fputc(static_cast<int>((p >> 16) & 0xFF), f);
+        }
+        std::fclose(f);
+        std::printf("  已写出 %s\n", out_path);
+    }
+    return (mr.Tiles_Missing() == 0) ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--vxlit") == 0) {
         if (argc < 3) {
@@ -1228,6 +1327,30 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Vxl_Light(mixes, unit, out, has_light ? light3 : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--map") == 0) {
+        if (argc < 4) {
+            std::printf("用法：ra2core --map <地图.mmx/.yro/.map> <顶层mix> [更多mix...] "
+                        "[--out out.ppm]\n");
+            std::printf("  例：ra2core --map D:/westwood/RA2YR/Arena.mmx "
+                        "D:/westwood/RA2YR/ra2.mix D:/westwood/RA2YR/ra2md.mix "
+                        "--out arena.ppm\n");
+            return 1;
+        }
+        std::vector<std::string> mixes;
+        const char* out = nullptr;
+        for (int i = 3; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+                out = argv[++i];
+                continue;
+            }
+            mixes.push_back(argv[i]);
+        }
+        if (mixes.empty()) {
+            std::printf("[x] 至少要给一个 .mix\n");
+            return 1;
+        }
+        return Map_Dump(mixes, argv[2], out);
     }
     if (argc > 1 && std::strcmp(argv[1], "--ini") == 0) {
         if (argc < 4) {

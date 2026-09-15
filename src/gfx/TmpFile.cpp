@@ -258,6 +258,66 @@ std::vector<uint32_t> TmpFile::Render_Cell_RGBA(int i, const Palette& pal,
     return out;
 }
 
+std::vector<uint32_t> TmpFile::Render_Cell_Padded_RGBA(int i, const Palette& pal, int pad,
+                                                       int* ox, int* oy,
+                                                       int* w, int* h) const {
+    const int W = cell_width_ + 2 * pad;
+    const int H = cell_height_ + 2 * pad;
+    if (ox) *ox = pad;
+    if (oy) *oy = pad;
+    if (w) *w = W;
+    if (h) *h = H;
+    std::vector<uint32_t> out(static_cast<size_t>(W) * static_cast<size_t>(H), 0);
+    if (i < 0 || i >= static_cast<int>(tiles_.size()) || !tiles_[i].present) {
+        return out;
+    }
+    if (pad < 0 || cell_width_ <= 0 || cell_height_ <= 0) {
+        return out;
+    }
+
+    // 菱形本体
+    const std::vector<uint32_t> body = Render_Cell_RGBA(i, pal, false);
+    for (int y = 0; y < cell_height_; ++y) {
+        for (int x = 0; x < cell_width_; ++x) {
+            const uint32_t px = body[static_cast<size_t>(y) * cell_width_ + x];
+            if ((px & 0xFF000000u) == 0) {
+                continue;
+            }
+            out[static_cast<size_t>(y + pad) * W + (x + pad)] = px;
+        }
+    }
+
+    // extra：画布坐标 (extra_x, extra_y) 与本 cell 的 (tile_x, tile_y) 同一套，
+    // 所以相对偏移就是 (extra_x - tile_x, extra_y - tile_y)。
+    const TmpTile& t = tiles_[static_cast<size_t>(i)];
+    if (t.extra.empty() || t.header.extra_width == 0 || !t.header.Has_Extra()) {
+        return out;
+    }
+    const int ex = static_cast<int>(t.header.extra_x) - t.header.tile_x;
+    const int ey = static_cast<int>(t.header.extra_y) - t.header.tile_y;
+    const int ew = static_cast<int>(t.header.extra_width);
+    const int eh = static_cast<int>(t.header.extra_height);
+    for (int y = 0; y < eh; ++y) {
+        const int dy = pad + ey + y;
+        if (dy < 0 || dy >= H) {
+            continue;
+        }
+        for (int x = 0; x < ew; ++x) {
+            const int dx = pad + ex + x;
+            if (dx < 0 || dx >= W) {
+                continue;
+            }
+            const uint8_t v = t.extra[static_cast<size_t>(y) * ew + x];
+            if (v == 0) {
+                continue;
+            }
+            const Palette::Color c = pal.Map(v);
+            out[static_cast<size_t>(dy) * W + dx] = Pack_RGBA(c.r, c.g, c.b, c.a);
+        }
+    }
+    return out;
+}
+
 std::vector<uint32_t> TmpFile::Render_Image_RGBA(const Palette& pal, bool with_extra) const {
     const int W = canvas_width_;
     const int H = canvas_height_;
