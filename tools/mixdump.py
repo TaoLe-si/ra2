@@ -211,8 +211,13 @@ class MixFile:
         self.flags = struct.unpack_from("<I", self.blob, 0)[0]
         self.encrypted = bool(self.flags & 0x00020000)
         self.has_checksum = bool(self.flags & 0x00010000)
-        if not self.encrypted:
-            raise NotImplementedError("未加密 MIX 走 src/io/FileSystem.cpp 那条路")
+        if self.encrypted:
+            self._parse_encrypted()
+        else:
+            self._parse_plain()
+
+    def _parse_encrypted(self):
+        """flags 带 0x00020000：4 字节 flags + 80 字节 RSA 密钥源 + Blowfish 索引。"""
         self.body = 4 + KEY_SOURCE_LEN
         bf = Blowfish(derive_blowfish_key(self.blob))
         head = bf.decrypt(self.blob[self.body:self.body + 8])
@@ -223,6 +228,38 @@ class MixFile:
         self.entries = [struct.unpack_from("<III", raw, 6 + i * 12)
                         for i in range(self.count)]
         self.data_start = self.body + enc_len
+
+    def _parse_plain(self):
+        """flags 不带 0x00020000：明文 MIX。
+
+        布局（三个样本严格验证，不是猜的）：
+            +0  u32 flags        （0x00010000 表示尾部有 20 字节 SHA1）
+            +4  u16 count
+            +6  u32 body_size
+            +10 count × 12 字节索引 { id, offset, size }
+        验算（offset = data_start + off）：
+            ISOGEN.MIX   10 + 24*12 + 11991728 + 20 = 11992046 ✓
+            ru2 大包     10 + 1257*12 + 31796288 + 20 = 31811402 ✓
+            0x92144015   10 + 3*12 + 10784 + 20 = 10850 ✓
+
+        **地形归档（ISOGEN.MIX / GENERIC.MIX / TEMPERAT 等）全都是这一种**，
+        之前没实现这条路径，导致 ra2.mix 里 13 个 10~35MB 的条目被当成 SHP，
+        地形素材整个不可见。
+        """
+        head = self._at(0, 16)
+        if len(head) < 10:
+            raise ValueError("明文 MIX 头部不足 10 字节")
+        self.count = struct.unpack_from("<H", head, 4)[0]
+        self.data_size = struct.unpack_from("<I", head, 6)[0]
+        if self.count == 0 or self.count > 20000:
+            raise ValueError("明文 MIX 条目数离谱：%d" % self.count)
+        raw = self._at(10, self.count * 12)
+        if len(raw) < self.count * 12:
+            raise ValueError("明文 MIX 索引不完整")
+        self.entries = [struct.unpack_from("<III", raw, i * 12)
+                        for i in range(self.count)]
+        self.data_start = 10 + self.count * 12
+        self.body = 10
 
     def _at(self, off: int, n: int) -> bytes:
         if self.fh is not None:
@@ -275,27 +312,46 @@ def nested_blob(m: MixFile, off: int, size: int, limit: int = 4 << 20) -> bytes 
 
     子归档可能有几十 MB，没必要整个读进来 —— 索引只占前几百字节。
     但如果头部解出来根本不像 MIX（文件数离谱 / 数据长度对不上），返回 None。
+    两种 MIX 都要认：加密的（fl 0x00020000）和明文的（地形归档全是这种）。
     """
     first = m.read(off, min(size, 4 + KEY_SOURCE_LEN + 8))
     if len(first) < 4 + KEY_SOURCE_LEN + 8:
         return None
     flags = struct.unpack_from("<I", first, 0)[0]
-    if not flags & 0x00020000:
-        return None                      # 未加密，不归这里管
-    try:
-        bf = Blowfish(derive_blowfish_key(first))
-        cnt, dsz = struct.unpack_from("<HI", bf.decrypt(first[84:92]), 0)
-    except Exception:
-        return None                      # RSA 分组 >= 模数，或解出来是噪声
-    if cnt == 0 or cnt > 20000 or dsz > size:
+
+    if flags & 0x00020000:
+        # ---- 加密 MIX ----
+        try:
+            bf = Blowfish(derive_blowfish_key(first))
+            cnt, dsz = struct.unpack_from("<HI", bf.decrypt(first[84:92]), 0)
+        except Exception:
+            return None                  # RSA 分组 >= 模数，或解出来是噪声
+        if cnt == 0 or cnt > 20000 or dsz > size:
+            return None
+        enc_len = (6 + cnt * 12 + 7) // 8 * 8
+        if enc_len > limit or off + 92 + enc_len > m.data_size:
+            return None
+        rest = m.read(off + 92, enc_len - 8)
+        if len(rest) < enc_len - 8:
+            return None
+        return first + rest
+
+    # ---- 明文 MIX ----
+    cnt = struct.unpack_from("<H", first, 4)[0]
+    dsz = struct.unpack_from("<I", first, 6)[0]
+    if cnt == 0 or cnt > 20000:
         return None
-    enc_len = (6 + cnt * 12 + 7) // 8 * 8
-    if enc_len > limit or off + 92 + enc_len > m.data_size:
+    idx_len = cnt * 12
+    if idx_len > limit or off + 10 + idx_len > m.data_size:
         return None
-    rest = m.read(off + 92, enc_len - 8)
-    if len(rest) < enc_len - 8:
+    # 数据区必须装得下；允许少量对齐冗余。这条检查是关键 ——
+    # 少了它，普通文件（尤其是大 SHP）会被当成明文 MIX 无限递归下去。
+    if 10 + idx_len + dsz > size + 64:
         return None
-    return first + rest
+    body = m.read(off, 10 + idx_len)
+    if len(body) < 10 + idx_len:
+        return None
+    return body
 
 
 # ---------------------------------------------------------------- 内容识别

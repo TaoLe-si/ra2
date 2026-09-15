@@ -17,6 +17,7 @@
 
 #include "gfx/Palette.h"
 #include "gfx/ShpFile.h"
+#include "gfx/TmpFile.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
 
@@ -35,6 +36,12 @@ struct App {
     int frame = 0;
     float scale = 1.0f;
     int sprite = -1;
+
+    /// TMP 地形模式：合成好的索引图（一次上传，不逐帧改）。
+    std::vector<uint8_t> terrain;
+    int terrain_w = 0;
+    int terrain_h = 0;
+
     Dx12Renderer r;
     bool ok = false;
 };
@@ -160,9 +167,145 @@ bool Load_Asset(MixFileClass& mix, const char* shp_name, const char* pal_name,
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// TMP 等距地形合成
+// ---------------------------------------------------------------------------
+//
+// 游戏里地形是一格一格画的：地块 (cx, cy) 的屏幕位置是
+//     x = (cx - cy) * cw/2
+//     y = (cx + cy) * ch/2
+// 也就是往右下和左下各走半个格子 —— 这就是"等距"的全部含义。
+// 绘制顺序必须是 (cx+cy) 递增（由远及近），否则前格的下半边会被后格盖掉。
+//
+// 这里合成的是**索引图**而不是 RGBA：整张图共用一个调色板，
+// 索引 0 就是透明，直接拷非零索引即可，省掉一次 256 色展开。
+
+struct TerrainTileSet {
+    std::vector<TmpFile> tiles;
+    int cell_w = 60;
+    int cell_h = 30;
+};
+
+/// 从已打开的归档里挑出所有能当地砖的模板（1x1 且首 cell 非空）。
+bool Load_Terrain_Tiles(MixFileClass& sub, TerrainTileSet* out) {
+    for (const MixEntry& e : sub.Entries()) {
+        std::vector<uint8_t> d = sub.Read_Entry(e);
+        TmpFile t;
+        if (!t.Load(d.data(), d.size())) {
+            continue;
+        }
+        if (!t.Tiles()[0].present || t.Block_Width() != 1 || t.Block_Height() != 1) {
+            continue;
+        }
+        out->cell_w = t.Cell_Width();
+        out->cell_h = t.Cell_Height();
+        out->tiles.push_back(std::move(t));
+    }
+    return !out->tiles.empty();
+}
+
+/// 把 N×N 个地块拼成一张索引图。返回 false 表示没东西可画。
+bool Build_Terrain_Image(const TerrainTileSet& set, int n, bool random_pick,
+                         std::vector<uint8_t>* out, int* out_w, int* out_h) {
+    if (set.tiles.empty() || n <= 0) {
+        return false;
+    }
+    const int cw = set.cell_w;
+    const int ch = set.cell_h;
+    // 原点要留出整整"半边斜带"：(cx-cy) 最小是 -(n-1)，不补这么多的话
+    // 左下角那一半地块会被裁到画布外面（实测第一版就是右边一片空白、
+    // 左边缺一块）。y 方向再各留 2 格给 extra 的负坐标（树冠探到上一格）。
+    const int margin_x = (n - 1) * cw / 2;
+    const int margin_y = ch * 2;
+    const int W = n * cw;
+    const int H = n * ch + margin_y * 2;
+    std::vector<uint8_t> img(static_cast<size_t>(W) * H, 0);
+    const auto rows = TmpFile::Row_Geometry(cw, ch);
+
+    int drawn = 0;
+    // 由远及近：(cx+cy) 小的先画。
+    for (int sum = 0; sum <= 2 * (n - 1); ++sum) {
+        for (int cx = 0; cx < n; ++cx) {
+            const int cy = sum - cx;
+            if (cy < 0 || cy >= n) {
+                continue;
+            }
+            // 选哪块砖。默认按顺序取（等于把模板集铺成一张"图集"，每块砖都露面，
+            // 适合验收）；--random 用坐标散列，画面更像真实地图但不可复现地好看。
+            size_t pick = 0;
+            if (random_pick) {
+                const uint32_t k = static_cast<uint32_t>(cx) * 73856093u ^
+                                   static_cast<uint32_t>(cy) * 19349663u;
+                pick = k % set.tiles.size();
+            } else {
+                pick = (static_cast<size_t>(cx) * static_cast<size_t>(n) +
+                        static_cast<size_t>(cy)) % set.tiles.size();
+            }
+            const TmpFile& t = set.tiles[pick];
+            const TmpTile& tile = t.Tiles()[0];
+
+            const int ox = margin_x + (cx - cy) * (cw / 2);
+            const int oy = margin_y + (cx + cy) * (ch / 2);
+
+            size_t row_start = 0;
+            for (int y = 0; y < ch; ++y) {
+                const int x0 = rows[static_cast<size_t>(y)].first;
+                const int w = rows[static_cast<size_t>(y)].second;
+                const int dy = oy + y;
+                if (dy >= 0 && dy < H) {
+                    uint8_t* dst = img.data() + static_cast<size_t>(dy) * W;
+                    for (int kk = 0; kk < w; ++kk) {
+                        const size_t p = row_start + static_cast<size_t>(kk);
+                        if (p >= tile.iso.size()) {
+                            break;
+                        }
+                        const uint8_t v = tile.iso[p];
+                        const int dx = ox + x0 + kk;
+                        if (v != 0 && dx >= 0 && dx < W) {
+                            dst[dx] = v;
+                        }
+                    }
+                }
+                row_start += static_cast<size_t>(w);
+            }
+
+            // extra 用同一套画布坐标，允许越出本格 —— 树冠/岩壁就是这么压到上一格的。
+            if (!tile.extra.empty() && tile.header.extra_width > 0) {
+                const int ew = static_cast<int>(tile.header.extra_width);
+                const int eh = static_cast<int>(tile.header.extra_height);
+                for (int y = 0; y < eh; ++y) {
+                    const int dy = oy + tile.header.extra_y + y;
+                    if (dy < 0 || dy >= H) {
+                        continue;
+                    }
+                    uint8_t* dst = img.data() + static_cast<size_t>(dy) * W;
+                    for (int x = 0; x < ew; ++x) {
+                        const int dx = ox + tile.header.extra_x + x;
+                        const uint8_t v = tile.extra[static_cast<size_t>(y) * ew + x];
+                        if (v != 0 && dx >= 0 && dx < W) {
+                            dst[dx] = v;
+                        }
+                    }
+                }
+            }
+            ++drawn;
+        }
+    }
+    std::printf("[地形] 拼了 %d 个地块 -> 索引图 %dx%d\n", drawn, W, H);
+    *out = std::move(img);
+    *out_w = W;
+    *out_h = H;
+    return true;
+}
+
 void Upload_Current_Frame() {
-    const ShpFrameInfo& f = g_app.shp.Frame_Info(g_app.frame);
     g_app.r.Set_Palette(g_app_frame_palette);
+    if (!g_app.terrain.empty()) {
+        g_app.sprite = g_app.r.Upload_Sprite(g_app.terrain.data(),
+                                             g_app.terrain_w, g_app.terrain_h);
+        return;
+    }
+    const ShpFrameInfo& f = g_app.shp.Frame_Info(g_app.frame);
     g_app.sprite = g_app.r.Upload_Sprite(g_app.shp.Frame_Pixels(g_app.frame).data(), f.w, f.h);
 }
 
@@ -270,6 +413,73 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     }
     std::printf("MIX  %s  条目=%d\n", mix_path, g_app.mix.Count());
 
+    // ---- TMP 地形模式：--tmp <0x归档ID> ----
+    // 归档 ID 必须是明文 MIX（地形素材全是这一类），pal_name 缺省用温带调色板。
+    // 形如：ra2view.exe <mix> --tmp 0x0F5D1D99 [TEMPERAT.PAL] [--grid15]
+    // 地形模式的两个位置参数跟在 --tmp 后面，和 SHP 模式（第 2/3 个位置参数）
+    // 是两套，别混用 —— 否则 "--tmp" 会被当成 SHP 名。
+    int tmp_arch = -1;
+    int grid = 15;
+    bool random_pick = false;
+    const char* tmp_pal_name = "TEMPERAT.PAL";
+    for (int i = 0; i < kMaxArgs; ++i) {
+        if (std::strcmp(args[i], "--tmp") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
+            tmp_arch = static_cast<int>(std::strtoul(args[i + 1], nullptr, 16));
+            if (i + 2 < kMaxArgs && args[i + 2][0] && args[i + 2][0] != '-') {
+                tmp_pal_name = args[i + 2];
+            }
+        } else if (std::strcmp(args[i], "--grid") == 0 && i + 1 < kMaxArgs && args[i + 1][0]) {
+            grid = std::atoi(args[i + 1]);       // --grid 16
+        } else if (std::strncmp(args[i], "--grid", 6) == 0 && args[i][6]) {
+            grid = std::atoi(args[i] + 6);       // --grid16（两种写法都收）
+        } else if (std::strcmp(args[i], "--random") == 0) {
+            random_pick = true;
+        }
+    }
+    if (grid < 1 || grid > 64) {
+        grid = 15;
+    }
+    if (tmp_arch >= 0) {
+        std::printf("[2] TMP 地形模式 归档=0x%08X 网格=%d\n", tmp_arch, grid);
+        const MixEntry* arch = g_app.mix.Find_By_ID(static_cast<uint32_t>(tmp_arch));
+        if (arch == nullptr) {
+            std::printf("[x] 顶层没有 0x%08X\n", tmp_arch);
+            return 1;
+        }
+        auto sub = g_app.mix.Open_Sub(*arch);
+        if (!sub) {
+            std::printf("[x] 0x%08X 不是 MIX\n", tmp_arch);
+            return 1;
+        }
+        std::printf("归档 flags=%s 条目=%d\n",
+                    MixFileClass::Describe_Flags(sub->Flags()).c_str(), sub->Count());
+
+        Palette pal;
+        const char* pn = tmp_pal_name;
+        std::vector<uint8_t> pd = g_app.mix.Read_Deep(pn);
+        if (pd.size() != 768 || !pal.Load(pd.data(), pd.size())) {
+            std::printf("[x] 调色板取不到: %s\n", pn);
+            return 1;
+        }
+        g_app_frame_palette = pal;
+        g_app.pal_name = pn;
+        std::printf("调色板 %s\n", pn);
+
+        TerrainTileSet set;
+        if (!Load_Terrain_Tiles(*sub, &set)) {
+            std::printf("[x] 归档里没有可用的 1x1 地形模板\n");
+            return 1;
+        }
+        std::printf("可用地形模板 %zu 个，每格 %dx%d\n", set.tiles.size(),
+                    set.cell_w, set.cell_h);
+        if (!Build_Terrain_Image(set, grid, random_pick, &g_app.terrain,
+                                 &g_app.terrain_w, &g_app.terrain_h)) {
+            std::printf("[x] 地形合成失败\n");
+            return 1;
+        }
+        std::printf("SHP  (地形模式，跳过)\n");
+    } else {
+
     std::printf("[2] 载入素材\n");
     int best_i = -1;
     if (!Load_Asset(g_app.mix, shp_name, pal_name, &g_app.shp, &g_app.pal_name, &best_i)) {
@@ -286,6 +496,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         const ShpFrameInfo& f = g_app.shp.Frame_Info(g_app.frame);
         std::printf("渲染帧=%d  %dx%d flags=0x%X\n", g_app.frame, f.w, f.h, f.flags);
     }
+    }   // end else（SHP 模式）
 
     // ---- 离屏模式：不开窗口，渲一帧回读就退出 ----
     if (offscreen) {

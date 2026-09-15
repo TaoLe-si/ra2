@@ -105,25 +105,27 @@ private:
 // ---------------------------------------------------------------------------
 // MIX 是 Westwood 的归档格式。结构（无文件名段的最简形态）：
 //
-//   [0x00] DWORD  标志：0 表示"无 ID / 无校验"的经典形态
-//   [0x04] WORD   文件数（大端）
-//   [0x06] DWORD  数据区总长（大端）
-//   [0x0C] 索引：文件数 * 12 字节，每项 = {DWORD id, DWORD offset, DWORD size}
-//                 id 是文件名经 CRC 计算出的 32 位标识
-//   数据区紧跟索引之后
+// 实测（2026-09-15，tools/mixdump.py）只有两种形态，全**小端**：
 //
-// 【已实测的形态】（2026-09-15，见 tools/mixdump.py）
-//   flags=0x00020000 / 0x00030000 的加密 MIX：
-//     [0x00] DWORD flags（小端，明文）
+// (A) 加密 MIX —— flags 带 0x00020000（ra2.mix / ra2md.mix / expandmd01.mix 等）
+//     [0x00] DWORD flags（明文）
 //     [0x04] 80 字节 RSA 加密的密钥源
 //     [0x54] Blowfish 加密的索引：u16 文件数 + u32 数据区长度 + 文件数×12 条目
 //           索引尾部补零到 8 字节对齐
 //     数据区紧跟其后；若带 kChecksum，文件末尾另有 20 字节 SHA1
-//   解密流程在 src/io/MixCrypto.cpp（Blowfish + 320 位 RSA + Westwood CRC）。
+//     解密流程见 src/io/MixCrypto.cpp（Blowfish + 320 位 RSA + Westwood CRC）。
 //
-// 注意：flags 是小端，但索引里的条目字段（id/offset/size）是**小端**，
-// 而"文件数/数据区长度"在解密后按 u16/u32 小端读 —— 与旧的"全大端"注释相反，
-// 那是照抄资料抄错的，实测已推翻。
+// (B) 明文 MIX —— flags 不带 0x00020000（**地形归档全是这一种**）
+//     [0x00] DWORD flags  （可能是 0，也可能是 0x00010000 带 SHA1）
+//     [0x04] WORD  文件数
+//     [0x06] DWORD 数据区长度
+//     [0x0A] 文件数 × 12 字节索引 { id, offset, size }
+//     数据区偏移 = 10 + 文件数*12
+//     验算：ISOGEN.MIX 10 + 24*12 + 11991728 + 20 = 11992046 ✓
+//     早期只实现了 (A)，于是 ra2.mix 里 13 个 10~35MB 的地形包全被误判成 SHP。
+//
+// 注意：旧注释写的是"全大端"，那是照抄资料抄错的，实测已推翻 ——
+// 两种形态的头部与索引字段一律小端。
 
 struct MixEntry {
     uint32_t id = 0;    ///< 文件名 CRC（Westwood_CRC）
@@ -212,7 +214,11 @@ public:
 
 private:
     /// 打开的核心：给定一段"至少含头部"的字节，解出索引。
+    /// 按 flags 是否带 kEncrypted 分派到明文/加密两条路径。
     bool Parse_Header();
+
+    /// 明文 MIX 索引解析（head 至少 10 字节）。见 FileSystem.cpp 里的布局说明。
+    bool Parse_Plain(const uint8_t* head);
 
     std::string path_;
     std::vector<MixEntry> entries_;

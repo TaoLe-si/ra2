@@ -34,6 +34,7 @@ CORE_SOURCES = [
     "src/io/MixCrypto.cpp",
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
+    "src/gfx/TmpFile.cpp",
     "src/core/Subsystems.cpp",
 ]
 
@@ -44,6 +45,7 @@ VIEW_SOURCES = [
     "src/io/MixCrypto.cpp",
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
+    "src/gfx/TmpFile.cpp",
     "src/gfx/dx12/Dx12Renderer.cpp",
 ]
 

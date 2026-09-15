@@ -191,6 +191,59 @@ constexpr uint64_t kMixKeySource = 80;   // 头部里 RSA 加密的密钥源长�
 constexpr uint64_t kMixBody = 4 + kMixKeySource;   // 84：索引起点
 }  // namespace
 
+static inline uint16_t RdU16(const uint8_t* p) {
+    return static_cast<uint16_t>(p[0] | (static_cast<uint16_t>(p[1]) << 8));
+}
+static inline uint32_t RdU32(const uint8_t* p) {
+    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+           (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+}
+
+/// 明文 MIX（flags 不带 kEncrypted）。
+///
+/// 布局（三个样本严格验算，不是猜的）：
+///     +0  u32 flags        （0x00010000 = 尾部有 20 字节 SHA1）
+///     +4  u16 count
+///     +6  u32 body_size
+///     +10 count × 12 字节索引 { id, offset, size }   —— 全小端
+/// 验算（data_start + body_size 应等于文件大小）：
+///     ISOGEN.MIX   10 + 24*12 + 11991728 + 20 = 11992046 ✓
+///     ru2 大包     10 + 1257*12 + 31796288 + 20 = 31811402 ✓
+///     0x92144015   10 + 3*12 + 10784 + 20 = 10850 ✓
+///
+/// **地形归档（ISOGEN.MIX / GENERIC.MIX / TEMPERAT 等）全是这一种。**
+/// 之前只实现了加密路径，导致 ra2.mix 里 13 个 10~35MB 的条目被误判成 SHP，
+/// 整个地形素材不可见。
+bool MixFileClass::Parse_Plain(const uint8_t* head) {
+    const uint32_t count = RdU16(head + 4);
+    data_size_ = RdU32(head + 6);
+    if (count == 0 || count > 20000u) {
+        return false;
+    }
+    const uint64_t idx_len = static_cast<uint64_t>(count) * 12;
+    data_start_ = 10 + idx_len;
+    // 自洽检查：数据区必须装得下。少了这一条，普通文件（尤其大 SHP）会被当成
+    // 明文 MIX，Read_Deep 里层层递归直接指数爆炸。允许 64 字节对齐/校验和冗余。
+    if (file_size_ > 0 && data_start_ + data_size_ > file_size_ + 64) {
+        return false;
+    }
+    std::vector<uint8_t> raw(static_cast<size_t>(idx_len));
+    if (!Read_At(10, raw.data(), static_cast<size_t>(idx_len))) {
+        return false;
+    }
+    entries_.clear();
+    entries_.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint8_t* e = raw.data() + i * 12;
+        MixEntry m;
+        m.id = RdU32(e);
+        m.offset = RdU32(e + 4);
+        m.size = RdU32(e + 8);
+        entries_.push_back(m);
+    }
+    return !entries_.empty();
+}
+
 bool MixFileClass::Parse_Header() {
     // 先读 flags + 8 字节密文索引头（够解出文件数）。
     uint8_t head[kMixBody + 8];
@@ -200,23 +253,22 @@ bool MixFileClass::Parse_Header() {
     flags_ = static_cast<uint32_t>(head[0]) | (static_cast<uint32_t>(head[1]) << 8) |
              (static_cast<uint32_t>(head[2]) << 16) | (static_cast<uint32_t>(head[3]) << 24);
 
-    std::vector<uint8_t> key;
-    if (flags_ & kEncrypted) {
-        key = Derive_Mix_Key(head);
-        if (key.empty()) {
-            return false;   // 密钥源解不开：不是真的加密 MIX
-        }
-    } else {
-        // 未加密（含"只有校验和"）的样本目前没有，先不支持，别猜。
-        return false;
+    if (!(flags_ & kEncrypted)) {
+        // 明文 MIX：头部只有 10 字节，索引是小端明文。
+        // 注意 flags 的高位也可能是 0x00010000（带 SHA1），仍属明文路径。
+        return Parse_Plain(head);
+    }
+
+    std::vector<uint8_t> key = Derive_Mix_Key(head);
+    if (key.empty()) {
+        return false;   // 密钥源解不开：不是真的加密 MIX
     }
 
     Blowfish bf(key.data(), key.size());
     uint8_t plain[8];
     bf.Decrypt(head + kMixBody, plain, 8);
-    const uint32_t count = static_cast<uint32_t>(plain[0]) | (static_cast<uint32_t>(plain[1]) << 8);
-    data_size_ = static_cast<uint32_t>(plain[2]) | (static_cast<uint32_t>(plain[3]) << 8) |
-                 (static_cast<uint32_t>(plain[4]) << 16) | (static_cast<uint32_t>(plain[5]) << 24);
+    const uint32_t count = RdU16(plain);
+    data_size_ = RdU32(plain + 2);
     if (count == 0 || count > 200000u) {
         return false;       // 解出来是噪声
     }
@@ -241,12 +293,9 @@ bool MixFileClass::Parse_Header() {
     for (uint32_t i = 0; i < count; ++i) {
         const uint8_t* e = raw.data() + 6 + i * 12;
         MixEntry m;
-        m.id = static_cast<uint32_t>(e[0]) | (static_cast<uint32_t>(e[1]) << 8) |
-               (static_cast<uint32_t>(e[2]) << 16) | (static_cast<uint32_t>(e[3]) << 24);
-        m.offset = static_cast<uint32_t>(e[4]) | (static_cast<uint32_t>(e[5]) << 8) |
-                   (static_cast<uint32_t>(e[6]) << 16) | (static_cast<uint32_t>(e[7]) << 24);
-        m.size = static_cast<uint32_t>(e[8]) | (static_cast<uint32_t>(e[9]) << 8) |
-                 (static_cast<uint32_t>(e[10]) << 16) | (static_cast<uint32_t>(e[11]) << 24);
+        m.id = RdU32(e);
+        m.offset = RdU32(e + 4);
+        m.size = RdU32(e + 8);
         entries_.push_back(m);
     }
     return !entries_.empty();
