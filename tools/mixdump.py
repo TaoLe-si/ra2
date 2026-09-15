@@ -299,6 +299,27 @@ class MixFile:
         return self._at(self.data_start + off, n)
 
 
+def index_fits(entries, data_size: int, slack: int = 64) -> bool:
+    """索引里的每个条目都必须落在数据区之内。
+
+    这是把"假嵌套 MIX"挡在门外的关键一道。实测 ra2.mix 里有个 101MB 的条目
+    （id=0x08050506），它的前 4 字节碰巧解出 flags=0x0605050A、count=600、
+    data_size=1 —— 光看头部完全像明文 MIX。C++ 侧 Open_Nested 里有一道
+    Validate_Index 把它拒了，Python 侧原先没有，于是它被当成归档打开，
+    里面 600 个垃圾条目全落在"数据区"之外，再读数据时读到的其实是文件里
+    毫不相干的字节。两边的叶子集合对不上就是这么来的。
+
+    允许 slack 是因为明文 MIX 尾部可能有 SHA1 / 对齐全零。
+    """
+    if data_size <= 0 and not entries:
+        return True
+    limit = data_size + slack
+    for _id, off, size in entries:
+        if off > limit or off + size > limit:
+            return False
+    return True
+
+
 def open_nested(m: MixFile, off: int, size: int, limit: int = 4 << 20) -> MixFile | None:
     """尝试把 m 里 off 处的条目当成嵌套 MIX 打开。不是 MIX 就返回 None。"""
     blob = nested_blob(m, off, size, limit)
@@ -323,9 +344,10 @@ def nested_blob(m: MixFile, off: int, size: int, limit: int = 4 << 20) -> bytes 
         # ---- 加密 MIX ----
         try:
             bf = Blowfish(derive_blowfish_key(first))
-            cnt, dsz = struct.unpack_from("<HI", bf.decrypt(first[84:92]), 0)
+            head = bf.decrypt(first[84:92])
         except Exception:
             return None                  # RSA 分组 >= 模数，或解出来是噪声
+        cnt, dsz = struct.unpack_from("<HI", head, 0)
         if cnt == 0 or cnt > 20000 or dsz > size:
             return None
         enc_len = (6 + cnt * 12 + 7) // 8 * 8
@@ -333,6 +355,12 @@ def nested_blob(m: MixFile, off: int, size: int, limit: int = 4 << 20) -> bytes 
             return None
         rest = m.read(off + 92, enc_len - 8)
         if len(rest) < enc_len - 8:
+            return None
+        # 顺手把索引也解出来验一遍：条目必须落在数据区内。
+        # 随机字节经 Blowfish 解密也可能碰出个合法 count/dsz，光看头部不够。
+        plain = bf.decrypt(first[84:92] + rest)
+        entries_co = [struct.unpack_from("<III", plain, 6 + i * 12) for i in range(cnt)]
+        if not index_fits(entries_co, dsz):
             return None
         return first + rest
 
@@ -350,6 +378,9 @@ def nested_blob(m: MixFile, off: int, size: int, limit: int = 4 << 20) -> bytes 
         return None
     body = m.read(off, 10 + idx_len)
     if len(body) < 10 + idx_len:
+        return None
+    entries = [struct.unpack_from("<III", body, 10 + i * 12) for i in range(cnt)]
+    if not index_fits(entries, dsz):
         return None
     return body
 
@@ -379,8 +410,15 @@ def classify(head: bytes, size: int) -> str:
 
 
 def iter_leaves(m: MixFile, depth: int = 0, max_depth: int = 4):
-    """递归产出 (所在归档, off, size, 深度)。嵌套 MIX 会被继续剥开。"""
+    """递归产出 (所在归档, off, size, 深度)。嵌套 MIX 会被继续剥开。
+
+    off+size 越界的条目直接跳过 —— 这种条目的元数据本身就是错的，
+    读出来的是文件里毫不相干的字节。C++ 侧 Read_Entry 遇到越界会返回空，
+    这里必须一致，否则两边遍历出的叶子集合对不上（实测踩过）。
+    """
     for h, off, size in m.entries:
+        if off + size > m.data_size:
+            continue
         sub = open_nested(m, off, size) if depth < max_depth else None
         if sub is None:
             yield m, h, off, size, depth

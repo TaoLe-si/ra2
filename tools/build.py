@@ -35,6 +35,7 @@ CORE_SOURCES = [
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
     "src/gfx/TmpFile.cpp",
+    "src/gfx/PcxFile.cpp",
     "src/data/Ini.cpp",
     "src/core/Subsystems.cpp",
 ]
@@ -47,6 +48,7 @@ VIEW_SOURCES = [
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
     "src/gfx/TmpFile.cpp",
+    "src/gfx/PcxFile.cpp",
     "src/gfx/dx12/Dx12Renderer.cpp",
 ]
 

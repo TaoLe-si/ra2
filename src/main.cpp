@@ -7,9 +7,13 @@
 // 运行： ./build/ra2core
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <functional>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "ai/PathFinder.h"
@@ -18,6 +22,7 @@
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/Palette.h"
+#include "gfx/PcxFile.h"
 #include "gfx/TmpFile.h"
 #include "io/FileSystem.h"
 #include "io/MixCrypto.h"
@@ -354,6 +359,112 @@ static int Hash_Tmp(const char* path, uint32_t arch_id, uint32_t pal_id, bool wi
     return 0;
 }
 
+// ---- PCX ----
+//
+// 递归剥开所有嵌套 MIX，把每个 PCX 解成 RGBA 后打哈希。
+// tools/pcxhash.py 用参考实现算同一张表，diff 为空才算过。
+//
+// 为什么用哈希而不是逐像素对账：ra2.mix 里 161 个 PCX 合计 500 多万像素，
+// 逐像素输出体量太大；哈希能精确到"哪一张错了"，又不用搬海量数据。
+
+static void Fnv_Bytes(uint32_t* h, const uint8_t* p, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        *h = (*h ^ p[i]) * 16777619u;
+    }
+}
+
+static int Hash_Pcx(const char* path, int max_depth = 4) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    std::printf("# mix=%s\n", path);
+
+    int seq = 0, ok = 0, bad = 0;
+    // 和 tools/pcxdec.py 的 iter_leaves 对齐：只有还没到深度上限时才继续下钻。
+    std::function<void(const MixFileClass&, int)> walk = [&](const MixFileClass& m,
+                                                             int depth) {
+        for (const MixEntry& e : m.Entries()) {
+            if (depth < max_depth) {
+                auto sub = m.Open_Sub(e);
+                if (sub) {
+                    walk(*sub, depth + 1);
+                    continue;
+                }
+            }
+            const std::vector<uint8_t> d = m.Read_Entry(e);
+            // 先用最省字节的判据筛：0A 05 魔数。真正是否成立交给 Load() 判定
+            // （编码字节必须是 1、数据区必须刚好吃完），所以 0x08050506 那种
+            // 首字节碰巧是 0A 的 101MB 条目不会被误收。
+            if (d.size() < 128 || d[0] != 0x0A || d[1] != 0x05) {
+                continue;
+            }
+            PcxFile p;
+            if (!p.Load(d.data(), d.size())) {
+                ++bad;
+                std::printf("BAD %d 0x%08X %zu\n", seq++, e.id, d.size());
+                continue;
+            }
+            const std::vector<uint8_t> rgba = p.To_RGBA();
+            uint32_t h = 2166136261u;
+            const uint32_t hdr[3] = {static_cast<uint32_t>(p.Width()),
+                                     static_cast<uint32_t>(p.Height()),
+                                     static_cast<uint32_t>(p.Planes())};
+            Fnv_Bytes(&h, reinterpret_cast<const uint8_t*>(hdr), sizeof(hdr));
+            Fnv_Bytes(&h, rgba.data(), rgba.size());
+            std::printf("%d 0x%08X %dx%d p%d %zu 0x%08X\n", seq++, e.id, p.Width(),
+                        p.Height(), p.Planes(), rgba.size(), h);
+            ++ok;
+        }
+    };
+    walk(mix, 0);
+    std::printf("# 共 %d 个 PCX（解码失败 %d）\n", ok, bad);
+    return bad == 0 ? 0 : 1;
+}
+
+// 把指定 PCX 解出来写成 24 位 BMP，用来肉眼验收（尤其是 24 位的 R/G/B 平面顺序）。
+static int Verify_Pcx(const char* path, uint32_t id) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("FAIL MIX 打不开 %s\n", path);
+        return 1;
+    }
+    const std::vector<uint8_t> d = mix.Read_Deep_By_ID(id);
+    if (d.empty()) {
+        std::printf("FAIL 递归找不到 0x%08X\n", id);
+        return 1;
+    }
+    PcxFile p;
+    if (!p.Load(d.data(), d.size())) {
+        std::printf("FAIL 0x%08X 不是可解的 PCX（%zu 字节，头 %02X %02X）\n", id, d.size(),
+                    d[0], d[1]);
+        return 1;
+    }
+    const std::vector<uint8_t> rgba = p.To_RGBA();
+    std::vector<uint32_t> px(static_cast<size_t>(p.Width()) * p.Height());
+    for (size_t i = 0; i < px.size(); ++i) {
+        // Write_BMP 认的是"R 在低字节"的打包格式（见 Pack_RGBA 的约定）。
+        px[i] = static_cast<uint32_t>(rgba[i * 4 + 0]) |
+                (static_cast<uint32_t>(rgba[i * 4 + 1]) << 8) |
+                (static_cast<uint32_t>(rgba[i * 4 + 2]) << 16);
+    }
+    std::error_code ec;
+    std::filesystem::create_directories("build/pcx", ec);
+    char out[512];
+    std::snprintf(out, sizeof(out), "build/pcx/0x%08X_%dx%d_p%d.bmp", id, p.Width(),
+                  p.Height(), p.Planes());
+    if (!Write_BMP(out, px.data(), p.Width(), p.Height())) {
+        std::printf("FAIL 写不出 %s\n", out);
+        return 1;
+    }
+    std::printf("OK   0x%08X %dx%d planes=%d bpl=%d 内嵌调色板=%s\n", id, p.Width(),
+                p.Height(), p.Planes(), p.Bytes_Per_Line(),
+                p.Has_Embedded_Palette() ? "有" : "无");
+    std::printf("     已写出 %s\n", out);
+    return 0;
+}
+
 // INI 解析器的自检。用的样本是**从真实文件里剪出来的行**，
 // 每一条都对应一个实测确认过的方言特征 —— 改解析器时这里挂掉就说明改错了。
 //
@@ -552,6 +663,22 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Dump_Ini(argv[2]);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--pcxhash") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --pcxhash <顶层mix> [最大嵌套深度]\n");
+            return 1;
+        }
+        const int d = (argc > 3) ? std::atoi(argv[3]) : 4;
+        return Hash_Pcx(argv[2], d);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--pcx") == 0) {
+        if (argc < 4) {
+            std::printf("用法：ra2core --pcx <顶层mix> <0xPCX的CRC>\n");
+            return 1;
+        }
+        return Verify_Pcx(argv[2],
+                          static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
     }
     if (argc > 1 && std::strcmp(argv[1], "--tmphash") == 0) {
         if (argc < 4) {

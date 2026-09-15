@@ -54,7 +54,9 @@ Blitter 家族整体作废，不再还原。
 | **PAL 调色板** | ✅ | 768 字节，6→8 bit 用 `(v<<2)|(v>>4)`，索引 0 透明 |
 | **TMP 等距地形** | ✅ | 660 个模板 / 2626 个 cell 全量对账通过；见 commit 44ac040 |
 | **INI 解析** | ✅ | 4 个真实 INI、63790 行，与参考实现逐行一致；见 `src/data/Ini.{h,cpp}` |
-| PCX / VXL / HVA | ⬜ | 未开始 |
+| **PCX 解码** | ✅ | 255 个样本全解通；ra2.mix 的 160 个逐条 RGBA 哈希与参考实现 0 差异 |
+| **HVA 体素动画** | 🟡 | 格式已破（见下），未落 C++ |
+| **VXL 体素** | 🟡 | 头部字段已定，body 区编码未破，需反汇编加载器 |
 | **DX12 渲染器** | 🟡 | 设备/交换链/离屏/调色板纹理/精灵上传已通；**地形已出画面**；批渲染未做 |
 | 游戏逻辑 | ⬜ | 未开始 |
 
@@ -82,6 +84,14 @@ OK   742958 字节 -> 1477 段 / 23379 条目 / 畸形行 2
 ra2view.exe D:\westwood\RA2YR\ra2.mix --tmp 0x0F5D1D99 --offscreen
 OK   可用地形模板 327 个，每格 60x30；拼了 225 个地块 -> 索引图 900x570
 OK   离屏渲染 1024x768 -> build/frame.raw
+
+ra2core.exe --pcxhash D:\westwood\RA2YR\ra2.mix
+# 与 tools/pcxhash.py 的输出 diff 为空
+OK   160 个 PCX，解码失败 0
+
+ra2core.exe --pcx D:\westwood\RA2YR\ra2.mix 0x9B570683
+OK   0x9B570683 800x600 planes=3 bpl=800 内嵌调色板=无
+     # 写出 build/pcx/0x9B570683_800x600_p3.bmp，肉眼确认是 YR 加载画面（鹰徽 + 闪电）
 ```
 
 ---
@@ -98,7 +108,60 @@ OK   离屏渲染 1024x768 -> build/frame.raw
 | **PAL 调色板** | `src/gfx/Palette.cpp` | 768 字节 → 256 色，第 0 色透明 | ✅ |
 | **TMP 地形** | `src/gfx/TmpFile.cpp` | 2323 个模板与参考实现像素一致 | ✅ |
 | **INI 解析** | `src/data/Ini.cpp` | 4 个真实 INI 逐行对账一致 | ✅ |
-| PCX / VXL / HVA | `src/gfx/` | 能取出像素/体素 | ⬜ |
+| **PCX 解码** | `src/gfx/PcxFile.cpp` | 160 个 PCX 的 RGBA 哈希与参考实现 0 差异 | ✅ |
+| **HVA 体素动画** | `src/gfx/HvaFile.cpp` | 帧×肢体矩阵与文件长度严丝合缝 | 🟡 格式已破 |
+| **VXL 体素** | `src/gfx/VxlFile.cpp` | 能取出体素坐标+色号 | 🟡 头部已破，body 未破 |
+| 文件名反查补齐 | `db/mix-names.txt` | 命中率从 45% 提到 80%+ | 🟡 |
+
+### P0 剩余：VXL / HVA 的已知线索（2026-09-15）
+
+素材全在 `ra2.mix` 的顶层子归档 **0xA8548FD9**（607 条目 / 34.8MB）里：
+184 个 VXL、183 个 HVA、148 个 PCX、46 个 SHP、11 个 INI、4 个 PAL。
+另外 ra2md.mix 里有 37 个 VXL。**RA2 确实用体素**：`artmd.ini` 里
+`Voxel=yes` 出现 92 次（Rhino `[HTNK]`、Apocalypse `[MTNK]`、Tesla `[TTNK]`、
+`[HARV]`/`[CMIN]` 采矿车……都是体素）。
+
+**HVA 已破**（无魔数，游戏是按 `名字 + ".HVA"` 拼文件名去查的；
+`gamemd.exe` 里 `0x004268E4` 处 `".HVA"` 和 `"Failed to create VoxLib!"` 相邻）：
+
+```
++0    16  char[16]   编译期残留的源文件路径（"N:\RA2\ASSETS\C\0" 之类，已截断）
++16    4  uint32     FrameCount
++20    4  uint32     LimbCount
++24   16*LimbCount   char[16] 每根肢体名（"BODY" / "TURRET" / "DUMMY01" …）
++..   48*Frame*Limb  float[12]  每帧每肢体的 3×4 变换矩阵
+文件长度 = 24 + 16*L + 48*F*L
+```
+实测 ra2.mix：183 个候选**全部**精确吻合该算术，0 例外。
+解出的矩阵是"单位旋转 + 平移"，例如 RAD03：translate(-1.352, -3.202, 186.803)。
+分布：180 个是 (1 帧, 1 肢)；另有 (17,13)、(2,3)、(1,2) 各 1 个。
+坑：有 4 个 SHP 因为巧合也能解出"合法"的 F/L，必须靠 `48*F*L` 算术拦掉。
+
+**VXL 头部已破**（`+0` 16 字节 `"Voxel Animation"`，注意这个串**不在 exe 里**，
+说明游戏不比较魔数）：
+
+```
++16  4  uint32  Unused（恒为 1）
++20  4  uint32  NumLimbs
++24  4  uint32  NumLimbFrames
++28  4  uint32  BodySize
++32  4  uint32  LimbSize（只有一个肢体时是常量 0x1F10=7952，>=2 时是 0xCDCDCDCD 类垃圾）
++36  .. BodySize 字节的 body 段
+```
+
+**关键不变量**（184 个 VXL 全部精确成立，0 例外）：
+`size - BodySize = 802 + 120 * NumLimbs`
+（1 肢 → 922，2 肢 → 1042，3 肢 → 1162，13 肢 → 2362）
+
+但 `BodySize + LimbSize + 36 != size`，所以 `LimbSize` 不是"每肢 N 字节"的意思。
+body 段（从 +36 开始）的字节是 `00 ab 00 ab 00 ab ab 00 ab 00 57 ff 57 ff ff 57 …`
+这样的两字节交替模式，**不是朴素的 x/y/z/color 四元组**；
+文件末尾 64 字节是浮点矩阵（可见 `00 00 80 3f` = 1.0f）。结论：body 段有编码，
+**下一步必须反汇编 `gamemd.exe` 里读 `.VXL` 的加载器**，靠猜字节划不来。
+
+**文件名反查的增益有限但有用**：VXL/HVA 无魔数，只能靠
+`UnitClass"的 Image 名 + ".VXL"/".HVA"` → Westwood CRC 查表。所以接下来
+应当把 `db/mix-names.txt` 里 92 个 `Voxel=yes` 的名字全部算 CRC 存成表。
 | 文件名反查补齐 | `db/mix-names.txt` | 命中率从 45% 提到 80%+ | 🟡 |
 
 **P0 曾经的关键卡点：SHP flags=0x3。** 已解决 —— 结论是它和 0x02 共用同一套
@@ -115,6 +178,19 @@ RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必�
 - INI 的编号列表**不从 0 开始**（[InfantryTypes] 是 1..65，[Animations] 还跳号），
   按"0,1,2 一直到缺号"读会一个都读不到。
 - 原始 INI 里有 6 行少写了等号（`842-GAWETH_ED` 之类），解析器必须跳过而不是报错。
+- **PCX 的内嵌调色板是标准 8 位**（实测 136 个样本最大分量 = 255），
+  不是 `.PAL` 那种 0..63 的 6 位值。套 `Palette::Load` 的 `(v<<2)|(v>>4)` 展开
+  会让整幅图暗一截、并把 255 压成 252 —— 这正是 `.PAL` 那条规则**不能无脑复用**的例子。
+- **24 位 PCX 是"按行交织"存 R/G/B 三条带**，不是"整幅 R 段 + 整幅 G 段"。
+  写错的话颜色会整体偏，但尺寸、行数全对，靠结构检查抓不出来 ——
+  得真把图渲染出来看一眼才对得上。
+- **MIX 里有个 101MB 的假条目**（id=0x08050506，在 ra2.mix 深度 2）：
+  前 4 字节碰巧解出 `flags=0x0605050A / count=600 / data_size=1`，
+  光看头部完全像明文 MIX。C++ 侧 `Open_Nested` 里有 `Validate_Index` 拦住了，
+  Python 侧原先没有，于是它被当成归档打开、600 个垃圾条目全在"数据区"外，
+  再读数据读到的其实是文件里毫不相干的字节 —— 两边遍历出的叶子集合对不上。
+  已在 `tools/mixdump.py` 补 `index_fits()`（索引必须落在数据区内）+
+  `iter_leaves()` 跳过 `off+size > data_size` 的条目。
 
 ### P1 — 渲染层：让第一个 RA2 精灵出现在屏幕上
 
@@ -213,5 +289,9 @@ AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 Ty
 
 ## 5. 当前进度
 
-- **P0 进行中**：MIX 解密 ✅、CRC ✅、嵌套 ✅；SHP/PAL/INI 待做。
-- 下一个里程碑：**P0 完成** —— `ra2core` 能解出一个 SHP 的全部帧并写出 PNG。
+- **P0 已完成 7/9**：MIX（加密 + 明文）✅、嵌套 ✅、CRC ✅、文件名反查 🟡、
+  SHP ✅、PAL ✅、TMP ✅、INI ✅、PCX ✅。
+- **P0 剩余**：VXL / HVA（HVA 格式已破、VXL 头部已破，body 编码要反汇编）。
+- **P1 部分完成**：DX12 设备/交换链/离屏/调色板纹理/地形渲染 ✅，精灵批渲染 ⬜。
+- 下一个里程碑：**VXL 出体素** —— `ra2core --vxl <mix> <0xID>` 打印体素包围盒与体素数，
+  且 184 个 VXL 全量自洽；再接上 HVA 变换在 DX12 里画出第一个 Rhino。
