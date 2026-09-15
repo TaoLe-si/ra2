@@ -12,6 +12,7 @@
 
 #include "ai/PathFinder.h"
 #include "engine/FrameQueue.h"
+#include "io/FileSystem.h"
 #include "map/Map.h"
 #include "threading/TaskSystem.h"
 
@@ -36,7 +37,30 @@ bool SameResult(const PathResult& a, const PathResult& b) {
 
 }  // namespace
 
-int main() {
+// 可选：传入真实 MIX 文件路径，就顺带验证一下 MIX 格式解析是否正确。
+// 例：  ra2core.exe D:\westwood\RA2YR\ra2md.mix
+// 判据：条目数 > 0，且每个条目的 [offset, offset+size) 都落在数据区内。
+// 索引若不自洽，十有八九是大端/CRC/头部长度三处有地方理解错了。
+static int Verify_Mix(const char* path) {
+    MixFileClass mix;
+    if (!mix.Open(path)) {
+        std::printf("MIX  %s：头部标志 = %s —— 索引为密文，需先还原 Blowfish 会话密钥\n",
+                    path, MixFileClass::Describe_Flags(mix.Flags()).c_str());
+        return 0;
+    }
+    int bad = 0;
+    const bool ok = mix.Validate_Index(&bad);
+    std::printf("MIX  %s：条目 %d，索引 CRC = 0x%08X，%s（越界条目 %d）\n",
+                path, mix.Count(), mix.Compute_CRC(),
+                ok ? "索引自洽" : "索引不自洽", bad);
+    return ok ? 0 : 1;
+}
+
+int main(int argc, char** argv) {
+    if (argc > 1) {
+        return Verify_Mix(argv[1]);  // 只做 MIX 校验，不跑下面的基准
+    }
+
     // ---- 地图 ----
     MapClass map;
     constexpr int kW = 128;

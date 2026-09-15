@@ -18,7 +18,8 @@
 | 类名 | **988 个真实类名**（来自 RTTI，非猜测），其中非模板类 328 个 |
 | 原始源文件 | **58 个**（来自 assert 的 `__FILE__` 字符串），构建机路径 `D:\ra2mdpost\` |
 | 关键子系统 | 主循环、锁步帧队列、寻路、地图、网络包泵均已定位到具体 VA |
-| C++ 骨架 | 可编译、可运行，寻路并行实测 **3.85x** 且结果与串行逐位一致 |
+| C++ 骨架 | 可编译、可运行，寻路并行实测 **3.5~4.0x** 且结果与串行逐位一致 |
+| 已还原模块 | 对象体系、地图/格子、两级寻路、锁步帧队列、主循环、文件系统(MIX)、INI、Locomotor、战斗、阵营/经济、AI 小队与触发、界面、网络接口 |
 
 ---
 
@@ -45,11 +46,12 @@ docs/            逆向笔记
 
 src/             C++ 还原代码
   core/     Types.h / Abstract.h        基础类型与对象体系
+            Subsystems.h/.cpp           Locomotor/战斗/阵营/AI脚本/INI/界面/网络
   map/      Cell.h / Map.h/.cpp         格子与地图
-  object/   （见 core/Abstract.h）       Techno/Foot/Unit/Infantry/Aircraft/Building
   ai/       PathFinder.h/.cpp           两级寻路（含并行实现）
   engine/   FrameQueue.h/.cpp           锁步帧队列
             GameLoop.h/.cpp             主循环（分阶段）
+  io/       FileSystem.h/.cpp           FileClass 家族 / MIX 打包 / Pipe-Straw
   threading/ TaskSystem.h/.cpp          线程池（新增，原引擎没有）
 
 tests/           预留
@@ -108,8 +110,13 @@ OK  锁步帧队列行为正确，帧 CRC = 0x15307EAB
 3. **锁步模型**：15 FPS 定步长，每帧等齐所有玩家输入才推进，靠 CRC 检测失步。
    多核改造只能在一帧内部做，且不得引入顺序相关的归约。
 4. **寻路是最佳突破口**：两级（分层 + 常规 A*），请求之间完全独立。
-   实测并行 3.85x，但前提是**先消除每次寻路的缓冲区分配**——
+   实测并行 3.5~4.0x，但前提是**先消除每次寻路的缓冲区分配**——
    否则并行反而更慢（实测 0.89x）。
+5. **MIX 归档是加密的**：实测 `ra2md.mix` / `ra2.mix` / `expandmd01.mix`
+   头部标志 `0x00030000`（加密+校验和）、`MULTIMD.MIX` 为 `0x00020000`（加密）。
+   在 `MULTIMD.MIX` 上枚举所有候选头部偏移都找不到自洽的 (文件数, 数据区长度)，
+   说明**头部与索引整体是 Blowfish 密文**，必须先还原会话密钥才能读。
+   无加密的经典 MIX（标志 0）已完整支持。
 
 详见 `docs/binary-baseline.md` 与 `docs/multicore-plan.md`。
 

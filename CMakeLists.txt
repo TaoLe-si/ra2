@@ -13,6 +13,7 @@ find_package(Threads REQUIRED)
 add_executable(ra2core
     src/main.cpp
     src/map/Map.h
+    src/map/Map.cpp
     src/ai/PathFinder.cpp
     src/ai/PathFinder.h
     src/engine/FrameQueue.cpp
@@ -21,8 +22,12 @@ add_executable(ra2core
     src/engine/GameLoop.h
     src/threading/TaskSystem.cpp
     src/threading/TaskSystem.h
+    src/io/FileSystem.cpp
+    src/io/FileSystem.h
     src/core/Abstract.h
     src/core/Types.h
+    src/core/Subsystems.h
+    src/core/Subsystems.cpp
 )
 
 target_include_directories(ra2core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
