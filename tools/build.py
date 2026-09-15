@@ -42,7 +42,8 @@ CORE_SOURCES = [
     "src/gfx/VxlNormals.cpp",
     "src/gfx/VoxelLight.cpp",
     "src/gfx/RemapTable.cpp",
-    "src/gfx/ObjectSprite.cpp",
+    # ObjectSprite.cpp 不在这里：它要调 Dx12Renderer（体素烘焙 / 精灵上传），
+    # 而 ra2core 是零系统依赖的验证台，不连 d3d12。
     "src/map/TheaterFile.cpp",
     "src/map/MapFile.cpp",
     "src/map/MapRenderer.cpp",

@@ -23,9 +23,16 @@ namespace {
 
 constexpr int kMaxArgs = 32;
 
-int Run_Offscreen(ra2::GameShell& game, const char* out_path) {
+int Run_Offscreen(ra2::GameShell& game, const char* out_path, int warm_frames) {
     std::vector<uint8_t> rgba;
     int w = 0, h = 0;
+    // 精灵是"用到才烘"的，每帧只补几张（见 SpriteCache::Reset_Budget）。
+    // 只渲一帧的话画面上绝大多数单位还是占位色块，出不了能看的截图。
+    // 所以先空跑几帧把精灵补齐，再取帧。
+    for (int i = 0; i < warm_frames; ++i) {
+        game.Update(1.0f / 60.0f);
+        game.Render();
+    }
     if (!game.Offscreen_Frame(&rgba, &w, &h)) {
         std::printf("[x] 离屏取帧失败\n");
         return 1;
@@ -143,6 +150,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     std::string map_path;
     bool offscreen = false;
     bool selftest = false;
+    bool vxlgpu = false;
+    int warm_frames = 0;
     std::string out_path = "build/game.raw";
     for (int i = 0; i < argc; ++i) {
         if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < argc) {
@@ -152,10 +161,15 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         } else if (std::strcmp(args[i], "--selftest") == 0) {
             selftest = true;
             offscreen = true;
+        } else if (std::strcmp(args[i], "--vxlgpu") == 0) {
+            vxlgpu = true;
+            offscreen = true;
         } else if (std::strncmp(args[i], "--offscreen", 11) == 0) {
             offscreen = true;
         } else if (std::strcmp(args[i], "--out") == 0 && i + 1 < argc) {
             out_path = args[++i];
+        } else if (std::strcmp(args[i], "--frames") == 0 && i + 1 < argc) {
+            warm_frames = std::atoi(args[++i]);
         } else if (args[i][0] == '-') {
             // 未知开关，忽略
         } else {
@@ -181,11 +195,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             std::printf("[x] 载入失败: %s\n", err.c_str());
             return 1;
         }
+        if (vxlgpu) {
+            return game.Self_Test_Voxel_GPU() ? 0 : 1;
+        }
         if (selftest) {
             return game.Self_Test() ? 0 : 1;
         }
-        game.Update(1.0f / 60.0f);
-        return Run_Offscreen(game, out_path.c_str());
+        return Run_Offscreen(game, out_path.c_str(), warm_frames);
     }
 
     // ---- 窗口模式 ----

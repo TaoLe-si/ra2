@@ -1,7 +1,10 @@
 #include "gfx/VxlFile.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+
+#include "gfx/VxlNormals.h"
 
 namespace ra2 {
 namespace {
@@ -281,7 +284,8 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
                                 std::vector<uint8_t>* shade_out,
                                 const float* shadow_light, float ground_z,
                                 std::vector<uint8_t>* shadow_out,
-                                const float* model_xform) const {
+                                const float* model_xform, float* out_x0,
+                                float* out_y0, const float* bbox_override) const {
     if (indexed == nullptr || out_w == nullptr || out_h == nullptr || scale <= 0.0f) {
         return false;
     }
@@ -420,17 +424,24 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
         return false;
     }
     float x0 = pts[0].sx, x1 = pts[0].sx, y0 = pts[0].sy, y1 = pts[0].sy;
-    for (const Pt& p : pts) {
-        if (p.sx < x0) x0 = p.sx;
-        if (p.sx > x1) x1 = p.sx;
-        if (p.sy < y0) y0 = p.sy;
-        if (p.sy > y1) y1 = p.sy;
-        // 阴影落点在模型之外，不一起算进 bbox 就会被裁掉
-        if (shadow_light != nullptr) {
-            if (p.gx < x0) x0 = p.gx;
-            if (p.gx > x1) x1 = p.gx;
-            if (p.gy < y0) y0 = p.gy;
-            if (p.gy > y1) y1 = p.gy;
+    if (bbox_override != nullptr) {
+        x0 = bbox_override[0];
+        y0 = bbox_override[1];
+        x1 = bbox_override[2];
+        y1 = bbox_override[3];
+    } else {
+        for (const Pt& p : pts) {
+            if (p.sx < x0) x0 = p.sx;
+            if (p.sx > x1) x1 = p.sx;
+            if (p.sy < y0) y0 = p.sy;
+            if (p.sy > y1) y1 = p.sy;
+            // 阴影落点在模型之外，不一起算进 bbox 就会被裁掉
+            if (shadow_light != nullptr) {
+                if (p.gx < x0) x0 = p.gx;
+                if (p.gx > x1) x1 = p.gx;
+                if (p.gy < y0) y0 = p.gy;
+                if (p.gy > y1) y1 = p.gy;
+            }
         }
     }
     const int w = static_cast<int>((x1 - x0) * scale) + 2;
@@ -492,6 +503,128 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
     }
     *out_w = w;
     *out_h = h;
+    if (out_x0) *out_x0 = x0;
+    if (out_y0) *out_y0 = y0;
+    return true;
+}
+
+bool VxlFile::Build_GPU_Geom(const float* pose, const VxlAttach* attach,
+                             int attach_count, float yaw, VxlGpuGeom* out) const {
+    if (out == nullptr) {
+        return false;
+    }
+    if (attach_count < 0 || (attach_count > 0 && attach == nullptr)) {
+        return false;
+    }
+    out->voxels.clear();
+    out->limbs.clear();
+
+    // 主体 + 附加层（炮塔 / 炮管）。顺序与 Render_Isometric 一致：
+    // 主体在前、attach 依次在后，肢体矩阵里已经把 attach 变换乘进去了。
+    struct Src {
+        const VxlFile* f;
+        const float* pose;
+        const float* pre;
+    };
+    std::vector<Src> srcs;
+    srcs.push_back(Src{this, pose, nullptr});
+    for (int a = 0; a < attach_count; ++a) {
+        if (attach[a].file != nullptr) {
+            srcs.push_back(Src{attach[a].file, nullptr, attach[a].transform});
+        }
+    }
+
+    const float k = 0.70710678f;
+    const float yc = std::cos(yaw);
+    const float ys = std::sin(yaw);
+    float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+    float dmin = 1e30f, dmax = -1e30f;
+
+    std::vector<VxlVoxel> vox;
+    for (const Src& s : srcs) {
+        for (int l = 0; l < s.f->limb_count_; ++l) {
+            // 肢体下标要塞进 uint8，超过 255 根就没法打包了（实测最多 13 根）
+            if (out->limbs.size() >= 255) {
+                break;
+            }
+            const VxlLimbTailer& t = s.f->tailers_[static_cast<size_t>(l)];
+            float m[12];
+            if (s.pose != nullptr) {
+                for (int i = 0; i < 12; ++i) {
+                    m[i] = s.pose[static_cast<size_t>(l) * 12 + i];
+                }
+                const float d = (t.det != 0.0f) ? t.det : 1.0f;
+                m[3] *= d;
+                m[7] *= d;
+                m[11] *= d;
+            } else {
+                std::memcpy(m, t.transform, sizeof(float) * 12);
+            }
+            if (s.pre != nullptr) {
+                float mm[12];
+                Mat34_Mul(s.pre, m, mm);
+                std::memcpy(m, mm, sizeof(mm));
+            }
+
+            // 画布范围 / 深度范围：取本肢体 AABB 的 8 个角。
+            // 逐体素扫也能算，但那正是要搬走的工作量 —— 而这里多出来的
+            // 只是画布边缘的一圈透明像素，落点不受影响。
+            for (int ci = 0; ci < 8; ++ci) {
+                const float lx = (ci & 1) ? t.max_bounds[0] : t.min_bounds[0];
+                const float ly = (ci & 2) ? t.max_bounds[1] : t.min_bounds[1];
+                const float lz = (ci & 4) ? t.max_bounds[2] : t.min_bounds[2];
+                const float px = m[0] * lx + m[1] * ly + m[2] * lz + m[3];
+                const float py = m[4] * lx + m[5] * ly + m[6] * lz + m[7];
+                const float pz = m[8] * lx + m[9] * ly + m[10] * lz + m[11];
+                const float wx = yc * px - ys * py;
+                const float wy = ys * px + yc * py;
+                const float sx = (wx - wy) * k;
+                const float sy = (wx + wy) * k * 0.5f - pz;
+                const float dp = wx + wy + pz;
+                if (sx < x0) x0 = sx;
+                if (sx > x1) x1 = sx;
+                if (sy < y0) y0 = sy;
+                if (sy > y1) y1 = sy;
+                if (dp < dmin) dmin = dp;
+                if (dp > dmax) dmax = dp;
+            }
+
+            VxlGpuLimb gl;
+            std::memcpy(gl.m, m, sizeof(m));
+            gl.min_b[0] = t.min_bounds[0];
+            gl.min_b[1] = t.min_bounds[1];
+            gl.min_b[2] = t.min_bounds[2];
+            gl.max_b[0] = t.max_bounds[0];
+            gl.max_b[1] = t.max_bounds[1];
+            gl.max_b[2] = t.max_bounds[2];
+            gl.normals_slot = Normal_Slot_Of(t.normals_type);
+            const uint32_t limb_idx = static_cast<uint32_t>(out->limbs.size());
+            out->limbs.push_back(gl);
+
+            vox.clear();
+            if (!s.f->Decode_Limb(l, &vox)) {
+                continue;
+            }
+            for (const VxlVoxel& v : vox) {
+                out->voxels.push_back(
+                    static_cast<uint32_t>(v.x) | (static_cast<uint32_t>(v.y) << 8) |
+                    (static_cast<uint32_t>(v.z) << 16) |
+                    (static_cast<uint32_t>(v.colour) << 24));
+                out->voxels.push_back(
+                    static_cast<uint32_t>(v.normal) | (limb_idx << 8) |
+                    (static_cast<uint32_t>(gl.normals_slot) << 16));
+            }
+        }
+    }
+    if (out->voxels.empty() || out->limbs.empty()) {
+        return false;
+    }
+    out->bbox[0] = x0;
+    out->bbox[1] = y0;
+    out->bbox[2] = x1;
+    out->bbox[3] = y1;
+    out->depth[0] = dmin;
+    out->depth[1] = dmax;
     return true;
 }
 

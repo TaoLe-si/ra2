@@ -20,6 +20,7 @@
 
 #include "gfx/Palette.h"
 #include "gfx/ShpFile.h"
+#include "gfx/VxlFile.h"
 
 namespace ra2 {
 
@@ -38,6 +39,24 @@ struct GpuSprite {
     bool rgba = false;
     ComPtr<ID3D12Resource> index_texture;   ///< R8 或 RGBA8
     D3D12_GPU_DESCRIPTOR_HANDLE index_srv = {};
+};
+
+/// 一次体素烘焙的参数。
+///
+/// 【为什么是"烘焙成一张精灵"而不是每帧画体素】
+/// 一辆坦克 8 万体素，屏幕上几百个单位就是上千万体素/帧，直接画会跪。
+/// 原版是进图时把每个朝向预渲成一张位图，之后只 blit —— 这里照抄这个
+/// 思路，差别只是"预渲"这一步从 CPU 软光栅搬到了 GPU。
+struct VoxelBakeParams {
+    float yaw = 0.0f;                  ///< 朝向（弧度，绕模型空间 Z 轴）
+    float scale = 8.0f;                ///< 一个体素占几个像素
+    const float* bbox = nullptr;       ///< VxlGpuGeom::bbox（已含 yaw）
+    const float* depth_range = nullptr;///< VxlGpuGeom::depth（画家序深度范围）
+    const uint8_t* pal768 = nullptr;   ///< 768 字节 RGB，remap 已经合好
+    const float* light = nullptr;      ///< 世界光向量（单位长）。空 = VoxelLight 默认
+    float ambient = 0.6f;              ///< exe 的 0.6（见 gfx/VoxelLight.h）
+    float diffuse = 0.8f;              ///< exe 的 0.8
+    float levels = 16.0f;              ///< exe 的 16 级明暗
 };
 
 class Dx12Renderer {
@@ -65,6 +84,33 @@ public:
 
     /// 设置当前调色板（影响后续所有绘制）。
     void Set_Palette(const Palette& pal);
+
+    /// 上传一份体素几何。返回句柄，-1 表示失败。
+    ///
+    /// 这里只接收 **VxlFile::Build_GPU_Geom 的产物** —— 也就是"只解码、不投影"
+    /// 的体素。投影 / 明暗查表 / 调色板查表 / 画家序全在着色器里做，CPU 不碰。
+    ///
+    /// 几何与朝向无关，所以**一个模型只传一次**；换朝向只是换一次烘焙的参数，
+    /// 8 向 32 向都不用重传。
+    int Upload_Voxel_Geom(const uint32_t* voxels /* 2 × count */, int count,
+                          const VxlGpuLimb* limbs, int limb_count);
+
+    /// 在 GPU 上把体素光栅化成一张 RGBA 精灵，返回精灵句柄（可直接喂 Draw_Sprite）。
+    ///
+    /// 必须在 Begin_Frame / End_Frame **之外**调用：它自己开一段命令列表，
+    /// 渲到一张临时渲染目标再拷出来。跟帧内的状态机混在一起会打架。
+    ///
+    /// 【画家序】不用 CPU 排序，改用深度缓冲：每个体素把
+    /// `depth = px+py+pz` 归一化后写进深度，GPU 逐像素判胜负。
+    /// 可证等价 —— 两个体素屏幕位置相同 <=> 它们在同一条视线 (1,1,1) 上，
+    /// 此时 px+py+pz 必然不同（推导：sx,sy 相同 => px-py 与 (px+py)/2-pz 相同，
+    /// 再叠加 px+py+pz 相同 => px,py,pz 逐项相同，即同一个体素）。
+    /// 而且逐像素比"整块按平均深度排序"更准。
+    ///
+    /// 【落点】out_w/out_h 之外，精灵左上角在屏幕上的位置应该是
+    /// `格心 + (bbox[0]*scale, bbox[1]*scale)`。这样模型原点（投影后恒为 (0,0)）
+    /// 正好落在格心 —— 与画布大小无关，所以 bbox 取保守上界也不会让单位浮空。
+    int Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w, int* out_h);
 
     /// 画一帧。dx/dy 是屏幕坐标，scale 是放大倍数。
     void Draw_Sprite(int sprite, int dx, int dy, float scale = 1.0f);
@@ -96,16 +142,59 @@ public:
     bool Is_Ready() const noexcept { return device_ != nullptr; }
     const char* Last_Error() const noexcept { return last_error_; }
 
+    /// 诊断：设备被摘掉的原因（0 = 还活着）。
+    ///
+    /// 非法调用不会在调用那一行报错，而是等下一次资源创建才冒出来，
+    /// 且报的还都是 DEVICE_REMOVED —— 只有这个返回值能定位到"到底哪一步
+    /// 把设备弄死了"。所以每做完一件可疑的事就查一次。
+    unsigned long Removal_Reason() const {
+        return device_ ? static_cast<unsigned long>(device_->GetDeviceRemovedReason())
+                       : 0ul;
+    }
+
+    /// 把调试层攒下的消息打到 stderr。
+    ///
+    /// 调试层默认只写 OutputDebugString，命令行下根本看不到；
+    /// 而"设备被摘掉"又总是滞后到下一次资源创建才报。
+    /// 所以每做完一件可疑的事就调一次，谁犯的错当场就现形。
+    void Flush_Debug_Messages();
+
+    /// 一份已上传的体素几何。
+    struct GpuVoxelGeom {
+        int count = 0;
+        ComPtr<ID3D12Resource> voxel_buf;   ///< uint2 × count（打包的体素）
+        ComPtr<ID3D12Resource> limb_buf;    ///< float4 × limbs × 4（含 min_bounds）
+        D3D12_GPU_DESCRIPTOR_HANDLE voxel_srv = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE limb_srv = {};
+    };
+
 private:
     /// Upload_Sprite / Upload_Sprite_RGBA 的公共实现。
     int Upload_Texture(const uint8_t* pixels, int width, int height, int bpp,
                        DXGI_FORMAT fmt, bool rgba);
 
+    /// 上传一段缓冲（默认堆 + 上传堆 + 拷贝 + 等 GPU）。给体素几何用。
+    ComPtr<ID3D12Resource> Upload_Buffer(const void* data, size_t bytes,
+                                         D3D12_RESOURCE_STATES after);
+    /// 往一张已建好的 COPY_DEST 纹理里灌数据，再转到 after 状态。
+    bool Upload_Texture_Data(ID3D12Resource* dst, const void* data, UINT w, UINT h,
+                             DXGI_FORMAT fmt, UINT bpp, D3D12_RESOURCE_STATES after);
+    /// 给结构化缓冲建一个 SRV，返回描述符下标；失败返回 0xFFFFFFFF。
+    UINT Alloc_Srv_Structured(ID3D12Resource* res, UINT stride, UINT count);
+    /// 给贴图建一个 SRV，返回描述符下标。
+    UINT Alloc_Srv_Texture(ID3D12Resource* res, DXGI_FORMAT fmt);
+
     bool Finish_Init();          ///< 两个 Init 共用的后半段
+    /// 全局调色板（slot 0）。**必须最先建** —— 见 Finish_Init 里的顺序说明。
+    bool Create_Global_Palette();
     bool Create_Device();
     bool Create_SwapChain(HWND hwnd, int width, int height);
     bool Create_Pipeline();
     bool Create_Descriptor_Heaps();
+    /// 体素管线：单独的根签名 + PSO（要读结构化缓冲，还得开深度）。
+    bool Create_Voxel_Pipeline();
+    /// 烘焙用的临时渲染目标 + 深度 + 法线表 / 调色板贴图。
+    bool Create_Voxel_Resources();
 
     void Fail(const char* msg);
     ID3D12Resource* Current_Target() const;
@@ -122,6 +211,19 @@ private:
     ComPtr<ID3D12PipelineState> pso_;        ///< 索引色 -> 查调色板
     ComPtr<ID3D12PipelineState> pso_rgba_;   ///< 真彩直接采样
     ComPtr<ID3D12PipelineState> pso_solid_;  ///< 纯色（界面图元）
+
+    // ---- 体素管线（投影 / 明暗 / 调色板全在 GPU） ----
+    ComPtr<ID3D12RootSignature> root_sig_voxel_;
+    ComPtr<ID3D12PipelineState> pso_voxel_;
+    ComPtr<ID3D12DescriptorHeap> dsv_heap_;
+    ComPtr<ID3D12Resource> bake_tex_;        ///< 烘焙用临时渲染目标（512²）
+    ComPtr<ID3D12Resource> bake_depth_;      ///< 画家序用的深度缓冲（512²）
+    ComPtr<ID3D12Resource> normals_tex_;     ///< 体素法线表 256×4（RGBA32F）
+    ComPtr<ID3D12Resource> voxel_palette_;   ///< 体素调色板 256×1，每烘一张重写一次
+    std::vector<GpuVoxelGeom> voxel_geoms_;
+    D3D12_GPU_DESCRIPTOR_HANDLE normals_srv_ = {};
+    D3D12_GPU_DESCRIPTOR_HANDLE voxel_palette_srv_ = {};
+    UINT dsv_size_ = 0;
     ComPtr<ID3D12Resource> backbuffers_[2];
     ComPtr<ID3D12Fence> fence_;
     HANDLE fence_event_ = nullptr;
@@ -137,6 +239,7 @@ private:
     UINT rtv_size_ = 0;
     UINT srv_size_ = 0;
     UINT srv_used_ = 0;
+    UINT srv_capacity_ = 0;
     UINT frame_index_ = 0;
     int vp_width_ = 0;
     int vp_height_ = 0;

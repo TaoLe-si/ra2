@@ -5,13 +5,25 @@
 
 #include "gfx/dx12/Dx12Renderer.h"
 
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include <d3dcompiler.h>
+#include <d3d12sdklayers.h>
+
+#include "gfx/VxlNormals.h"
 
 namespace ra2 {
 namespace {
+
+/// 着色器可见 SRV 堆的槽位数（见 Create_Descriptor_Heaps 的注释）。
+constexpr UINT kSrvCapacity = 4096;
+
+/// 体素烘焙画布的最大边长。一辆坦克在 scale=8 下大约 120×90，512² 富余。
+/// 超了直接判失败（宁可退化成色块，也不要悄悄裁掉半个模型）。
+constexpr int kBakeMax = 512;
 
 // ---------------------------------------------------------------------------
 // 着色器
@@ -59,11 +71,118 @@ float4 PSMainRGBA(VSOut i) : SV_Target {
 float4 PSSolid(VSOut i) : SV_Target {
     return tint;
 }
+
+// ---------------------------------------------------------------------------
+// 体素光栅化：投影 / 明暗查表 / 调色板查表全在这里做，CPU 只负责解码。
+//
+// 每个体素 = 一个屏幕空间方块（scale × scale 像素），一次 DrawInstanced。
+// 画家序不靠 CPU 排序，靠深度缓冲：dep = px+py+pz 归一化后写深度，
+// 深度测试 LESS 让近的赢。可证与 CPU 的"按 dep 排序后从远到近落格"等价。
+// ---------------------------------------------------------------------------
+// 用 4 个 float4 而不是逐个标量声明：cbuffer 里 float3 会被补齐到 16 字节
+// 边界，标量混排的偏移很容易和 CPU 侧的数组对不上（踩过一次，画面全黑）。
+// 打包成 float4 之后偏移是确定的：CPU 那边就是 16 个 float 平铺。
+cbuffer VC : register(b0) {
+    float4 c0;   // xy = 画布像素尺寸, z = scale, w = cos(yaw)
+    float4 c1;   // x = sin(yaw), yz = 投影原点 (x0,y0), w = depth_bias
+    float4 c2;   // xyz = 世界光向量, w = depth_scale
+    float4 c3;   // x = ambient, y = diffuse, z = levels（0.6 / 0.8 / 16）
+};
+
+StructuredBuffer<uint2> voxBuf  : register(t0);   // 打包的体素
+StructuredBuffer<float4> limbBuf : register(t1);  // 每根肢体 4×float4
+Texture2D<float4> normTex : register(t2);         // 法线表 256×4，w=1 表示有效
+Texture2D<float4> palTex  : register(t3);         // 调色板 256×1
+
+struct VOut {
+    float4 pos : SV_Position;
+    float4 col : COLOR0;
+};
+
+VOut VSVoxel(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
+    uint2 v = voxBuf[iid];
+    uint vx = v.x & 0xFFu;
+    uint vy = (v.x >> 8) & 0xFFu;
+    uint vz = (v.x >> 16) & 0xFFu;
+    uint vc = (v.x >> 24) & 0xFFu;   // 调色板索引
+    uint vn = v.y & 0xFFu;           // 法线索引
+    uint vl = (v.y >> 8) & 0xFFu;    // 肢体下标
+    uint vs = (v.y >> 16) & 0xFFu;   // 法线表槽位
+
+    float4 r0 = limbBuf[vl * 4 + 0];
+    float4 r1 = limbBuf[vl * 4 + 1];
+    float4 r2 = limbBuf[vl * 4 + 2];
+    float3 mn = limbBuf[vl * 4 + 3].xyz;   // 肢体局部 AABB 最小角
+    float2 vp = c0.xy;
+    float scale = c0.z, yaw_c = c0.w;
+    float yaw_s = c1.x, x0 = c1.y, y0 = c1.z, depth_bias = c1.w;
+    float3 light = c2.xyz;
+    float depth_scale = c2.w;
+    float ambient = c3.x, diffuse = c3.y, levels = c3.z;
+
+    // world = Yaw · (R·(index + min_bounds) + T)
+    // min_bounds 这一步不能省：肢体局部原点在 AABB 中心，不加会散架。
+    float3 lp = float3(float(vx), float(vy), float(vz)) + mn;
+    float3 p = float3(dot(r0.xyz, lp) + r0.w,
+                      dot(r1.xyz, lp) + r1.w,
+                      dot(r2.xyz, lp) + r2.w);
+    float3 w = float3(yaw_c * p.x - yaw_s * p.y,
+                      yaw_s * p.x + yaw_c * p.y,
+                      p.z);
+
+    const float kk = 0.70710678;
+    float sx = (w.x - w.y) * kk;
+    float sy = (w.x + w.y) * kk * 0.5 - w.z;
+    float dep = w.x + w.y + w.z;
+
+    // 明暗：法线先过肢体旋转、再过朝向，然后和世界光向量点乘。
+    //   level = (d > 0) ? floor(d * levels) : 0
+    // exe 用的是 ftol（截断），所以这里也是 floor 而不是 round。
+    // 法线表里没填到的项（w == 0）取最亮级 —— exe 是 `rep stosd` 先把整张
+    // 表填 0x10 再算，语义一致。
+    float4 nt = normTex.Load(int3(int(vn), int(vs), 0));
+    float3 nl = float3(dot(r0.xyz, nt.xyz), dot(r1.xyz, nt.xyz), dot(r2.xyz, nt.xyz));
+    float3 nw = float3(yaw_c * nl.x - yaw_s * nl.y,
+                       yaw_s * nl.x + yaw_c * nl.y,
+                       nl.z);
+    float d = dot(nw, light);
+    float lvl = (nt.w < 0.5) ? levels
+              : ((d > 0.0) ? min(floor(d * levels), levels) : 0.0);
+
+    float2 c = float2((vid == 1 || vid == 4 || vid == 5) ? 1.0 : 0.0,
+                      (vid == 2 || vid == 3 || vid == 5) ? 1.0 : 0.0);
+    // 方块原点要**先 floor 再铺 scale×scale**，不能直接让浮点范围去盖像素：
+    // 后者是按"像素中心是否落在范围内"取整的，等效于四舍五入，和 CPU 那边的
+    // (int) 截断在不同小数部分上会差 1 个像素。体素方块本来就有重叠（相邻体素
+    // 在屏幕上只隔 0.7071×scale 像素，比 scale 小），差 1 像素就会换掉重叠区
+    // 里"谁盖谁"，细节（装甲缝、履带）会整片对不上。
+    float px = floor((sx - x0) * scale) + c.x * scale;
+    float py = floor((sy - y0) * scale) + c.y * scale;
+
+    VOut o;
+    o.pos = float4(px / vp.x * 2.0 - 1.0,
+                   1.0 - py / vp.y * 2.0,
+                   saturate((dep - depth_bias) * depth_scale),
+                   1.0);
+    // 最终颜色 = 调色板色 × 明暗系数。系数就是 exe 的 level/16*0.8+0.6。
+    // 索引 0 是"无此色"，输出全透明 —— 和 CPU 侧 Shade_To_RGBA 的语义一致。
+    float4 pc = palTex.Load(int3(int(vc), 0, 0));
+    float f = ambient + diffuse * (lvl / max(levels, 1.0));
+    o.col = float4(saturate(pc.rgb * f), (vc == 0u) ? 0.0 : 1.0);
+    return o;
+}
+
+float4 PSVoxel(VOut i) : SV_Target {
+    return i.col;
+}
 )";
 
 void SetError(char* dst, const char* msg) {
     std::snprintf(dst, 256, "%s", msg);
 }
+
+/// 设了 RA2_D3D_DEBUG 才打诊断，正常跑不刷屏。
+bool Debug_Trace_On() { return std::getenv("RA2_D3D_DEBUG") != nullptr; }
 
 // ---- 手写描述符句柄与屏障 ----
 // 本机 WinSDK 10.0.26100 里没有 d3dx12.h（那是独立下载的辅助头），
@@ -105,6 +224,29 @@ void Wait_Queue(ID3D12CommandQueue* q, ID3D12Fence* f, HANDLE ev, UINT64& value)
 
 Dx12Renderer::~Dx12Renderer() { Shutdown(); }
 
+void Dx12Renderer::Flush_Debug_Messages() {
+    if (!device_) {
+        return;
+    }
+    ComPtr<ID3D12InfoQueue> iq;
+    if (FAILED(device_.As(&iq)) || !iq) {
+        return;
+    }
+    const UINT64 n = iq->GetNumStoredMessages();
+    for (UINT64 i = 0; i < n; ++i) {
+        SIZE_T len = 0;
+        if (FAILED(iq->GetMessage(i, nullptr, &len)) || len == 0) {
+            continue;
+        }
+        std::vector<uint8_t> buf(len);
+        D3D12_MESSAGE* m = reinterpret_cast<D3D12_MESSAGE*>(buf.data());
+        if (SUCCEEDED(iq->GetMessage(i, m, &len)) && m->pDescription != nullptr) {
+            std::fprintf(stderr, "[D3D12] %s\n", m->pDescription);
+        }
+    }
+    iq->ClearStoredMessages();
+}
+
 void Dx12Renderer::Fail(const char* msg) {
     SetError(last_error_, msg);
     std::fprintf(stderr, "[DX12] %s\n", msg);
@@ -136,15 +278,30 @@ bool Dx12Renderer::Init(HWND hwnd, int width, int height) {
 }
 
 bool Dx12Renderer::Finish_Init() {
+    // 【顺序是有讲究的，别随便挪】srv_used_ 是描述符槽位的水位线，谁先分配谁
+    // 拿前面的槽位。slot 0 必须**先**留给全局调色板（索引色精灵管线要用），
+    // 否则后面建体素资源时会先占掉 slot 0/1，然后全局调色板又回过头覆写
+    // slot 0、体素缓冲覆写 slot 1 —— 两个纹理描述符全被顶掉，
+    // 症状是"形状对、颜色全黑、法线查表也全空"（踩过，很难定位）。
     if (!Create_Descriptor_Heaps()) {
         return false;
     }
-    if (!Create_Descriptor_Heaps()) {
+    if (!Create_Global_Palette()) {
         return false;
     }
     if (!Create_Pipeline()) {
         return false;
     }
+    if (!Create_Voxel_Resources()) {
+        return false;
+    }
+    if (!Create_Voxel_Pipeline()) {
+        return false;
+    }
+    return true;
+}
+
+bool Dx12Renderer::Create_Global_Palette() {
     // 调色板纹理先建好，之后只更新内容。
     D3D12_HEAP_PROPERTIES hp = {};
     hp.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -171,17 +328,22 @@ bool Dx12Renderer::Finish_Init() {
     sv.Texture2D.MipLevels = 1;
     device_->CreateShaderResourceView(palette_tex_.Get(), &sv,
                                       Cpu_Handle(srv_heap_.Get(), 0, srv_size_));
-    srv_used_ = 1;   // slot 0 归调色板
-
-    if (FAILED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)))) {
-        Fail("创建 fence 失败");
-        return false;
-    }
-    fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    srv_used_ = 1;   // slot 0 归全局调色板，后面的分配从 1 开始
     return true;
 }
 
 bool Dx12Renderer::Create_Device() {
+    // 调试层：设 RA2_D3D_DEBUG=1 才开。开启后非法调用会在**发生那一行**
+    // 打印原因，而不是等到设备被摘掉才报 DEVICE_REMOVED。
+    if (std::getenv("RA2_D3D_DEBUG") != nullptr) {
+        ComPtr<ID3D12Debug> dbg;
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dbg)))) {
+            dbg->EnableDebugLayer();
+            std::printf("[DX12] 调试层已开\n");
+        } else {
+            std::printf("[DX12] 调试层不可用（要装 Graphics Tools 可选功能）\n");
+        }
+    }
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory_)))) {
         Fail("CreateDXGIFactory1 失败");
         return false;
@@ -236,6 +398,18 @@ bool Dx12Renderer::Create_Device() {
     std::printf("[DX12] 设备自检：removed=0x%08lX 试建 64KB 缓冲=0x%08lX\n",
                 static_cast<unsigned long>(removed), static_cast<unsigned long>(phr));
     probe.Reset();
+
+    // fence 要在这儿就建好：体素资源的首次上传（Create_Voxel_Resources）也要
+    // 等 GPU，而它跑在 Finish_Init 里、比原来的建 fence 位置更早。
+    if (FAILED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)))) {
+        Fail("创建 fence 失败");
+        return false;
+    }
+    fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (fence_event_ == nullptr) {
+        Fail("创建 fence 事件失败");
+        return false;
+    }
     return true;
 }
 
@@ -266,7 +440,7 @@ bool Dx12Renderer::Create_SwapChain(HWND hwnd, int width, int height) {
 bool Dx12Renderer::Create_Descriptor_Heaps() {
     D3D12_DESCRIPTOR_HEAP_DESC rh = {};
     rh.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    rh.NumDescriptors = 2;
+    rh.NumDescriptors = 3;   // 0/1 = 后台缓冲（或离屏），2 = 体素烘焙临时目标
     if (FAILED(device_->CreateDescriptorHeap(&rh, IID_PPV_ARGS(&rtv_heap_)))) {
         Fail("创建 RTV 堆失败");
         return false;
@@ -304,7 +478,10 @@ bool Dx12Renderer::Create_Descriptor_Heaps() {
 
     D3D12_DESCRIPTOR_HEAP_DESC sh = {};
     sh.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    sh.NumDescriptors = 256;
+    // 4096 而不是 256：体素路径每个"几何"要占 3 个槽（体素 / 肢体 / 调色板），
+    // 每烘出的一张精灵还要 1 个。8 朝向 × 多阵营一展开，256 个远远不够。
+    // 描述符堆本身很便宜（一个槽 32~64 字节），放开不用省。
+    sh.NumDescriptors = kSrvCapacity;
     sh.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     if (FAILED(device_->CreateDescriptorHeap(&sh, IID_PPV_ARGS(&srv_heap_)))) {
         Fail("创建 SRV 堆失败");
@@ -312,6 +489,7 @@ bool Dx12Renderer::Create_Descriptor_Heaps() {
     }
     srv_size_ = device_->GetDescriptorHandleIncrementSize(
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    srv_capacity_ = kSrvCapacity;
     return true;
 }
 
@@ -448,6 +626,646 @@ bool Dx12Renderer::Create_Pipeline() {
 }
 
 // ---------------------------------------------------------------------------
+// 缓冲 / 纹理上传的公共片段
+// ---------------------------------------------------------------------------
+
+ComPtr<ID3D12Resource> Dx12Renderer::Upload_Buffer(const void* data, size_t bytes,
+                                                   D3D12_RESOURCE_STATES after) {
+    ComPtr<ID3D12Resource> res;
+    if (!device_ || data == nullptr || bytes == 0) {
+        return res;
+    }
+    const UINT64 size = (static_cast<UINT64>(bytes) + 255) & ~static_cast<UINT64>(255);
+    D3D12_HEAP_PROPERTIES hp = {};
+    hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC rd = {};
+    rd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    rd.Width = size;
+    rd.Height = 1;
+    rd.DepthOrArraySize = 1;
+    rd.MipLevels = 1;
+    rd.SampleDesc.Count = 1;
+    rd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (FAILED(device_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd,
+                                                D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                                                IID_PPV_ARGS(&res)))) {
+        Fail("创建缓冲失败");
+        return res;
+    }
+    ComPtr<ID3D12Resource> up;
+    D3D12_HEAP_PROPERTIES uhp = {};
+    uhp.Type = D3D12_HEAP_TYPE_UPLOAD;
+    if (FAILED(device_->CreateCommittedResource(&uhp, D3D12_HEAP_FLAG_NONE, &rd,
+                                                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                                IID_PPV_ARGS(&up)))) {
+        Fail("创建上传缓冲失败");
+        res.Reset();
+        return res;
+    }
+    void* p = nullptr;
+    if (FAILED(up->Map(0, nullptr, &p))) {
+        res.Reset();
+        return res;
+    }
+    std::memcpy(p, data, bytes);
+    up->Unmap(0, nullptr);
+
+    alloc_->Reset();
+    cmd_->Reset(alloc_.Get(), nullptr);
+    cmd_->CopyBufferRegion(res.Get(), 0, up.Get(), 0, size);
+    D3D12_RESOURCE_BARRIER b =
+        Transition(res.Get(), D3D12_RESOURCE_STATE_COPY_DEST, after);
+    cmd_->ResourceBarrier(1, &b);
+    cmd_->Close();
+    ID3D12CommandList* lists[] = {cmd_.Get()};
+    queue_->ExecuteCommandLists(1, lists);
+    Wait_Queue(queue_.Get(), fence_.Get(), fence_event_, fence_value_);
+    return res;
+}
+
+bool Dx12Renderer::Upload_Texture_Data(ID3D12Resource* dst, const void* data, UINT w,
+                                       UINT h, DXGI_FORMAT fmt, UINT bpp,
+                                       D3D12_RESOURCE_STATES after) {
+    if (!device_ || dst == nullptr || data == nullptr || w == 0 || h == 0) {
+        return false;
+    }
+    const UINT64 row_bytes = static_cast<UINT64>(w) * bpp;
+    const UINT64 row = (row_bytes + 255) & ~static_cast<UINT64>(255);
+    const UINT64 total = row * h;
+    ComPtr<ID3D12Resource> up;
+    D3D12_HEAP_PROPERTIES uhp = {};
+    uhp.Type = D3D12_HEAP_TYPE_UPLOAD;
+    D3D12_RESOURCE_DESC urd = {};
+    urd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    urd.Width = total;
+    urd.Height = 1;
+    urd.DepthOrArraySize = 1;
+    urd.MipLevels = 1;
+    urd.SampleDesc.Count = 1;
+    urd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (FAILED(device_->CreateCommittedResource(&uhp, D3D12_HEAP_FLAG_NONE, &urd,
+                                                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                                IID_PPV_ARGS(&up)))) {
+        return false;
+    }
+    void* p = nullptr;
+    if (FAILED(up->Map(0, nullptr, &p))) {
+        return false;
+    }
+    const uint8_t* src = static_cast<const uint8_t*>(data);
+    for (UINT y = 0; y < h; ++y) {
+        std::memcpy(static_cast<uint8_t*>(p) + static_cast<size_t>(y) * row,
+                    src + static_cast<size_t>(y) * row_bytes,
+                    static_cast<size_t>(row_bytes));
+    }
+    up->Unmap(0, nullptr);
+
+    alloc_->Reset();
+    cmd_->Reset(alloc_.Get(), nullptr);
+    D3D12_TEXTURE_COPY_LOCATION d = {};
+    d.pResource = dst;
+    d.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    D3D12_TEXTURE_COPY_LOCATION s = {};
+    s.pResource = up.Get();
+    s.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    s.PlacedFootprint.Footprint.Format = fmt;
+    s.PlacedFootprint.Footprint.Width = w;
+    s.PlacedFootprint.Footprint.Height = h;
+    s.PlacedFootprint.Footprint.Depth = 1;
+    s.PlacedFootprint.Footprint.RowPitch = static_cast<UINT>(row);
+    cmd_->CopyTextureRegion(&d, 0, 0, 0, &s, nullptr);
+    D3D12_RESOURCE_BARRIER b =
+        Transition(dst, D3D12_RESOURCE_STATE_COPY_DEST, after);
+    cmd_->ResourceBarrier(1, &b);
+    cmd_->Close();
+    ID3D12CommandList* lists[] = {cmd_.Get()};
+    queue_->ExecuteCommandLists(1, lists);
+    Wait_Queue(queue_.Get(), fence_.Get(), fence_event_, fence_value_);
+    return true;
+}
+
+UINT Dx12Renderer::Alloc_Srv_Structured(ID3D12Resource* res, UINT stride, UINT count) {
+    if (!device_ || res == nullptr || srv_used_ >= srv_capacity_) {
+        return 0xFFFFFFFFu;
+    }
+    const UINT slot = srv_used_++;
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
+    sv.Format = DXGI_FORMAT_UNKNOWN;   // 结构化缓冲必须 UNKNOWN，格式在 stride 里
+    sv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+    sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    sv.Buffer.FirstElement = 0;
+    sv.Buffer.NumElements = count;
+    sv.Buffer.StructureByteStride = stride;
+    device_->CreateShaderResourceView(res, &sv,
+                                      Cpu_Handle(srv_heap_.Get(), slot, srv_size_));
+    return slot;
+}
+
+UINT Dx12Renderer::Alloc_Srv_Texture(ID3D12Resource* res, DXGI_FORMAT fmt) {
+    if (!device_ || res == nullptr || srv_used_ >= srv_capacity_) {
+        return 0xFFFFFFFFu;
+    }
+    const UINT slot = srv_used_++;
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
+    sv.Format = fmt;
+    sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    sv.Texture2D.MipLevels = 1;
+    device_->CreateShaderResourceView(res, &sv,
+                                      Cpu_Handle(srv_heap_.Get(), slot, srv_size_));
+    return slot;
+}
+
+// ---------------------------------------------------------------------------
+// 体素资源与管线
+// ---------------------------------------------------------------------------
+
+bool Dx12Renderer::Create_Voxel_Resources() {
+    // 1) 法线表：4 个槽位 × 256 项，打包成一张 256×4 的 RGBA32F。
+    //    w 分量是"有效位" —— exe 里表是先用 rep stosd 填成最亮级再逐项算的，
+    //    表里没填到的法线索引必须落到"最亮"，着色器靠 w 来区分。
+    {
+        std::vector<float> buf(static_cast<size_t>(256) * kNormalSlotCount * 4, 0.0f);
+        for (int slot = 0; slot < kNormalSlotCount; ++slot) {
+            int count = 0;
+            const float* tab = Voxel_Normal_Table(slot, &count);
+            if (tab == nullptr) {
+                continue;
+            }
+            if (count > 256) {
+                count = 256;
+            }
+            for (int i = 0; i < count; ++i) {
+                const size_t o = (static_cast<size_t>(slot) * 256 + i) * 4;
+                buf[o + 0] = tab[static_cast<size_t>(i) * 3 + 0];
+                buf[o + 1] = tab[static_cast<size_t>(i) * 3 + 1];
+                buf[o + 2] = tab[static_cast<size_t>(i) * 3 + 2];
+                buf[o + 3] = 1.0f;
+            }
+        }
+        D3D12_HEAP_PROPERTIES hp = {};
+        hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rd = {};
+        rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rd.Width = 256;
+        rd.Height = kNormalSlotCount;
+        rd.DepthOrArraySize = 1;
+        rd.MipLevels = 1;
+        rd.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        rd.SampleDesc.Count = 1;
+        rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        if (FAILED(device_->CreateCommittedResource(
+                &hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                IID_PPV_ARGS(&normals_tex_)))) {
+            Fail("创建法线表纹理失败");
+            return false;
+        }
+        Upload_Texture_Data(normals_tex_.Get(), buf.data(), 256, kNormalSlotCount,
+                            DXGI_FORMAT_R32G32B32A32_FLOAT, 16,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        const UINT slot = Alloc_Srv_Texture(normals_tex_.Get(),
+                                            DXGI_FORMAT_R32G32B32A32_FLOAT);
+        if (slot == 0xFFFFFFFFu) {
+            return false;
+        }
+        normals_srv_ = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
+    }
+
+    // 2) 体素调色板 256×1。每次烘焙前重写（一张一张烘，共用就行）。
+    {
+        D3D12_HEAP_PROPERTIES hp = {};
+        hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rd = {};
+        rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rd.Width = 256;
+        rd.Height = 1;
+        rd.DepthOrArraySize = 1;
+        rd.MipLevels = 1;
+        rd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rd.SampleDesc.Count = 1;
+        rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        if (FAILED(device_->CreateCommittedResource(
+                &hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                IID_PPV_ARGS(&voxel_palette_)))) {
+            Fail("创建体素调色板纹理失败");
+            return false;
+        }
+        // 先灌一次空调色板，把它从 COPY_DEST 转到"可读"状态。
+        // 之后每次烘焙都是 NON_PIXEL_SHADER_RESOURCE -> COPY_DEST -> 上传，
+        // 状态机才对得上。
+        const uint8_t pal0[256 * 4] = {};
+        Upload_Texture_Data(voxel_palette_.Get(), pal0, 256, 1,
+                            DXGI_FORMAT_R8G8B8A8_UNORM, 4,
+                            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        const UINT slot = Alloc_Srv_Texture(voxel_palette_.Get(),
+                                            DXGI_FORMAT_R8G8B8A8_UNORM);
+        if (slot == 0xFFFFFFFFu) {
+            return false;
+        }
+        voxel_palette_srv_ = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
+    }
+
+    // 3) 烘焙用的临时渲染目标 + 深度缓冲。
+    {
+        D3D12_HEAP_PROPERTIES hp = {};
+        hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rd = {};
+        rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rd.Width = kBakeMax;
+        rd.Height = kBakeMax;
+        rd.DepthOrArraySize = 1;
+        rd.MipLevels = 1;
+        rd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rd.SampleDesc.Count = 1;
+        rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rd.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        // 建的时候就给清屏值：调试层会为"没带清屏值的 ClearRenderTargetView"
+        // 报一条"这条清屏会变慢"的提示，顺手消掉。
+        D3D12_CLEAR_VALUE bake_cv = {};
+        bake_cv.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        if (FAILED(device_->CreateCommittedResource(
+                &hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_RENDER_TARGET,
+                &bake_cv, IID_PPV_ARGS(&bake_tex_)))) {
+            Fail("创建体素烘焙目标失败");
+            return false;
+        }
+        device_->CreateRenderTargetView(bake_tex_.Get(), nullptr,
+                                        Cpu_Handle(rtv_heap_.Get(), 2, rtv_size_));
+
+        D3D12_RESOURCE_DESC dd = rd;
+        dd.Format = DXGI_FORMAT_D32_FLOAT;
+        dd.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        D3D12_CLEAR_VALUE cv = {};
+        cv.Format = DXGI_FORMAT_D32_FLOAT;
+        cv.DepthStencil.Depth = 0.0f;   // 画家序：键值越大越近，所以清成 0
+        if (FAILED(device_->CreateCommittedResource(
+                &hp, D3D12_HEAP_FLAG_NONE, &dd, D3D12_RESOURCE_STATE_DEPTH_WRITE, &cv,
+                IID_PPV_ARGS(&bake_depth_)))) {
+            Fail("创建体素深度缓冲失败");
+            return false;
+        }
+        D3D12_DESCRIPTOR_HEAP_DESC dh = {};
+        dh.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        dh.NumDescriptors = 1;
+        if (FAILED(device_->CreateDescriptorHeap(&dh, IID_PPV_ARGS(&dsv_heap_)))) {
+            Fail("创建 DSV 堆失败");
+            return false;
+        }
+        dsv_size_ = device_->GetDescriptorHandleIncrementSize(
+            D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+        device_->CreateDepthStencilView(bake_depth_.Get(), nullptr,
+                                        dsv_heap_->GetCPUDescriptorHandleForHeapStart());
+    }
+    if (Debug_Trace_On()) {
+        std::fprintf(stderr, "[trace] Create_Voxel_Resources: removed=0x%08lX\n",
+                     static_cast<unsigned long>(device_->GetDeviceRemovedReason()));
+        Flush_Debug_Messages();
+    }
+    return true;
+}
+
+bool Dx12Renderer::Create_Voxel_Pipeline() {
+    ComPtr<ID3DBlob> vs, ps, err;
+    const UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+    if (FAILED(D3DCompile(kShaderSource, std::strlen(kShaderSource), nullptr, nullptr,
+                          nullptr, "VSVoxel", "vs_5_0", flags, 0, &vs, &err))) {
+        Fail(err ? static_cast<const char*>(err->GetBufferPointer())
+                 : "体素顶点着色器编译失败");
+        return false;
+    }
+    if (FAILED(D3DCompile(kShaderSource, std::strlen(kShaderSource), nullptr, nullptr,
+                          nullptr, "PSVoxel", "ps_5_0", flags, 0, &ps, &err))) {
+        Fail(err ? static_cast<const char*>(err->GetBufferPointer())
+                 : "体素像素着色器编译失败");
+        return false;
+    }
+
+    // t0 体素 / t1 肢体矩阵 / t2 法线表 / t3 调色板，b0 是根常量。
+    // 前三个都在顶点着色器里读（体素是逐实例的，投影也在 VS 里做完），
+    // 所以可见性写 VERTEX —— 写 ALL 也行，写 VERTEX 更贴切。
+    D3D12_DESCRIPTOR_RANGE ranges[4] = {};
+    for (int i = 0; i < 4; ++i) {
+        ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        ranges[i].NumDescriptors = 1;
+        ranges[i].BaseShaderRegister = static_cast<UINT>(i);
+    }
+    D3D12_ROOT_PARAMETER params[5] = {};
+    for (int i = 0; i < 4; ++i) {
+        params[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        params[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        params[i].DescriptorTable.NumDescriptorRanges = 1;
+        params[i].DescriptorTable.pDescriptorRanges = &ranges[i];
+    }
+    params[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    params[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    params[4].Constants.Num32BitValues = 16;
+    params[4].Constants.ShaderRegister = 0;
+
+    D3D12_ROOT_SIGNATURE_DESC rsd = {};
+    rsd.NumParameters = 5;
+    rsd.pParameters = params;
+    rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    ComPtr<ID3DBlob> sig;
+    if (FAILED(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig,
+                                           nullptr))) {
+        Fail("序列化体素根签名失败");
+        return false;
+    }
+    if (FAILED(device_->CreateRootSignature(0, sig->GetBufferPointer(),
+                                            sig->GetBufferSize(),
+                                            IID_PPV_ARGS(&root_sig_voxel_)))) {
+        Fail("创建体素根签名失败");
+        return false;
+    }
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pd = {};
+    pd.pRootSignature = root_sig_voxel_.Get();
+    pd.VS = {vs->GetBufferPointer(), vs->GetBufferSize()};
+    pd.PS = {ps->GetBufferPointer(), ps->GetBufferSize()};
+    pd.BlendState.RenderTarget[0].BlendEnable = TRUE;
+    pd.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+    pd.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+    pd.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+    pd.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+    pd.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+    pd.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+    pd.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    pd.SampleMask = 0xFFFFFFFF;
+    pd.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    pd.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    pd.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    // 画家序：depth = px+py+pz，**越大越近**，所以清 0、测 GREATER。
+    pd.DepthStencilState.DepthEnable = TRUE;
+    pd.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
+    pd.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    pd.NumRenderTargets = 1;
+    pd.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pd.SampleDesc.Count = 1;
+    if (FAILED(device_->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&pso_voxel_)))) {
+        Fail("创建体素 PSO 失败");
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+int Dx12Renderer::Upload_Voxel_Geom(const uint32_t* voxels, int count,
+                                    const VxlGpuLimb* limbs, int limb_count) {
+    if (!device_ || voxels == nullptr || count <= 0 || limbs == nullptr ||
+        limb_count <= 0) {
+        return -1;
+    }
+    // 肢体矩阵打包成 float4 × 4：3 行旋转平移 + min_bounds。
+    std::vector<float> lm(static_cast<size_t>(limb_count) * 16, 0.0f);
+    for (int i = 0; i < limb_count; ++i) {
+        const VxlGpuLimb& g = limbs[i];
+        float* d = &lm[static_cast<size_t>(i) * 16];
+        d[0] = g.m[0];  d[1] = g.m[1];  d[2] = g.m[2];   d[3] = g.m[3];
+        d[4] = g.m[4];  d[5] = g.m[5];  d[6] = g.m[6];   d[7] = g.m[7];
+        d[8] = g.m[8];  d[9] = g.m[9];  d[10] = g.m[10]; d[11] = g.m[11];
+        d[12] = g.min_b[0];
+        d[13] = g.min_b[1];
+        d[14] = g.min_b[2];
+        d[15] = 0.0f;
+    }
+
+    GpuVoxelGeom g;
+    g.count = count;
+    g.voxel_buf = Upload_Buffer(voxels, static_cast<size_t>(count) * 8,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    g.limb_buf = Upload_Buffer(lm.data(), lm.size() * sizeof(float),
+                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (!g.voxel_buf || !g.limb_buf) {
+        return -1;
+    }
+    UINT s0 = Alloc_Srv_Structured(g.voxel_buf.Get(), 8, static_cast<UINT>(count));
+    UINT s1 = Alloc_Srv_Structured(g.limb_buf.Get(), 16,
+                                   static_cast<UINT>(limb_count) * 4);
+    if (s0 == 0xFFFFFFFFu || s1 == 0xFFFFFFFFu) {
+        return -1;
+    }
+    g.voxel_srv = Gpu_Handle(srv_heap_.Get(), s0, srv_size_);
+    g.limb_srv = Gpu_Handle(srv_heap_.Get(), s1, srv_size_);
+    voxel_geoms_.push_back(g);
+    return static_cast<int>(voxel_geoms_.size()) - 1;
+}
+
+int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
+                              int* out_h) {
+    if (!device_ || in_frame_ || !pso_voxel_) {
+        return -1;
+    }
+    if (geom < 0 || geom >= static_cast<int>(voxel_geoms_.size())) {
+        return -1;
+    }
+    if (p.bbox == nullptr || p.depth_range == nullptr || p.pal768 == nullptr) {
+        return -1;
+    }
+    const int w = static_cast<int>((p.bbox[2] - p.bbox[0]) * p.scale) + 2;
+    const int h = static_cast<int>((p.bbox[3] - p.bbox[1]) * p.scale) + 2;
+    if (w <= 0 || h <= 0 || w > kBakeMax || h > kBakeMax) {
+        return -1;
+    }
+    const GpuVoxelGeom& g = voxel_geoms_[static_cast<size_t>(geom)];
+
+    // 分步探针：非法调用不会当场报错，只会让设备在之后某个任意点被摘掉，
+    // 所以每做完一段就查一次"设备还活着吗 + 调试层有没有攒下消息"。
+    auto trace = [&](const char* where) {
+        if (!Debug_Trace_On()) {
+            return;
+        }
+        std::fprintf(stderr, "[trace] %s: removed=0x%08lX\n", where,
+                     static_cast<unsigned long>(device_->GetDeviceRemovedReason()));
+        Flush_Debug_Messages();
+    };
+    trace("bake 开始");
+
+    // 1) 调色板：768 字节 RGB -> 256×1 RGBA。索引 0 留成透明。
+    uint8_t pal[256 * 4];
+    for (int i = 0; i < 256; ++i) {
+        pal[i * 4 + 0] = p.pal768[i * 3 + 0];
+        pal[i * 4 + 1] = p.pal768[i * 3 + 1];
+        pal[i * 4 + 2] = p.pal768[i * 3 + 2];
+        pal[i * 4 + 3] = (i == 0) ? 0 : 255;
+    }
+    {
+        D3D12_RESOURCE_BARRIER to_copy =
+            Transition(voxel_palette_.Get(),
+                       D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                       D3D12_RESOURCE_STATE_COPY_DEST);
+        alloc_->Reset();
+        cmd_->Reset(alloc_.Get(), nullptr);
+        cmd_->ResourceBarrier(1, &to_copy);
+        cmd_->Close();
+        ID3D12CommandList* lists[] = {cmd_.Get()};
+        queue_->ExecuteCommandLists(1, lists);
+        Wait_Queue(queue_.Get(), fence_.Get(), fence_event_, fence_value_);
+        if (!Upload_Texture_Data(voxel_palette_.Get(), pal, 256, 1,
+                                 DXGI_FORMAT_R8G8B8A8_UNORM, 4,
+                                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)) {
+            Fail("体素调色板上传失败");
+            return -1;
+        }
+    }
+    if (Debug_Trace_On()) {
+        std::fprintf(stderr,
+                     "[trace] 调色板 idx32=(%d,%d,%d) idx48=(%d,%d,%d) "
+                     "idx255=(%d,%d,%d)\n",
+                     pal[32 * 4], pal[32 * 4 + 1], pal[32 * 4 + 2], pal[48 * 4],
+                     pal[48 * 4 + 1], pal[48 * 4 + 2], pal[255 * 4],
+                     pal[255 * 4 + 1], pal[255 * 4 + 2]);
+    }
+    trace("调色板上传后");
+
+    // 2) 渲染到临时目标
+    float light[3] = {0.40824829f, 0.40824829f, 0.81649658f};
+    if (p.light != nullptr) {
+        light[0] = p.light[0];
+        light[1] = p.light[1];
+        light[2] = p.light[2];
+    }
+    const float dmin = p.depth_range[0];
+    const float dmax = p.depth_range[1];
+    // 顺序必须和着色器里的 c0/c1/c2/c3 逐个对应（每个 float4 一组）。
+    const float k[16] = {
+        // c0
+        static_cast<float>(w),
+        static_cast<float>(h),
+        p.scale,
+        std::cos(p.yaw),
+        // c1
+        std::sin(p.yaw),
+        p.bbox[0],
+        p.bbox[1],
+        dmin,
+        // c2
+        light[0], light[1], light[2],
+        (dmax > dmin) ? (1.0f / (dmax - dmin)) : 1.0f,
+        // c3
+        p.ambient,
+        p.diffuse,
+        p.levels,
+        0.0f,
+    };
+
+    if (Debug_Trace_On()) {
+        std::fprintf(stderr,
+                     "[trace] 烘焙 %d 个体素 / %zu 肢体，画布 %dx%d\n"
+                     "        c0=(%.2f %.2f %.2f %.4f) c1=(%.4f %.3f %.3f %.3f)\n"
+                     "        c2=(%.4f %.4f %.4f %.6f) c3=(%.2f %.2f %.2f)\n",
+                     g.count, voxel_geoms_[static_cast<size_t>(geom)].count > 0
+                                  ? static_cast<size_t>(g.count) : 0,
+                     w, h, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8],
+                     k[9], k[10], k[11], k[12], k[13], k[14]);
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = Cpu_Handle(rtv_heap_.Get(), 2, rtv_size_);
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv = dsv_heap_->GetCPUDescriptorHandleForHeapStart();
+
+    alloc_->Reset();
+    cmd_->Reset(alloc_.Get(), nullptr);
+    const float clear[4] = {0, 0, 0, 0};
+    cmd_->ClearRenderTargetView(rtv, clear, 0, nullptr);
+    cmd_->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
+    cmd_->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+    D3D12_VIEWPORT vp = {};
+    vp.Width = static_cast<float>(w);
+    vp.Height = static_cast<float>(h);
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    cmd_->RSSetViewports(1, &vp);
+    D3D12_RECT sc = {0, 0, w, h};
+    cmd_->RSSetScissorRects(1, &sc);
+    cmd_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ID3D12DescriptorHeap* heaps[] = {srv_heap_.Get()};
+    cmd_->SetDescriptorHeaps(1, heaps);
+    cmd_->SetGraphicsRootSignature(root_sig_voxel_.Get());
+    cmd_->SetPipelineState(pso_voxel_.Get());
+    cmd_->SetGraphicsRootDescriptorTable(0, g.voxel_srv);
+    cmd_->SetGraphicsRootDescriptorTable(1, g.limb_srv);
+    cmd_->SetGraphicsRootDescriptorTable(2, normals_srv_);
+    cmd_->SetGraphicsRootDescriptorTable(3, voxel_palette_srv_);
+    cmd_->SetGraphicsRoot32BitConstants(4, 16, k, 0);
+    // RA2_VOXEL_PROBE=1 只画 1 个体素：用来分辨"整条管线没通"还是"逐体素的
+    // 数学算歪了"——前者一个点都不会有，后者会有一个孤零零的小方块。
+    UINT instances = static_cast<UINT>(g.count);
+    if (std::getenv("RA2_VOXEL_PROBE") != nullptr) {
+        instances = 1;
+    }
+    cmd_->DrawInstanced(6, instances, 0, 0);
+    trace("录完绘制（还没提交）");
+
+    // 3) 拷到一张尺寸刚好的纹理上（临时目标是复用的，下一次烘焙会覆盖）
+    ComPtr<ID3D12Resource> dst;
+    D3D12_HEAP_PROPERTIES hp = {};
+    hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC rd = {};
+    rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    rd.Width = static_cast<UINT>(w);
+    rd.Height = static_cast<UINT>(h);
+    rd.DepthOrArraySize = 1;
+    rd.MipLevels = 1;
+    rd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    rd.SampleDesc.Count = 1;
+    rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    if (FAILED(device_->CreateCommittedResource(
+            &hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+            IID_PPV_ARGS(&dst)))) {
+        Fail("创建体素烘焙结果纹理失败");
+        return -1;
+    }
+    {
+        D3D12_RESOURCE_BARRIER b =
+            Transition(bake_tex_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
+                       D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmd_->ResourceBarrier(1, &b);
+    }
+    D3D12_TEXTURE_COPY_LOCATION d = {};
+    d.pResource = dst.Get();
+    d.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    D3D12_TEXTURE_COPY_LOCATION s = {};
+    s.pResource = bake_tex_.Get();
+    s.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    // 【踩过】pSrcBox 传 nullptr 不是"拷到哪算哪"，而是"拷**整个**源子资源"，
+    // 这张源是 512×512 的复用目标，目标只有 w×h —— 越界直接把设备摘掉
+    // （removed=0x887A0001），报错却出现在后面的 CreateCommittedResource 上。
+    // 必须显式给源盒。
+    const D3D12_BOX src_box = {0, 0, 0, static_cast<UINT>(w), static_cast<UINT>(h), 1};
+    cmd_->CopyTextureRegion(&d, 0, 0, 0, &s, &src_box);
+    {
+        D3D12_RESOURCE_BARRIER b =
+            Transition(bake_tex_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE,
+                       D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmd_->ResourceBarrier(1, &b);
+        D3D12_RESOURCE_BARRIER b2 =
+            Transition(dst.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+                       D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        cmd_->ResourceBarrier(1, &b2);
+    }
+    cmd_->Close();
+    ID3D12CommandList* lists[] = {cmd_.Get()};
+    queue_->ExecuteCommandLists(1, lists);
+    Wait_Queue(queue_.Get(), fence_.Get(), fence_event_, fence_value_);
+    trace("绘制提交并等待后");
+
+    const UINT slot = Alloc_Srv_Texture(dst.Get(), DXGI_FORMAT_R8G8B8A8_UNORM);
+    if (slot == 0xFFFFFFFFu) {
+        return -1;
+    }
+    GpuSprite sp;
+    sp.width = w;
+    sp.height = h;
+    sp.rgba = true;
+    sp.index_texture = dst;
+    sp.index_srv = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
+    sprites_.push_back(sp);
+    if (out_w) *out_w = w;
+    if (out_h) *out_h = h;
+    return static_cast<int>(sprites_.size()) - 1;
+}
+
+// ---------------------------------------------------------------------------
 int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     return Upload_Texture(pixels, width, height, 1, DXGI_FORMAT_R8_UNORM, false);
 }
@@ -458,7 +1276,7 @@ int Dx12Renderer::Upload_Sprite_RGBA(const uint8_t* pixels, int width, int heigh
 
 int Dx12Renderer::Upload_Texture(const uint8_t* pixels, int width, int height,
                                  int bpp, DXGI_FORMAT fmt, bool rgba) {
-    if (!device_ || srv_used_ >= 256) {
+    if (!device_ || srv_used_ >= srv_capacity_) {
         return -1;
     }
     // 纹理拷贝的行距必须按 D3D12_TEXTURE_DATA_PITCH_ALIGNMENT(256) 对齐 ——

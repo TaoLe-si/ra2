@@ -177,6 +177,7 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
 
     // 单位真图：体素走 VXL、步兵/建筑走 SHP，都带阵营色 remap
     if (sprites_.Bind(roots_)) {
+        sprites_.Set_Renderer(&renderer_);   // 体素精灵是 GPU 烘出来的
         sprites_.Set_Remap(remap_);
         sprites_.Set_Theater(map_.Theater());
         std::printf("  精灵库就绪（单位模型 %d 个）\n", sprites_.Models().Unit_Count());
@@ -276,6 +277,10 @@ void GameShell::Render() {
     if (!ready_) {
         return;
     }
+    // 精灵必须在**帧外**备好。体素烘焙（Bake_Voxels）和 SHP 上传都会自己
+    // reset 命令分配器再提交一段命令列表，放到 Begin_Frame 之后做，会把
+    // 这一帧已经录进去、还没提交的绘制命令直接冲掉。
+    Warm_Sprites();
     const float clear[4] = {0.02f, 0.02f, 0.03f, 1.0f};
     renderer_.Begin_Frame(clear);
     if (screen_ == GameScreen::Battle) {
@@ -334,41 +339,51 @@ void GameShell::Center_On_Cell(float cx, float cy) {
                 py + kCellHalfH - half_vh);
 }
 
+/// 把这一帧要用的精灵备好。必须放在 Begin_Frame **之前**（见 Render 里的注释）。
+///
+/// 分两遍：先单位/建筑（Techno），再装饰。不然 200 多个树先来，
+/// 每帧 4 个预算全被它们吃掉，坦克要等几十帧才出得来。
+void GameShell::Warm_Sprites() {
+    sprites_.Reset_Budget(4);
+    const int view_w = win_w_ - kSidebarW;
+    auto warm = [&](bool techno_only) {
+        for (const Object& o : world_.Objects()) {
+            if (sprites_.Budget_Left() <= 0) {
+                return;
+            }
+            if (techno_only != o.Is_Techno()) {
+                continue;
+            }
+            float sx = 0.0f, sy = 0.0f;
+            Cell_To_Screen(o.x, o.y, &sx, &sy);
+            if (sx < -kCellW || sx > view_w + kCellW ||
+                sy < kTopBarH - kCellH || sy > win_h_ + kCellH) {
+                continue;
+            }
+            const int house_color = (o.house >= 0 && o.is_mine) ? player_color_ : 11;
+            sprites_.Get(o.type.c_str(), o.facing, house_color);
+        }
+    };
+    warm(true);
+    warm(false);
+}
+
 /// 画一个单位的真精灵。返回 false 表示没有可用素材（调用方退成色块）。
 ///
-/// 精灵 id 按"精灵缓存里的地址"做 key：同一个 (类型,朝向档,阵营色)
-/// 一定对应同一个 ObjectSprite 实例，指针当身份既快又不会撞。
+/// 精灵本体已经在显存里（sprite_id）：体素是 GPU 光栅化烘出来的，
+/// SHP 是 CPU 解完索引图传上去的。这里只负责 blit。
 bool GameShell::Draw_Object_Sprite(const Object& o, int sx, int sy, float scale) {
-    if (o.kind == MapObjectKind::Terrain) {
-        // 树/路灯这些走 SHP，但优先级最低 —— 先保证单位出得来
-    }
     const int house_color = (o.house >= 0 && o.is_mine) ? player_color_ : 11;
     const ObjectSprite* sp = sprites_.Get(o.type.c_str(), o.facing, house_color);
-    if (sp == nullptr || !sp->ok) {
+    if (sp == nullptr || !sp->ok || sp->sprite_id < 0) {
         ++sprites_miss_;
         return false;
     }
-
-    const auto key = reinterpret_cast<uintptr_t>(sp);
-    auto it = sprite_ids_.find(static_cast<int>(key & 0x7FFFFFFF));
-    int id = -1;
-    if (it == sprite_ids_.end()) {
-        id = renderer_.Upload_Sprite_RGBA(sp->rgba.data(), sp->w, sp->h);
-        if (id < 0) {
-            ++sprites_miss_;
-            return false;
-        }
-        sprite_ids_[static_cast<int>(key & 0x7FFFFFFF)] = id;
-    } else {
-        id = it->second;
-    }
     ++sprites_ok_;
 
-    const int dw = static_cast<int>(sp->w * scale);
-    const int dh = static_cast<int>(sp->h * scale);
     const int dx = sx + static_cast<int>(sp->off_x * scale);
     const int dy = sy + static_cast<int>(sp->off_y * scale);
-    renderer_.Draw_Sprite(id, dx, dy, scale);
+    renderer_.Draw_Sprite(sp->sprite_id, dx, dy, scale);
     return true;
 }
 
@@ -376,7 +391,6 @@ void GameShell::Draw_Objects() {
     objects_drawn_ = 0;
     sprites_ok_ = 0;
     sprites_miss_ = 0;
-    sprites_.Reset_Budget(4);
     const int view_w = win_w_ - kSidebarW;
     for (const Object& o : world_.Objects()) {
         float sx = 0.0f, sy = 0.0f;
@@ -946,6 +960,268 @@ bool GameShell::Self_Test() {
     std::printf("     画出 %d 个对象\n", objects_drawn_);
 
     std::printf(ok ? "[OK] 行为自检全过\n" : "[x] 行为自检有不过的\n");
+    return ok;
+}
+
+bool GameShell::Self_Test_Voxel_GPU() {
+    bool ok = true;
+    auto check = [&ok](bool cond, const char* what) {
+        std::printf("  [%s] %s\n", cond ? "OK" : "FAIL", what);
+        if (!cond) ok = false;
+    };
+    std::printf("== 体素：GPU 光栅化 vs CPU 软光栅 ==\n");
+
+    // 拿地图里第一个体素单位当样本（比硬编码一个名字稳，换图也不怕）
+    const char* type = nullptr;
+    for (const Object& o : world_.Objects()) {
+        if (sprites_.Is_Voxel(o.type.c_str())) {
+            type = o.type.c_str();
+            break;
+        }
+    }
+    if (type == nullptr) {
+        std::printf("     （这张图没有体素单位，跳过）\n");
+        return true;
+    }
+    std::printf("     样本单位：%s（朝向 0，即 yaw=0）\n", type);
+
+    std::vector<uint8_t> cpu;
+    int cw = 0, ch = 0;
+    float cx0 = 0.0f, cy0 = 0.0f;
+    if (!sprites_.Bake_CPU_Reference(type, 0.0f, player_color_, &cpu, &cw, &ch,
+                                     &cx0, &cy0)) {
+        check(false, "CPU 参考图渲染成功");
+        return false;
+    }
+    std::printf("     CPU 参考图 %dx%d，画布原点 (%.3f, %.3f)\n", cw, ch, cx0, cy0);
+
+    std::printf("     烘焙前设备状态 0x%08lX（0 = 只是还没烘过，不等于有问题）\n",
+                renderer_.Removal_Reason());
+    sprites_.Reset_Budget(4);
+    const ObjectSprite* sp = sprites_.Get(type, 0, player_color_);
+    if (sp == nullptr || sp->sprite_id < 0) {
+        check(false, "GPU 烘焙成功");
+        return false;
+    }
+    std::printf("     GPU 烘焙图 %dx%d，画布原点 (%.3f, %.3f)\n", sp->w, sp->h,
+                sp->bbox[0], sp->bbox[1]);
+
+    // 把 GPU 精灵单独画一帧回读。左上角留 8px，免得贴边被裁。
+    const int kOff = 8;
+    if (sp->w + kOff * 2 > win_w_ || sp->h + kOff * 2 > win_h_) {
+        check(false, "GPU 精灵尺寸没超过视口");
+        return false;
+    }
+    std::printf("     烘焙后设备状态 0x%08lX\n", renderer_.Removal_Reason());
+    renderer_.Request_Capture();
+    // 底色用深蓝而不是黑：清屏是黑的话，"着色器吐出全黑"和"一个像素都没画"
+    // 在回读图里长得一模一样，白绕一圈。深蓝能把这两件事分开。
+    const float clear[4] = {0.0f, 0.0f, 0.25f, 1.0f};
+    renderer_.Begin_Frame(clear);
+    renderer_.Draw_Sprite(sp->sprite_id, kOff, kOff, 1.0f);
+    renderer_.End_Frame();
+    std::printf("     出图后设备状态 0x%08lX\n", renderer_.Removal_Reason());
+    std::vector<uint8_t> cap;
+    int gw = 0, gh = 0;
+    if (!renderer_.Get_Capture(cap, gw, gh)) {
+        check(false, "GPU 出图能回读");
+        return false;
+    }
+
+    // 诊断：把精灵那一块从大帧里裁出来，连同 CPU 参考图一起 dump 成裸 RGBA。
+    // 像素对不上时，看这两张图比看百分比有用得多。
+    int gpu_nonblack = 0;
+    {
+        std::vector<uint8_t> cut(static_cast<size_t>(sp->w) * sp->h * 4, 0);
+        for (int y = 0; y < sp->h; ++y) {
+            const size_t g = (static_cast<size_t>(y + kOff) * gw + kOff) * 4;
+            std::memcpy(&cut[static_cast<size_t>(y) * sp->w * 4], &cap[g],
+                        static_cast<size_t>(sp->w) * 4);
+        }
+        long long sum[3] = {0, 0, 0};
+        for (size_t i = 0; i < cut.size(); i += 4) {
+            // 底色是 (0,0,64)；和它不一样就说明这里被画过了
+            if (cut[i] != 0 || cut[i + 1] != 0 || cut[i + 2] != 64) {
+                ++gpu_nonblack;
+                sum[0] += cut[i];
+                sum[1] += cut[i + 1];
+                sum[2] += cut[i + 2];
+            }
+        }
+        if (gpu_nonblack > 0) {
+            std::printf("     被画过的像素 %d，平均色 (%lld, %lld, %lld)\n",
+                        gpu_nonblack, sum[0] / gpu_nonblack, sum[1] / gpu_nonblack,
+                        sum[2] / gpu_nonblack);
+        }
+        auto dump = [](const char* path, const uint8_t* p, int w, int h) {
+            FILE* f = std::fopen(path, "wb");
+            if (f == nullptr) {
+                return;
+            }
+            std::fwrite(p, 1, static_cast<size_t>(w) * h * 4, f);
+            std::fclose(f);
+        };
+        dump("build/vxl_cpu.raw", cpu.data(), cw, ch);
+        dump("build/vxl_gpu.raw", cut.data(), sp->w, sp->h);
+        std::printf("     GPU 画布非黑像素 %d（0 = 着色器没出东西）\n", gpu_nonblack);
+        std::printf("     已 dump build/vxl_cpu.raw(%dx%d) / build/vxl_gpu.raw(%dx%d)\n",
+                    cw, ch, sp->w, sp->h);
+    }
+
+    // 对位：CPU 像素 (i,j) 的投影坐标是 (cx0 + i/s, cy0 + j/s)，
+    // 换到 GPU 画布上就是 u = i + (cx0 - bbox[0])*s。
+    //
+    // 【为什么要搜偏移而不是算一次】两条路的画布原点是**故意不一样**的：
+    // CPU 用逐体素求出的精确包围盒，GPU 用每根肢体 AABB 的 8 个角求的保守
+    // 上界（O(肢体数) 而不是 O(体素数)，代价是边缘多一圈透明像素）。
+    // 两个原点差的是个非整数，量化到像素格上就会差 0~2 个像素。
+    // 所以这里在 ±3 像素里搜一遍最佳对齐 —— 对齐之后剩下多少差异，
+    // 才是真正需要解释的差异。
+    //
+    // 别叫 near —— windows.h 里 `#define near` 是个宏，用作变量名会炸。
+    int total = 0;
+    for (int j = 0; j < ch; ++j) {
+        for (int i = 0; i < cw; ++i) {
+            if (cpu[(static_cast<size_t>(j) * cw + i) * 4 + 3] != 0) {
+                ++total;
+            }
+        }
+    }
+    if (total == 0) {
+        check(false, "CPU 参考图有非透明像素");
+        return false;
+    }
+
+    // CPU 这边某像素的 8 邻域是否全不透明 —— 用来把"轮廓上那一圈"
+    // 挑出来单独看：那圈天然会有 1 像素级的差异（画布原点差的是个非整数），
+    // 混在一起算会把真正的内容差异淹掉。
+    auto interior = [&](int i, int j) {
+        for (int dj = -1; dj <= 1; ++dj) {
+            for (int di = -1; di <= 1; ++di) {
+                const int x = i + di, y = j + dj;
+                if (x < 0 || y < 0 || x >= cw || y >= ch) {
+                    return false;
+                }
+                if (cpu[(static_cast<size_t>(y) * cw + x) * 4 + 3] == 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    // 返回"误差 <=2 的像素数"，同时给出完全一致的个数与参与比较的个数。
+    auto score = [&](int dx, int dy, int* exact_out, int* cmp_out) {
+        int exact = 0, near_ok = 0, cmp = 0;
+        for (int j = 0; j < ch; ++j) {
+            for (int i = 0; i < cw; ++i) {
+                const size_t o = (static_cast<size_t>(j) * cw + i) * 4;
+                if (cpu[o + 3] == 0) {
+                    continue;   // CPU 这边是透明的，不比
+                }
+                const int u = i + dx;
+                const int v = j + dy;
+                if (u < 0 || v < 0 || u >= sp->w || v >= sp->h) {
+                    continue;
+                }
+                ++cmp;
+                const size_t g =
+                    (static_cast<size_t>(v + kOff) * gw + (u + kOff)) * 4;
+                int dmax = 0;
+                for (int c = 0; c < 3; ++c) {
+                    const int d = std::abs(static_cast<int>(cpu[o + c]) -
+                                           static_cast<int>(cap[g + c]));
+                    if (d > dmax) dmax = d;
+                }
+                if (dmax == 0) ++exact;
+                if (dmax <= 2) ++near_ok;
+            }
+        }
+        if (exact_out) *exact_out = exact;
+        if (cmp_out) *cmp_out = cmp;
+        return near_ok;
+    };
+
+    // 先按解析式算出偏移，再在它周围搜 —— 只在 ±3 里搜会漏掉真实偏移
+    // （STANG 的偏移是 17,45，搜不到就得出"全不对"的错误结论）。
+    const float s = sp->scale;
+    const int base_dx = static_cast<int>(std::lround((cx0 - sp->bbox[0]) * s));
+    const int base_dy = static_cast<int>(std::lround((cy0 - sp->bbox[1]) * s));
+    int best_dx = base_dx, best_dy = base_dy, best_near = -1;
+    for (int dy = base_dy - 3; dy <= base_dy + 3; ++dy) {
+        for (int dx = base_dx - 3; dx <= base_dx + 3; ++dx) {
+            const int n = score(dx, dy, nullptr, nullptr);
+            if (n > best_near) {
+                best_near = n;
+                best_dx = dx;
+                best_dy = dy;
+            }
+        }
+    }
+    std::printf("     解析偏移 (%d, %d) -> 搜到最佳 (%d, %d)\n", base_dx, base_dy,
+                best_dx, best_dy);
+
+    // 只比"内部"像素：这些像素的 3×3 邻域在 CPU 图上全是不透明的，
+    // 不受轮廓对齐误差影响。差异只剩下"8 位量化 CPU 截断 / GPU 四舍五入"。
+    int inner_total = 0, inner_near = 0, inner_exact = 0;
+    for (int j = 0; j < ch; ++j) {
+        for (int i = 0; i < cw; ++i) {
+            if (!interior(i, j)) {
+                continue;
+            }
+            const int u = i + best_dx;
+            const int v = j + best_dy;
+            if (u < 0 || v < 0 || u >= sp->w || v >= sp->h) {
+                continue;
+            }
+            const size_t o = (static_cast<size_t>(j) * cw + i) * 4;
+            const size_t g = (static_cast<size_t>(v + kOff) * gw + (u + kOff)) * 4;
+            int dmax = 0;
+            for (int c = 0; c < 3; ++c) {
+                const int d = std::abs(static_cast<int>(cpu[o + c]) -
+                                       static_cast<int>(cap[g + c]));
+                if (d > dmax) dmax = d;
+            }
+            ++inner_total;
+            if (dmax == 0) ++inner_exact;
+            if (dmax <= 2) ++inner_near;
+        }
+    }
+    if (inner_total == 0) {
+        check(false, "有可比的内部像素");
+        return false;
+    }
+    const double r_inner = static_cast<double>(inner_near) / inner_total;
+    std::printf("     总非透明 %d；内部像素 %d：误差<=2 的 %.3f%%，完全一致 %.2f%%\n",
+                total, inner_total, r_inner * 100.0,
+                100.0 * inner_exact / inner_total);
+    check(r_inner >= 0.99, "内部像素 GPU 与 CPU 一致（误差<=2）>= 99%");
+
+    // 轮廓覆盖率：两张图的"被画过"像素数应该很接近（画布大小不同，
+    // 但内容面积应该基本一样）。
+    const double cover = static_cast<double>(gpu_nonblack) / total;
+    std::printf("     轮廓面积 GPU/CPU = %d/%d = %.3f\n", gpu_nonblack, total, cover);
+    check(cover > 0.95 && cover < 1.1, "轮廓面积与 CPU 相当（0.95~1.10）");
+
+    // 8 个朝向都得烘得出来，而且不能全都长一样（证明 yaw 真的生效了）
+    int distinct = 0;
+    int prev_id = -1;
+    for (int f = 0; f < 256; f += 32) {
+        sprites_.Reset_Budget(4);
+        const ObjectSprite* s2 = sprites_.Get(type, f, player_color_);
+        if (s2 == nullptr || s2->sprite_id < 0) {
+            check(false, "朝向档能烘出来");
+            break;
+        }
+        if (s2->sprite_id != prev_id) {
+            ++distinct;
+        }
+        prev_id = s2->sprite_id;
+    }
+    check(distinct == 8, "8 个朝向各烘出一张（互不相同）");
+    std::printf("     朝向数：%d/8\n", distinct);
+
+    std::printf(ok ? "[OK] GPU 体素管线与 CPU 一致\n" : "[x] GPU 体素管线有偏差\n");
     return ok;
 }
 

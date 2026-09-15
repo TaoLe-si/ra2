@@ -126,6 +126,12 @@ public:
     /// 返回 false 表示有不通过的判据。
     bool Self_Test();
 
+    /// 体素管线自检：GPU 光栅化 vs CPU 软光栅，逐像素比。
+    ///
+    /// 判据很硬：GPU 路径是新写的，必须证明它和已经验过的 CPU 路径出一样的图，
+    /// 否则"解码交给 DX12"就只是把 bug 搬了个地方。
+    bool Self_Test_Voxel_GPU();
+
     /// 建造页签：0=建筑 1=防御 2=步兵 3=车辆（对应热键 Q/W/E/R）。
     int Sidebar_Tab() const noexcept { return sidebar_tab_; }
     /// 当前挂起的光标命令（K 修理 / L 变卖）。
@@ -134,6 +140,8 @@ public:
 
 private:
     void Update_Camera(float dt);
+    /// 帧外准备精灵（体素烘焙 + SHP 上传）。见 Render 里为什么要放在帧外。
+    void Warm_Sprites();
     void Draw_Battlefield();
     /// 画一个单位的真精灵（体素/SHP）。返回 false = 没有素材，退成色块。
     bool Draw_Object_Sprite(const Object& o, int sx, int sy, float scale);
@@ -170,7 +178,6 @@ private:
     // 逻辑层
     World world_;
     SpriteCache sprites_;                  ///< 单位名 -> 真图（体素/SHP）
-    std::unordered_map<int, int> sprite_ids_;   ///< 缓存 key 的哈希 -> 渲染器精灵 id
     int sprites_ok_ = 0, sprites_miss_ = 0;
     int sidebar_tab_ = 0;    ///< Q/W/E/R
     int cursor_mode_ = 0;    ///< 0=普通 1=修理 2=变卖

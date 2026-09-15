@@ -114,6 +114,47 @@ struct VxlAttach {
     float transform[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
 };
 
+/// 送给 GPU 的一根肢体的常量包。
+///
+/// 关键点是 **m 里不含朝向 yaw**：朝向是每帧/每档变的，把它烘进矩阵就得
+/// 每个朝向重传一遍全部肢体矩阵。这里把 yaw 留成着色器里的根常量，
+/// 于是"一个模型只上传一次几何"，8 向 32 向都是白送的。
+struct VxlGpuLimb {
+    /// 3×4 行主序：已含 HVA 姿态与附加层（炮塔/炮管）变换，**不含**朝向。
+    /// 用法和 Render_Isometric 完全一致：world = Yaw · (m · (idx + min_b))
+    float m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+    /// 肢体局部 AABB 最小角（体素坐标）。体素索引要先加上它才能进矩阵 ——
+    /// 局部原点在 AABB 中心，不加会散架（见 Render_Isometric 的注释）。
+    float min_b[3] = {0, 0, 0};
+    /// 最大角。**只有 CPU 侧用**（算画布包围盒），不上传 GPU。
+    float max_b[3] = {0, 0, 0};
+    /// 法线表槽位 0..3（= NormalsType - 1）。
+    int normals_slot = 0;
+};
+
+/// GPU 光栅化用的几何。
+///
+/// CPU 到这里就**收工**了：LZO 解压 + 列解码，仅此而已。剩下的
+/// 投影 / 明暗查表 / 调色板查表 / 画家序全部搬到着色器里
+/// （见 Dx12Renderer::Bake_Voxels）。
+///
+/// 体素是打包的：每体素 2 个 uint32
+///   [2i + 0] = x | y<<8 | z<<16 | colour<<24
+///   [2i + 1] = normal | limb<<8 | normals_slot<<16
+struct VxlGpuGeom {
+    std::vector<uint32_t> voxels;
+    std::vector<VxlGpuLimb> limbs;
+    /// 投影后的画布范围 x0,y0,x1,y1（已含 yaw）。
+    ///
+    /// 这是**保守上界**（用每根肢体 AABB 的 8 个角算的，没逐体素扫）。
+    /// 只影响画布大小、不影响落点：落点锚在模型原点
+    /// （见 Dx12Renderer::Bake_Voxels 里关于 off_x/off_y 的说明），
+    /// 所以画布多一圈透明边也没关系。
+    float bbox[4] = {0, 0, 0, 0};
+    /// 画家序深度（px+py+pz）的范围 min,max —— 深度缓冲要拿它做归一化。
+    float depth[2] = {0, 0};
+};
+
 class VxlFile {
 public:
     /// 解析一整块 VXL 数据。返回 false 表示不是 VXL 或外层长度不自洽。
@@ -213,7 +254,30 @@ public:
                           const float* shadow_light = nullptr,
                           float ground_z = 0.0f,
                           std::vector<uint8_t>* shadow_out = nullptr,
-                          const float* model_xform = nullptr) const;
+                          const float* model_xform = nullptr,
+                          /// 画布原点对应的投影坐标。做像素级对齐时才需要
+                          /// （`ra2game --vxlgpu` 拿它把 CPU 图和 GPU 图对上）。
+                          float* out_x0 = nullptr, float* out_y0 = nullptr,
+                          /// 强制指定的画布范围 x0,y0,x1,y1（4 个 float）。
+                          /// 给了就不用逐体素自己求 —— GPU 路径用的是"每根肢体
+                          /// AABB 的 8 个角"求出的**保守**上界（O(肢体数) 而不是
+                          /// O(体素数)）。两条路要逐像素对，就得用同一个原点，
+                          /// 否则差异全来自画布相位、看不出真正的问题。
+                          const float* bbox_override = nullptr) const;
+
+    /// 导出"只解码、不投影"的 GPU 几何。
+    ///
+    /// 与 Render_Isometric 用的是同一套变换约定（pose / attach / yaw 语义
+    /// 完全一致），所以两条路的像素结果必须能对上 —— `ra2game --vxlgpu`
+    /// 就是在验这件事。区别在于它**不做**这几件事：
+    ///   * 不投影（不产生 sx/sy）
+    ///   * 不算明暗级（法线索引原样带过去，GPU 查表）
+    ///   * 不查调色板（colour 原样带过去，GPU 查表）
+    ///   * 不排序（画家序改用深度缓冲，逐像素判定，比整块排序更准）
+    ///
+    /// 一个模型的几何与朝向无关，所以可以只调一次；朝向在烘焙时给。
+    bool Build_GPU_Geom(const float* pose, const VxlAttach* attach, int attach_count,
+                        float yaw, VxlGpuGeom* out) const;
 
     void Reset();
 
