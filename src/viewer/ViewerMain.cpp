@@ -36,6 +36,7 @@
 #include "gfx/ShpFile.h"
 #include "gfx/TmpFile.h"
 #include "gfx/VxlFile.h"
+#include "gfx/VoxelLight.h"
 #include "data/UnitModel.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
@@ -68,6 +69,10 @@ struct App {
     /// VXL 体素模式：软件等距光栅化出来的索引图，形状和 TMP 那条路一样，
     /// 所以能直接复用同一个 R8 + 256×1 查表的精灵管线。
     std::vector<uint8_t> vxl_idx;
+    std::vector<uint8_t> vxl_shade;   ///< 每个像素的明暗级（0..16），配 vxl_idx 用
+    std::vector<uint8_t> vxl_rgba;    ///< 打光后烘出来的真彩图
+    VoxelLight light;                 ///< 光照参数（默认值 = gamemd.exe 实测）
+    bool light_on = true;             ///< L 键切换：关掉就是"原始色号"，方便对比
     int vxl_w = 0;
     int vxl_h = 0;
     VxlFile vxl;
@@ -491,11 +496,15 @@ void Rebuild_Vxl_Pose() {
     }
     const VxlAttach* att_p = (att_n > 0) ? att : nullptr;
 
+    // 【光影】体素走真彩管线：明暗由法线算好后烘进 RGB（见 gfx/VoxelLight.h）。
+    // 索引管线做不到 —— 同一个色号在不同朝向上要有不同亮度。
+    const VoxelLight* light_p = g_app.light_on ? &g_app.light : nullptr;
+
     // 先按每体素 8 像素画；画布超过窗口就整体缩小重画一次。
     // 体素模型的世界尺寸差得极远（小坦克 ~30、四足机甲 ~400），固定倍数必然有一头看不全。
     float sc = 8.0f;
     if (!g_app.vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, sc, pose,
-                                    att_p, att_n)) {
+                                    att_p, att_n, light_p, &g_app.vxl_shade)) {
         std::printf("[x] 体素光栅化失败（HVA 帧 %d）\n", g_app.hva_frame);
         return;
     }
@@ -509,13 +518,21 @@ void Rebuild_Vxl_Pose() {
             sc = 1.0f;
         }
         if (!g_app.vxl.Render_Isometric(&g_app.vxl_idx, &g_app.vxl_w, &g_app.vxl_h, sc,
-                                        pose, att_p, att_n)) {
+                                        pose, att_p, att_n, light_p, &g_app.vxl_shade)) {
             std::printf("[x] 体素光栅化失败（缩放后）\n");
             return;
         }
     }
-    g_app.sprite = g_app.r.Upload_Sprite(g_app.vxl_idx.data(), g_app.vxl_w,
-                                         g_app.vxl_h);
+    if (g_app.light_on) {
+        Shade_To_RGBA(g_app.vxl_idx.data(), g_app.vxl_shade.data(),
+                      g_app.vxl_w * g_app.vxl_h, g_app.vxl.Palette(), g_app.light,
+                      &g_app.vxl_rgba);
+        g_app.sprite = g_app.r.Upload_Sprite_RGBA(g_app.vxl_rgba.data(), g_app.vxl_w,
+                                                  g_app.vxl_h);
+    } else {
+        g_app.sprite = g_app.r.Upload_Sprite(g_app.vxl_idx.data(), g_app.vxl_w,
+                                             g_app.vxl_h);
+    }
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -546,6 +563,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                   g_app.shp.Frame_Count();
                     Upload_Current_Frame();
                 }
+            } else if (wp == 'L') {
+                // 开/关体素光影。关掉就是"原始色号"直出，用来对比明暗到底起了多大作用。
+                g_app.light_on = !g_app.light_on;
+                Rebuild_Vxl_Pose();
+                std::printf("体素光影：%s（环境光 %.2f 漫反射 %.2f 分级 %d）\n",
+                            g_app.light_on ? "开" : "关", g_app.light.ambient,
+                            g_app.light.diffuse, g_app.light.levels);
             } else if (wp == VK_OEM_PLUS || wp == VK_ADD) {
                 g_app.scale *= 1.25f;
             } else if (wp == VK_OEM_MINUS || wp == VK_SUBTRACT) {

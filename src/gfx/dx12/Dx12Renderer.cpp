@@ -47,6 +47,11 @@ float4 PSMain(VSOut i) : SV_Target {
     uint idx = (uint)(indexTex.Sample(samp, i.uv).r * 255.0 + 0.5);
     return paletteTex.Sample(samp, float2((float(idx) + 0.5) / 256.0, 0.5));
 }
+
+// 真彩精灵（体素）：明暗已经在 CPU 端烘进 RGB，直接采样。
+float4 PSMainRGBA(VSOut i) : SV_Target {
+    return indexTex.Sample(samp, i.uv);
+}
 )";
 
 void SetError(char* dst, const char* msg) {
@@ -324,6 +329,16 @@ bool Dx12Renderer::Create_Pipeline() {
         }
         return false;
     }
+    ComPtr<ID3DBlob> ps_rgba;
+    if (FAILED(D3DCompile(kShaderSource, std::strlen(kShaderSource), nullptr, nullptr,
+                          nullptr, "PSMainRGBA", "ps_5_0", flags, 0, &ps_rgba, &err))) {
+        if (err) {
+            Fail(static_cast<const char*>(err->GetBufferPointer()));
+        } else {
+            Fail("真彩像素着色器编译失败");
+        }
+        return false;
+    }
 
     // 根签名：t0=索引纹理, t1=调色板, b0=变换常量, s0=静态点采样器
     D3D12_DESCRIPTOR_RANGE r0 = {};
@@ -397,11 +412,26 @@ bool Dx12Renderer::Create_Pipeline() {
         Fail("创建 PSO 失败");
         return false;
     }
+    // 真彩管线：除了换像素着色器，其它全部复用（根签名/混合/光栅都一致）。
+    pd.PS = {ps_rgba->GetBufferPointer(), ps_rgba->GetBufferSize()};
+    if (FAILED(device_->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&pso_rgba_)))) {
+        Fail("创建真彩 PSO 失败");
+        return false;
+    }
     return true;
 }
 
 // ---------------------------------------------------------------------------
 int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
+    return Upload_Texture(pixels, width, height, 1, DXGI_FORMAT_R8_UNORM, false);
+}
+
+int Dx12Renderer::Upload_Sprite_RGBA(const uint8_t* pixels, int width, int height) {
+    return Upload_Texture(pixels, width, height, 4, DXGI_FORMAT_R8G8B8A8_UNORM, true);
+}
+
+int Dx12Renderer::Upload_Texture(const uint8_t* pixels, int width, int height,
+                                 int bpp, DXGI_FORMAT fmt, bool rgba) {
     if (!device_ || srv_used_ >= 256) {
         return -1;
     }
@@ -409,7 +439,8 @@ int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     // 不 aligned 的 CopyTextureRegion 是 INVALID_CALL，而且 DX12 会直接把设备
     // 摘掉（removed=0x887A0001），报错却出现在下一次资源创建上，极难定位。
     // 宽 632 的索引纹理就踩过这个坑。
-    const UINT64 row = (static_cast<UINT64>(width) + 255) & ~static_cast<UINT64>(255);
+    const UINT64 row_bytes = static_cast<UINT64>(width) * bpp;
+    const UINT64 row = (row_bytes + 255) & ~static_cast<UINT64>(255);
     const UINT64 total = row * height;
 
     ComPtr<ID3D12Resource> tex;
@@ -421,13 +452,13 @@ int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     rd.Height = static_cast<UINT>(height);
     rd.DepthOrArraySize = 1;
     rd.MipLevels = 1;
-    rd.Format = DXGI_FORMAT_R8_UNORM;
+    rd.Format = fmt;
     rd.SampleDesc.Count = 1;
     rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     if (FAILED(device_->CreateCommittedResource(
             &hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
             IID_PPV_ARGS(&tex)))) {
-        Fail("创建索引纹理失败");
+        Fail("创建精灵纹理失败");
         return -1;
     }
 
@@ -452,10 +483,11 @@ int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     if (FAILED(up->Map(0, nullptr, &mapped))) {
         return -1;
     }
-    // 逐行拷贝：源是紧凑的 width 字节一行，目标是 256 对齐的 row 字节一行。
+    // 逐行拷贝：源是紧凑的 row_bytes 字节一行，目标是 256 对齐的 row 字节一行。
     for (int y = 0; y < height; ++y) {
-        std::memcpy(static_cast<uint8_t*>(mapped) + y * row, pixels + static_cast<size_t>(y) * width,
-                    static_cast<size_t>(width));
+        std::memcpy(static_cast<uint8_t*>(mapped) + y * row,
+                    pixels + static_cast<size_t>(y) * row_bytes,
+                    static_cast<size_t>(row_bytes));
     }
     up->Unmap(0, nullptr);
 
@@ -469,7 +501,7 @@ int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     src.pResource = up.Get();
     src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     src.PlacedFootprint.Offset = 0;
-    src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8_UNORM;
+    src.PlacedFootprint.Footprint.Format = fmt;
     src.PlacedFootprint.Footprint.Width = static_cast<UINT>(width);
     src.PlacedFootprint.Footprint.Height = static_cast<UINT>(height);
     src.PlacedFootprint.Footprint.Depth = 1;
@@ -487,7 +519,7 @@ int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
 
     const UINT slot = srv_used_++;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv = {};
-    sv.Format = DXGI_FORMAT_R8_UNORM;
+    sv.Format = fmt;
     sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     sv.Texture2D.MipLevels = 1;
@@ -497,6 +529,7 @@ int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     GpuSprite s;
     s.width = width;
     s.height = height;
+    s.rgba = rgba;
     s.index_texture = tex;
     s.index_srv = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
     sprites_.push_back(s);
@@ -613,6 +646,8 @@ void Dx12Renderer::Draw_Sprite(int sprite, int dx, int dy, float scale) {
     const float ndc_h = (h / vp_height_) * 2.0f;
     const float xform[4] = {ndc_x, ndc_y, ndc_w, ndc_h};
 
+    // 真彩精灵用另一条 PSO（像素着色器不查调色板），其余完全一致。
+    cmd_->SetPipelineState(s.rgba ? pso_rgba_.Get() : pso_.Get());
     cmd_->SetGraphicsRootDescriptorTable(0, s.index_srv);
     cmd_->SetGraphicsRoot32BitConstants(2, 4, xform, 0);
     cmd_->DrawInstanced(6, 1, 0, 0);

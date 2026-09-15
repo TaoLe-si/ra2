@@ -277,7 +277,8 @@ void Mat34_Mul(const float* a, const float* b, float* c) {
 
 bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
                                float scale, const float* pose, const VxlAttach* attach,
-                               int attach_count) const {
+                               int attach_count, const VoxelLight* light,
+                               std::vector<uint8_t>* shade_out) const {
     if (indexed == nullptr || out_w == nullptr || out_h == nullptr || scale <= 0.0f) {
         return false;
     }
@@ -287,9 +288,11 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
     struct Pt {
         float sx, sy, depth;
         uint8_t c;
+        uint8_t shade;
     };
     std::vector<Pt> pts;
     std::vector<VxlVoxel> vox;
+    VoxelShadeTable shade;
 
     // 把一个 VXL 的体素全投影成 (sx, sy, depth, colour) 追加到 pts。
     //
@@ -346,6 +349,15 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
             const float lox = t.min_bounds[0];
             const float loy = t.min_bounds[1];
             const float loz = t.min_bounds[2];
+            // 明暗查表：光向量按**本肢体**的旋转转到物体空间，再对法线表逐项
+            // 量化。每根肢体一张表（最多 245 项），和 exe 的做法一致
+            // （exe 也是每个物体调用一次 LUT 生成，传的是同一个光向量）。
+            if (light != nullptr) {
+                const float R[9] = {m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]};
+                shade.Build(t.normals_type, *light, R);
+            } else {
+                shade.Reset_To_Brightest(light ? light->levels : 16);
+            }
             for (const VxlVoxel& v : vox) {
                 const float lx = static_cast<float>(v.x) + lox;
                 const float ly = static_cast<float>(v.y) + loy;
@@ -359,6 +371,7 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
                 p.sy = (px + py) * k * 0.5f - pz;
                 p.depth = px + py + pz;
                 p.c = v.colour;
+                p.shade = shade.Level(v.normal);
                 pts.push_back(p);
             }
         }
@@ -397,6 +410,9 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
               [](const Pt& a, const Pt& b) { return a.depth < b.depth; });
 
     indexed->assign(static_cast<size_t>(w) * h, 0);
+    if (shade_out != nullptr) {
+        shade_out->assign(static_cast<size_t>(w) * h, 0);
+    }
     const int cell = static_cast<int>(scale);
     for (const Pt& p : pts) {
         const int cx = static_cast<int>((p.sx - x0) * scale);
@@ -411,7 +427,11 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
                 if (xx < 0 || xx >= w) {
                     continue;
                 }
-                (*indexed)[static_cast<size_t>(yy) * w + xx] = p.c;
+                const size_t o = static_cast<size_t>(yy) * w + xx;
+                (*indexed)[o] = p.c;
+                if (shade_out != nullptr) {
+                    (*shade_out)[o] = p.shade;
+                }
             }
         }
     }

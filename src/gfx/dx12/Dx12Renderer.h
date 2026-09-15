@@ -26,10 +26,17 @@ namespace ra2 {
 using Microsoft::WRL::ComPtr;
 
 /// 一张已上传到 GPU 的精灵。
+///
+/// 两种形态：
+///   * 索引色（rgba=false）：R8 每像素一个调色板索引，像素着色器查 256×1 调色板。
+///     SHP/TMP/PCX 这些"画好的图"走这条 —— 换阵营色只要重传调色板。
+///   * 真彩（rgba=true）：RGBA8，直接采样。体素走这条 —— 它的明暗是逐体素算好
+///     烘进去的（见 gfx/VoxelLight.h），没有"换调色板改色"这回事了。
 struct GpuSprite {
     int width = 0;
     int height = 0;
-    ComPtr<ID3D12Resource> index_texture;   ///< R8，每像素一个调色板索引
+    bool rgba = false;
+    ComPtr<ID3D12Resource> index_texture;   ///< R8 或 RGBA8
     D3D12_GPU_DESCRIPTOR_HANDLE index_srv = {};
 };
 
@@ -49,6 +56,12 @@ public:
 
     /// 把一帧索引像素传上去。返回句柄下标，-1 表示失败。
     int Upload_Sprite(const uint8_t* indexed_pixels, int width, int height);
+
+    /// 把一帧真彩像素传上去（RGBA8，每行 w*4 字节）。
+    ///
+    /// 给体素用：明暗是 CPU 端按法线算好烘进像素的（gfx/VoxelLight.h），
+    /// 走索引管线没法表达"同一个色号在不同法线下亮度不同"。
+    int Upload_Sprite_RGBA(const uint8_t* rgba_pixels, int width, int height);
 
     /// 设置当前调色板（影响后续所有绘制）。
     void Set_Palette(const Palette& pal);
@@ -72,6 +85,10 @@ public:
     const char* Last_Error() const noexcept { return last_error_; }
 
 private:
+    /// Upload_Sprite / Upload_Sprite_RGBA 的公共实现。
+    int Upload_Texture(const uint8_t* pixels, int width, int height, int bpp,
+                       DXGI_FORMAT fmt, bool rgba);
+
     bool Finish_Init();          ///< 两个 Init 共用的后半段
     bool Create_Device();
     bool Create_SwapChain(HWND hwnd, int width, int height);
@@ -90,7 +107,8 @@ private:
     ComPtr<ID3D12DescriptorHeap> rtv_heap_;
     ComPtr<ID3D12DescriptorHeap> srv_heap_;
     ComPtr<ID3D12RootSignature> root_sig_;
-    ComPtr<ID3D12PipelineState> pso_;
+    ComPtr<ID3D12PipelineState> pso_;        ///< 索引色 -> 查调色板
+    ComPtr<ID3D12PipelineState> pso_rgba_;   ///< 真彩直接采样
     ComPtr<ID3D12Resource> backbuffers_[2];
     ComPtr<ID3D12Fence> fence_;
     HANDLE fence_event_ = nullptr;

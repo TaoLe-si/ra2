@@ -62,6 +62,8 @@
 #include <string>
 #include <vector>
 
+#include "gfx/VoxelLight.h"
+
 namespace ra2 {
 
 /// 体素数据区里一张表的"空列"标记。
@@ -177,10 +179,18 @@ public:
     ///
     /// 注意 det **只乘平移**。写成 `world = det×(R·v + T)` 会把体素坐标缩小
     /// 12 倍而平移不变，13 根肢体立刻散成天上的一堆小方块（实测踩过）。
+    ///
+    /// 【光影】light 非空时每个体素会按法线算一个明暗级写进 shade_out
+    /// （尺寸与 indexed 相同，取值 0..light->levels）。明暗级的算法完全照抄
+    /// gamemd.exe（见 gfx/VoxelLight.h）。light 为空而 shade_out 非空时，
+    /// 整张图填"最亮级"，等于不打光但结构对齐。
+    /// 最终颜色由调用方算：`palette[colour] × Shade_Factor(light, level)`。
     bool Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
                           float scale = 8.0f, const float* pose = nullptr,
                           const VxlAttach* attach = nullptr,
-                          int attach_count = 0) const;
+                          int attach_count = 0,
+                          const VoxelLight* light = nullptr,
+                          std::vector<uint8_t>* shade_out = nullptr) const;
 
     void Reset();
 

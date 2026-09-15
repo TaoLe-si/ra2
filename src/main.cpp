@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "ai/PathFinder.h"
+#include "core/GameVersion.h"
 #include "core/VTableMap.h"
 #include "data/Ini.h"
 #include "data/UnitModel.h"
@@ -28,6 +29,8 @@
 #include "gfx/PcxFile.h"
 #include "gfx/TmpFile.h"
 #include "gfx/VxlFile.h"
+#include "gfx/VxlNormals.h"
+#include "gfx/VoxelLight.h"
 #include "io/FileSystem.h"
 #include "io/MixCrypto.h"
 #include "map/Map.h"
@@ -922,6 +925,37 @@ static int Verify_Ini(const char* path, uint32_t ini_id) {
 // 判据是"能不能自证"：86 个 Voxel=yes 单位的车体 VXL **必须全部命中**，
 // 缺一个就说明 Image= / CRC 大小写 / 段合并这三处里有一处写错了。
 // --dump 会把整张表写出去，交给 tools/unitvxl_check.py 与 Python 参考实现逐行对账。
+// ---- 版本识别：RA2 与 YR 是"打底 + 覆盖"，不是一个目录两套无关素材 ----
+static int Detect_Game(const char* dir) {
+    using namespace ra2;
+    std::vector<GameVersion> installed = GameInstall::Detect_Installed(dir);
+    std::printf("目录 %s 里检测到 %zu 个版本：", dir, installed.size());
+    for (GameVersion v : installed) {
+        std::printf("%s ", Version_Name(v));
+    }
+    std::printf("（自动选择：%s）\n\n", Version_Name(GameInstall::Guess(dir)));
+    if (installed.empty()) {
+        std::printf("[x] 既没找到 game.exe+ra2.mix，也没找到 gamemd.exe+ra2md.mix\n");
+        return 1;
+    }
+    int rc = 0;
+    for (GameVersion v : installed) {
+        GamePaths p;
+        std::string missing;
+        const bool ok = GameInstall::Resolve(dir, v, &p, &missing);
+        GameInstall::Dump(p);
+        if (!missing.empty()) {
+            std::printf("   缺失（不致命）：%s\n", missing.c_str());
+        }
+        if (!ok) {
+            std::printf("   [x] 缺核心文件\n");
+            rc = 1;
+        }
+        std::printf("\n");
+    }
+    return rc;
+}
+
 static int Unit_DB(const std::vector<std::string>& mix_paths, const char* dump_path) {
     std::vector<ra2::MixFileClass> mixes(mix_paths.size());
     std::vector<const ra2::MixFileClass*> ptrs(mix_paths.size());
@@ -971,7 +1005,230 @@ static int Unit_DB(const std::vector<std::string>& mix_paths, const char* dump_p
     return s.body_missing == 0 ? 0 : 1;
 }
 
+/// 体素光影：渲染一个单位并出图，同时做"顶面亮 / 底面暗"的硬判据自检。
+///
+/// 为什么要自检而不是"看着差不多"：本环境看不到图，判断只能靠数值。
+/// 判据来自常识之外的东西 —— 法线表本身（外表面法线朝外，94% 命中），
+/// 所以"朝上的面必须比朝下的面亮"是可以直接算出来的。
+static int Vxl_Light(const std::vector<std::string>& mix_paths, const char* unit_name,
+                     const char* out_path, const float* light3) {
+    std::vector<MixFileClass> mixes(mix_paths.size());
+    for (size_t i = 0; i < mix_paths.size(); ++i) {
+        if (!mixes[i].Open(mix_paths[i].c_str())) {
+            std::printf("[x] 打不开 %s\n", mix_paths[i].c_str());
+            return 1;
+        }
+    }
+    auto read_any = [&](uint32_t id, std::vector<uint8_t>* out) -> bool {
+        for (size_t i = mixes.size(); i-- > 0;) {
+            *out = mixes[i].Read_Deep_By_ID(id);
+            if (!out->empty()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    std::vector<const MixFileClass*> ptrs(mixes.size());
+    for (size_t i = 0; i < mixes.size(); ++i) {
+        ptrs[i] = &mixes[i];
+    }
+    UnitModelDB db;
+    if (!db.Load(ptrs.data(), static_cast<int>(ptrs.size()))) {
+        std::printf("[x] 规则表加载失败\n");
+        return 1;
+    }
+    const UnitModel* um = db.Resolve(unit_name);
+    if (um == nullptr || !um->ok()) {
+        std::printf("[x] %s 不是体素单位（或找不到）\n", unit_name);
+        return 1;
+    }
+
+    std::vector<uint8_t> body, tur, barl;
+    if (!read_any(um->body.id, &body)) {
+        std::printf("[x] 读不到 %s\n", um->body.name.c_str());
+        return 1;
+    }
+    VxlFile vxl;
+    if (!vxl.Load(body.data(), body.size())) {
+        std::printf("[x] %s 不是合法 VXL\n", um->body.name.c_str());
+        return 1;
+    }
+    VxlFile vxl_tur, vxl_barl;
+    VxlAttach att[2];
+    int att_n = 0;
+    if (um->turret_vxl.present && read_any(um->turret_vxl.id, &tur) &&
+        vxl_tur.Load(tur.data(), tur.size())) {
+        att[att_n].file = &vxl_tur;
+        ++att_n;
+    }
+    if (um->barrel_vxl.present && read_any(um->barrel_vxl.id, &barl) &&
+        vxl_barl.Load(barl.data(), barl.size())) {
+        att[att_n].file = &vxl_barl;
+        ++att_n;
+    }
+
+    VoxelLight light;
+    if (light3 != nullptr) {
+        light.light[0] = light3[0];
+        light.light[1] = light3[1];
+        light.light[2] = light3[2];
+    }
+    light.Normalize();
+
+    std::vector<uint8_t> idx, shade;
+    int w = 0, h = 0;
+    if (!vxl.Render_Isometric(&idx, &w, &h, 8.0f, nullptr, att, att_n, &light, &shade)) {
+        std::printf("[x] 渲染失败\n");
+        return 1;
+    }
+
+    // ---- 硬判据自检：按世界法线的 z 分量分桶，看平均明暗级 ----
+    // 判据：顶面(nz>0.7) 平均级 > 侧面(|nz|<0.3) > 底面(nz<-0.7)。
+    double sum[3] = {0, 0, 0};
+    long cnt[3] = {0, 0, 0};
+    auto bucket = [](float nz) -> int {
+        if (nz > 0.7f) return 0;
+        if (nz < -0.7f) return 1;
+        if (nz < 0.3f && nz > -0.3f) return 2;
+        return -1;
+    };
+    std::vector<VxlVoxel> vox;
+    VoxelShadeTable st;
+    for (int l = 0; l < vxl.Limb_Count(); ++l) {
+        const VxlLimbTailer& t = vxl.Tailer(l);
+        vox.clear();
+        if (!vxl.Decode_Limb(l, &vox)) {
+            continue;
+        }
+        const float R[9] = {t.transform[0], t.transform[1], t.transform[2],
+                            t.transform[4], t.transform[5], t.transform[6],
+                            t.transform[8], t.transform[9], t.transform[10]};
+        st.Build(t.normals_type, light, R);
+        int count = 0;
+        const float* tab = Voxel_Normal_Table(Normal_Slot_Of(t.normals_type), &count);
+        if (tab == nullptr) {
+            continue;
+        }
+        for (const VxlVoxel& v : vox) {
+            if (v.normal >= count) {
+                continue;
+            }
+            const float nx = tab[v.normal * 3 + 0];
+            const float ny = tab[v.normal * 3 + 1];
+            const float nz = tab[v.normal * 3 + 2];
+            const float wz = R[6] * nx + R[7] * ny + R[8] * nz;
+            const int b = bucket(wz);
+            if (b < 0) {
+                continue;
+            }
+            sum[b] += st.Level(v.normal);
+            ++cnt[b];
+        }
+    }
+    std::printf("单位 %s（美术名 %s）肢体 %d，炮塔/炮管附加层 %d\n",
+                um->unit.c_str(), um->image.c_str(), vxl.Limb_Count(), att_n);
+    std::printf("光向量 L = (%+.4f, %+.4f, %+.4f)  环境光 %.2f 漫反射 %.2f 分级 %d\n",
+                light.light[0], light.light[1], light.light[2], light.ambient,
+                light.diffuse, light.levels);
+    const char* bn[3] = {"顶面", "底面", "侧面"};
+    double mean[3] = {0, 0, 0};
+    for (int b = 0; b < 3; ++b) {
+        mean[b] = cnt[b] ? sum[b] / cnt[b] : -1.0;
+        std::printf("  %s：%6ld 个体素，平均明暗级 %.2f / %d（亮度系数 %.3f）\n",
+                    bn[b], cnt[b], mean[b], light.levels,
+                    cnt[b] ? Shade_Factor(light, static_cast<int>(mean[b] + 0.5)) : 0.0);
+    }
+    int rc = 0;
+    if (cnt[0] > 0 && cnt[1] > 0 && cnt[2] > 0) {
+        const bool ok = (mean[0] > mean[2]) && (mean[2] > mean[1]);
+        std::printf("  判据 顶面 > 侧面 > 底面：%s\n", ok ? "通过" : "**不通过**");
+        if (!ok) rc = 1;
+    } else {
+        std::printf("  判据：样本不足，跳过\n");
+    }
+
+    // ---- 明暗级直方图 ----
+    long hist[17] = {0};
+    long opaque = 0;
+    for (size_t i = 0; i < idx.size(); ++i) {
+        if (idx[i] == 0) {
+            continue;
+        }
+        ++opaque;
+        const int lv = shade[i];
+        hist[lv < 0 ? 0 : (lv > 16 ? 16 : lv)]++;
+    }
+    std::printf("  出图 %dx%d，不透明像素 %ld\n", w, h, opaque);
+    std::printf("  明暗级直方图：");
+    for (int i = 0; i <= 16; ++i) {
+        if (hist[i]) {
+            std::printf(" %d:%ld", i, hist[i]);
+        }
+    }
+    std::printf("\n");
+
+    if (out_path != nullptr) {
+        std::vector<uint8_t> rgba;
+        Shade_To_RGBA(idx.data(), shade.data(), static_cast<int>(idx.size()),
+                      vxl.Palette(), light, &rgba);
+        std::FILE* f = std::fopen(out_path, "wb");
+        if (!f) {
+            std::printf("[x] 写不了 %s\n", out_path);
+            return 1;
+        }
+        // PPM（P6）：无依赖、Python 一行就能读，专门给离屏校验用。
+        std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+        for (int i = 0; i < w * h; ++i) {
+            std::fputc(rgba[i * 4 + 0], f);
+            std::fputc(rgba[i * 4 + 1], f);
+            std::fputc(rgba[i * 4 + 2], f);
+        }
+        std::fclose(f);
+        std::printf("  已写出 %s\n", out_path);
+    }
+    return rc;
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--vxlit") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --vxlit <mix> [更多mix...] "
+                        "[--unit NAME] [--out out.ppm] [--light x,y,z]\n");
+            std::printf("  例：ra2core --vxlit D:/westwood/RA2YR/ra2.mix"
+                        " D:/westwood/RA2YR/ra2md.mix --unit MTNK --out mtnk.ppm\n");
+            return 1;
+        }
+        std::vector<std::string> mixes;
+        const char* unit = "MTNK";
+        const char* out = nullptr;
+        float light3[3] = {0, 0, 0};
+        bool has_light = false;
+        for (int i = 2; i < argc; ++i) {
+            if (argv[i][0] == '-' && argv[i][1] == '-') {
+                if (std::strcmp(argv[i], "--unit") == 0 && i + 1 < argc) {
+                    unit = argv[++i];
+                } else if (std::strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+                    out = argv[++i];
+                } else if (std::strcmp(argv[i], "--light") == 0 && i + 1 < argc) {
+                    const char* s = argv[++i];
+                    light3[0] = static_cast<float>(std::atof(s));
+                    const char* c1 = std::strchr(s, ',');
+                    if (c1) light3[1] = static_cast<float>(std::atof(c1 + 1));
+                    const char* c2 = c1 ? std::strchr(c1 + 1, ',') : nullptr;
+                    if (c2) light3[2] = static_cast<float>(std::atof(c2 + 1));
+                    has_light = true;
+                }
+                continue;
+            }
+            mixes.push_back(argv[i]);
+        }
+        if (mixes.empty()) {
+            std::printf("[x] 至少要给一个 .mix\n");
+            return 1;
+        }
+        return Vxl_Light(mixes, unit, out, has_light ? light3 : nullptr);
+    }
     if (argc > 1 && std::strcmp(argv[1], "--ini") == 0) {
         if (argc < 4) {
             std::printf("用法：ra2core --ini <顶层mix> <0xINI的CRC>\n");
@@ -979,6 +1236,14 @@ int main(int argc, char** argv) {
         }
         return Verify_Ini(argv[2],
                           static_cast<uint32_t>(std::strtoul(argv[3], nullptr, 16)));
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--detect") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --detect <游戏目录>\n");
+            std::printf("  例：ra2core --detect D:/westwood/RA2YR\n");
+            return 1;
+        }
+        return Detect_Game(argv[2]);
     }
     if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
         return Ini_Self_Test();
