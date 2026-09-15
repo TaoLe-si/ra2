@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ai/PathFinder.h"
+#include "core/VTableMap.h"
 #include "engine/FrameQueue.h"
 #include "io/FileSystem.h"
 #include "map/Map.h"
@@ -136,5 +137,12 @@ int main(int argc, char** argv) {
                 base.size(), found, serial_ms, par_ms,
                 par_ms > 0.0 ? serial_ms / par_ms : 0.0);
     std::printf("OK  锁步帧队列行为正确，帧 CRC = 0x%08X\n", q.Compute_CRC());
+
+    // 虚表：打印推断出的继承骨架（数据来自 db/vtmap.json，属推断，未证实）
+    static_assert(vtable::kFamily122Count == 9, "122 槽派生族应为 9 张");
+    std::printf("INFO 虚表继承骨架（推断）：共同基类 0x%08X(109槽) -> %d 张 122 槽 -> "
+                "0x%08X(123) -> 0x%08X(124) -> 0x%08X(125)\n",
+                vtable::kRootBase109, vtable::kFamily122Count,
+                vtable::kLevel123, vtable::kLevel124, vtable::kLevel125);
     return 0;
 }

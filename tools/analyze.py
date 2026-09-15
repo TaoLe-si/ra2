@@ -56,11 +56,43 @@ def extract_strings(img: PEImage) -> dict[int, str]:
 
 
 # ---------------- 虚表 ----------------
-def find_vtables(img: PEImage, func_starts: set[int], min_slots: int = 3) -> list[dict]:
-    """扫描可执行段之外的只读数据，找连续的函数指针数组"""
+def collect_data_refs(img: PEImage) -> dict[int, int]:
+    """扫描 .text，统计每个 4 字节立即数把哪些数据地址当成了指针常量。
+
+    虚表起点一定被引用过（构造函数里的 mov [this], offset vftable），
+    所以引用次数 > 0 是判断"这里是某张表的开头"的强证据。
+    """
+    lo, hi = img.text_range()
+    off0 = img.rva_to_off(lo)
+    blob = img.data[off0:off0 + (hi - lo)]
+    ib = img.image_base
+    refs: dict[int, int] = {}
+    for k in range(len(blob) - 3):
+        (v,) = struct.unpack_from("<I", blob, k)
+        rva = v - ib
+        if rva <= 0:
+            continue
+        sec = img.section_of(rva)
+        if sec in (".rdata", ".data"):
+            refs[rva] = refs.get(rva, 0) + 1
+    return refs
+
+
+def find_vtables(img: PEImage, data_refs: dict[int, int], min_slots: int = 3,
+                 max_slots: int = 128, sections=(".rdata",)) -> list[dict]:
+    """找连续的 .text 指针数组 = 虚函数表。
+
+    定界规则（比"是否已知函数起点"可靠得多）：
+      * 起点：被代码引用过；
+      * 延伸：值落在 .text 范围内即可，不要求已被识别为函数起点
+        —— 虚函数里有一部分是 thunk 或非标准开场，用函数表会提前截断；
+      * 终点：遇到非 .text 指针，或遇到另一个"被引用过"的地址
+        （MSVC 把虚表连续排布，后一张表的开头会被引用于它自己的构造函数）。
+    """
+    lo, hi = img.text_range()
     out = []
     for sec in img.sections:
-        if sec["name"] not in (".rdata", ".data"):
+        if sec["name"] not in sections:
             continue
         off = sec["raw_ptr"]
         size = min(sec["raw_size"], sec["vsize"] or sec["raw_size"])
@@ -69,20 +101,23 @@ def find_vtables(img: PEImage, func_starts: set[int], min_slots: int = 3) -> lis
         vals = struct.unpack_from("<%dI" % n, blob, 0)
         i = 0
         while i < n:
-            if vals[i] in func_starts:
+            if lo <= vals[i] - img.image_base < hi:
                 j = i
-                while j < n and vals[j] in func_starts:
+                while j < n and lo <= vals[j] - img.image_base < hi:
+                    if j > i and data_refs.get(sec["rva"] + j * 4, 0) > 0:
+                        break  # 下一张表的开头
                     j += 1
-                if j - i >= min_slots:
-                    rva = sec["rva"] + i * 4
+                start_rva = sec["rva"] + i * 4
+                if min_slots <= j - i <= max_slots and data_refs.get(start_rva, 0) > 0:
                     out.append({
-                        "rva": rva,
-                        "va": img.image_base + rva,
+                        "rva": start_rva,
+                        "va": img.image_base + start_rva,
                         "count": j - i,
                         "entries": list(vals[i:j]),
                         "section": sec["name"],
+                        "refs": data_refs.get(start_rva, 0),
                     })
-                i = j
+                i = j if j > i else i + 1
             else:
                 i += 1
     return out
@@ -146,8 +181,9 @@ def main() -> None:
     t("引用关联完成", t0)
 
     funcs = ff.funcs
-    func_starts = {f["va"] for f in funcs.values()}
-    vtables = find_vtables(img, func_starts)
+    data_refs = collect_data_refs(img)
+    t("数据引用点 %d 个" % len(data_refs), t0)
+    vtables = find_vtables(img, data_refs)
     t("虚函数表 %d 张" % len(vtables), t0)
 
     names = build_names(img, funcs, strings)
