@@ -174,10 +174,10 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
             }
         }
         std::printf("  战场 %dx%d：格 %d（无瓦片 %d），画上 %d，"
-                    "取不到瓦片 %d，取到但全空 %d\n",
+                    "取不到瓦片 %d，取到但全空 %d，SubTile 越界退 0 %d 次\n",
                     terrain_w_, terrain_h_, total, no_tile,
                     map_renderer_.Cells_Drawn(), map_renderer_.Tiles_Missing(),
-                    map_renderer_.Cells_Empty());
+                    map_renderer_.Cells_Empty(), map_renderer_.Sub_Clamped());
         // 空格的分布图：黑块到底是"地图边界外的空白"（正常）还是"中间破了个洞"
         // （解析错），看这张图一眼就知道。每个字符代表 2×4 格。
         const int W = map_.Width(), H = map_.Height();
@@ -722,9 +722,11 @@ bool GameShell::Radar_Rect(int* x, int* y, int* w, int* h) const {
     if (!ui_radar_.ok()) {
         return false;
     }
-    // 贴着屏幕底边钉死，原版就是这样
+    // 【在最上面，不是最下面】原版侧栏的缩略图是钉在**顶部**的，
+    // 下面依次是资金/电力条、四个页签、建造格。
+    // 之前按"雷达在底部"摆，整条顺序是反的（用户对着原版截图指出来了）。
     const int rx = win_w_ - kSidebarW;
-    const int ry = win_h_ - ui_radar_.h;
+    const int ry = 0;
     if (x) *x = rx;
     if (y) *y = ry;
     if (w) *w = ui_radar_.w;
@@ -737,11 +739,12 @@ bool GameShell::Radar_Inner(int* x, int* y, int* w, int* h) const {
     if (!Radar_Rect(&rx, &ry, &rw, &rh)) {
         return false;
     }
-    // RADAR.SHP 第 32 帧量出来的镂空区：x 12..153, y 1..108
-    if (x) *x = rx + 13;
-    if (y) *y = ry + 2;
-    if (w) *w = 140;
-    if (h) *h = 105;
+    // 内缩量是对 RADAR.SHP 第 32 帧做逐行/逐列扫描量出来的：
+    // 上下左右被金属边框和内阴影占掉的部分要去掉，否则小地图会压到框上。
+    if (x) *x = rx + 26;
+    if (y) *y = ry + 14;
+    if (w) *w = 116;
+    if (h) *h = 82;
     return true;
 }
 
@@ -756,55 +759,52 @@ void GameShell::Draw_Sidebar() {
     renderer_.Draw_Rect(sx, 0, kSidebarW, win_h_, kUiBackdrop);
     renderer_.Draw_Rect(sx, 0, 1, win_h_, kUiEdge);
 
-    // 头部 + 页签。页签凹槽位置是从 SIDE1 实测的（见文件头注释）
-    const int head_h = ui_side1_.ok() ? ui_side1_.h : 69;
-    if (ui_side1_.ok()) {
-        Draw_Ui(ui_side1_, sx, 0);
+    // ---- 纵向顺序：照着原版截图自上而下摆 ----
+    //   RADAR    缩略图钉在**顶部**（这是之前搞反的地方，雷达不在底部）
+    //   SIDE1    头部：上半是蓝面板（资金 + 电力），下缘是 4 个页签凹槽
+    //   SIDE2    建造格，两列一行，一直铺到底
+    //   SIDE3    收尾装饰（有些图集里它就是底部那条鹰徽带）
+    int y = 0;
+    if (ui_radar_.ok()) {
+        // 第 32 帧中间是显示区；前面的帧是"雷达未上线"的鹰徽动画
+        Draw_Ui(ui_radar_, sx, 0, 32);
+        y = ui_radar_.h;
     }
+    const int head_y = y;
+    if (ui_side1_.ok()) {
+        Draw_Ui(ui_side1_, sx, head_y);
+        y = head_y + ui_side1_.h;
+    }
+
+    // 资金条 + 电力表画在 SIDE1 上半那块蓝面板里（原版就在这儿，不在屏幕底部）
+    if (ui_credits_.ok()) {
+        Draw_Ui(ui_credits_, sx, head_y + 6);
+        // 数字精灵还没接（要 SIDEFNT3 位图字体），先用色带占位
+        renderer_.Draw_Rect(sx + 26, head_y + 12, 70, 7, kUiGold);
+    }
+    if (ui_power_.ok()) {
+        // 有富余画第 0 帧、欠费画第 1 帧（原版这 2 帧就是这两种状态）
+        Draw_Ui(ui_power_, sx + kSidebarW - ui_power_.w - 10,
+                head_y + (ui_side1_.ok() ? 2 : 0), power_warn_ ? 1 : 0);
+    }
+
+    // 页签叠在 SIDE1 下缘的凹槽上：x = 26 + i*29, y = 42（对 SIDE1 实测）
     for (int i = 0; i < 4; ++i) {
         if (!ui_tab_[i].ok()) {
             continue;
         }
         // 第 1 帧是"选中"态（平均亮度最高，实测 (93,160,204) vs 常态 (56,104,192)）
-        Draw_Ui(ui_tab_[i], sx + 26 + i * 29, 42, (i == sidebar_tab_) ? 1 : 0);
+        Draw_Ui(ui_tab_[i], sx + 26 + i * 29, head_y + 42,
+                (i == sidebar_tab_) ? 1 : 0);
     }
 
-    // ---- 纵向顺序（自上而下，和原版一致）----
-    //   SIDE1    头部：蓝色面板 + 4 个页签
-    //   CREDITS  资金条（原版资金就在页签正下方，不在屏幕底部）
-    //   SIDE2    建造格，两列一行，一直铺到电力带
-    //   SIDE3    电力/鹰徽带（原版电力表在雷达正上方）
-    //   RADAR    贴屏幕底边
-    int y = head_h;
-
-    if (ui_credits_.ok()) {
-        Draw_Ui(ui_credits_, sx, y);
-        // 数字精灵还没接（要 SIDEFNT3 位图字体），先用色带占位
-        renderer_.Draw_Rect(sx + 8, y + 5, 60, 6, kUiGold);
-        y += ui_credits_.h;
-    }
-
-    // 底部自下往上钉死：雷达 -> 电力带
-    const int radar_h = ui_radar_.ok() ? ui_radar_.h : 110;
-    const int radar_y = win_h_ - radar_h;
-    const int band_h = ui_side3_.ok() ? ui_side3_.h : 26;
-    const int band_y = radar_y - band_h;
-    if (ui_side3_.ok()) {
-        Draw_Ui(ui_side3_, sx, band_y);
-    }
-    // 电力表画在电力带的左侧蓝底上（原版电力表就长这样）
-    if (ui_power_.ok()) {
-        // 有富余画第 0 帧、欠费画第 1 帧（原版这 2 帧就是这两种状态）
-        Draw_Ui(ui_power_, sx + 4, band_y + (band_h - ui_power_.h) / 2,
-                power_warn_ ? 1 : 0);
-    }
-
-    // 中间铺建造格：一行 50 像素、两列凹槽在 x = 24 / 86。
-    // 最后一行**贴着电力带对齐**，否则余数会留出一条黑缝。
+    // 建造格：一行 50 像素、两列凹槽在 x = 24 / 86，一直铺到侧栏底部。
+    // 最后一行**贴着底对齐**，否则余数会留出一条黑缝。
     const int row_h = ui_side2_.ok() ? ui_side2_.h : 50;
-    if (row_h > 0 && band_y > y) {
+    const int grid_bottom = win_h_ - (ui_side3_.ok() ? ui_side3_.h : 0);
+    if (row_h > 0 && grid_bottom > y) {
         int gy = y;
-        while (gy + row_h <= band_y) {
+        while (gy + row_h <= grid_bottom) {
             if (ui_side2_.ok()) {
                 Draw_Ui(ui_side2_, sx, gy);
             } else {
@@ -813,13 +813,17 @@ void GameShell::Draw_Sidebar() {
             }
             gy += row_h;
         }
-        if (gy < band_y) {
-            const int tail = band_y - row_h;
+        if (gy < grid_bottom) {
+            const int tail = grid_bottom - row_h;
             if (tail >= y) {
                 const UiPiece& row = ui_side2b_.ok() ? ui_side2b_ : ui_side2_;
                 Draw_Ui(row, sx, tail);
             }
         }
+    }
+    // 底部收尾
+    if (ui_side3_.ok()) {
+        Draw_Ui(ui_side3_, sx, grid_bottom);
     }
 
     // 光标命令提示（K 修理 / L 变卖）

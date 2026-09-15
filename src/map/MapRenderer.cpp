@@ -220,10 +220,17 @@ const TerrainTileRGBA* MapRenderer::Tile_RGBA(int index, int sub) {
             std::vector<uint8_t> raw = subs_[si].mix->Read_Entry(*e);
             TmpFile tmp;
             if (tmp.Load(raw.data(), raw.size())) {
-                // sub 是模板里的第几个 cell（多格模板才 >0）。
+                // 【sub 是变体/朝向，不是可有可无的】实测 Arena 里同一个
+                // TileIndex 下挂了 0..7 共八种 SubTile（461 个 (tile,sub) 组合里
+                // 有 335 个 sub>0）。所以必须按 sub 取对应那份图，
+                // 一律取 0 会让全图每块地都朝同一个方向 —— 这是用户一眼看出来的
+                // "地板连不起来 / 城市是错的"。
                 int cell = sub;
                 if (cell < 0 || cell >= tmp.Tile_Count()) {
+                    // 越界才退 0；但要计数，因为"经常退 0"说明 TMP 的变体数
+                    // 没读对，是另一个 bug，不能默默吞掉。
                     cell = 0;
+                    ++sub_clamped_;
                 }
                 // 外扩 64 像素，保住探到上一格的树冠/岩壁（见 TmpFile.h 关键发现 3）。
                 out.pixels = tmp.Render_Cell_Padded_RGBA(cell, palette_, kCellPad,

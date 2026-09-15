@@ -87,6 +87,8 @@ public:
     /// 所以必须独立统计"有多少格真的画上了不透明像素"。
     int Cells_Drawn() const noexcept { return cells_drawn_; }
     int Cells_Empty() const noexcept { return cells_empty_; }
+    /// SubTile 越界退 0 的次数（0 才是正常）。见 sub_clamped_ 的注释。
+    int Sub_Clamped() const noexcept { return sub_clamped_; }
 
     /// ---- 等距几何：给游戏层做"屏幕 <-> 格子"换算用 ----
     ///
@@ -142,6 +144,9 @@ private:
     int origin_y_ = 0;
     int cells_drawn_ = 0;   ///< 上次 Render 里真的画上像素的格数
     int cells_empty_ = 0;   ///< 取了瓦片但一个不透明像素都没画出来的格数
+    /// 因为 SubTile 越界而退回变体 0 的次数。这个数大就说明 TMP 的变体数没读对
+    /// （SubTile 在 RA2 里是"同一块地的第几种朝向/变体"，不能一律取 0）。
+    int sub_clamped_ = 0;
 };
 
 }  // namespace ra2
