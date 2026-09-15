@@ -170,6 +170,8 @@ public:
     /// 把整张战场画布落盘成 RGBA（`--dumptmap <路径>`）。
     /// 只截屏局部的话，"大片黑楔形"到底是地图边界还是漏画，看不出比例。
     bool Dump_Terrain_RGBA(const char* path) const;
+    /// 把指定瓦片变体落盘（`--dumptile <tile> <sub> <路径>`）。
+    bool Dump_Tile_RGBA(int tile, int sub, const char* path);
 
 private:
     void Update_Camera(float dt);

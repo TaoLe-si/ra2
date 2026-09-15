@@ -163,6 +163,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     bool vxlgpu = false;
     bool grid_debug = false;
     std::string dump_map_path;
+    int dump_tile_tile = -1, dump_tile_sub = -1;
+    std::string dump_tile_path;
     int warm_frames = 0;
     std::string out_path = "build/game.raw";
     for (int i = 0; i < argc; ++i) {
@@ -186,6 +188,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             grid_debug = true;
         } else if (std::strcmp(args[i], "--dumptmap") == 0 && i + 1 < argc) {
             dump_map_path = args[++i];
+        } else if (std::strcmp(args[i], "--dumptile") == 0 && i + 2 < argc) {
+            dump_tile_tile = std::atoi(args[++i]);
+            dump_tile_sub = std::atoi(args[++i]);
+        } else if (std::strcmp(args[i], "--dumptileout") == 0 && i + 1 < argc) {
+            dump_tile_path = args[++i];
         } else if (args[i][0] == '-') {
             // 未知开关，忽略
         } else {
@@ -214,6 +221,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         }
         if (!dump_map_path.empty()) {
             game.Dump_Terrain_RGBA(dump_map_path.c_str());
+        }
+        if (dump_tile_tile >= 0 && !dump_tile_path.empty()) {
+            game.Dump_Tile_RGBA(dump_tile_tile, dump_tile_sub, dump_tile_path.c_str());
         }
         if (vxlgpu) {
             return game.Self_Test_Voxel_GPU() ? 0 : 1;

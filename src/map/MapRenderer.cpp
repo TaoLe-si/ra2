@@ -249,6 +249,25 @@ const TerrainTileRGBA* MapRenderer::Tile_RGBA(int index, int sub) {
     return &cache_.emplace(key, std::move(out)).first->second;
 }
 
+bool MapRenderer::Dump_Tile_RGBA(int tile, int sub, const char* path) {
+    // 走和 Tile_RGBA 完全一样的取图路径，再把结果落盘成原生尺寸的裸 RGBA。
+    // 调用方拿 tools/rawdump.py 转 PNG 就能看。
+    const TerrainTileRGBA* img = Tile_RGBA(tile, sub);
+    if (img == nullptr || !img->ok || img->width <= 0 || img->height <= 0) {
+        std::printf("[x] 瓦片 (tile=%d, sub=%d) 取不到\n", tile, sub);
+        return false;
+    }
+    FILE* f = std::fopen(path, "wb");
+    if (f == nullptr) {
+        return false;
+    }
+    std::fwrite(img->pixels.data(), 4, img->pixels.size(), f);
+    std::fclose(f);
+    std::printf("[OK] 瓦片 (tile=%d, sub=%d) %dx%d -> %s\n", tile, sub,
+                img->width, img->height, path);
+    return true;
+}
+
 bool MapRenderer::Render(const MapFile& map, int rect_x, int rect_y, int rect_w, int rect_h,
                          std::vector<uint32_t>* out, int* out_w, int* out_h,
                          std::string* err) {

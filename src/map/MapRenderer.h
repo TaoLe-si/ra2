@@ -90,6 +90,12 @@ public:
     /// SubTile 越界退 0 的次数（0 才是正常）。见 sub_clamped_ 的注释。
     int Sub_Clamped() const noexcept { return sub_clamped_; }
 
+    /// 把指定 (TileIndex, SubTile) 的瓦片渲成带 padding 的 RGBA 落盘。
+    /// "地图瓦块方向错"这种问题，光看整图分不清是哪一格、哪个变体散了；
+    /// 把单个变体抠出来和原版 [PreviewPack] 缩略图里同一块地比，才能定位。
+    /// 非 const：要走和铺图一样的取图路径，而 Tile_RGBA 会写缓存。
+    bool Dump_Tile_RGBA(int tile, int sub, const char* path);
+
     /// ---- 等距几何：给游戏层做"屏幕 <-> 格子"换算用 ----
     ///
     /// 上次 Render 用的画布原点（格子 (0,0) 在画布里的像素位置）。

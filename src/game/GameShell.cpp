@@ -567,6 +567,10 @@ void GameShell::Draw_Battlefield() {
     }
 }
 
+bool GameShell::Dump_Tile_RGBA(int tile, int sub, const char* path) {
+    return map_renderer_.Dump_Tile_RGBA(tile, sub, path);
+}
+
 bool GameShell::Dump_Terrain_RGBA(const char* path) const {
     if (path == nullptr || terrain_rgba_.empty() || terrain_w_ <= 0 ||
         terrain_h_ <= 0) {
