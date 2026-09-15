@@ -23,6 +23,7 @@
 
 #include "data/Ini.h"
 #include "game/World.h"
+#include "gfx/ObjectSprite.h"
 #include "gfx/RemapTable.h"
 #include "gfx/dx12/Dx12Renderer.h"
 #include "io/FileSystem.h"
@@ -134,6 +135,8 @@ public:
 private:
     void Update_Camera(float dt);
     void Draw_Battlefield();
+    /// 画一个单位的真精灵（体素/SHP）。返回 false = 没有素材，退成色块。
+    bool Draw_Object_Sprite(const Object& o, int sx, int sy, float scale);
     void Draw_Objects();
     void Draw_Top_Bar();
     void Draw_Sidebar();
@@ -166,6 +169,9 @@ private:
 
     // 逻辑层
     World world_;
+    SpriteCache sprites_;                  ///< 单位名 -> 真图（体素/SHP）
+    std::unordered_map<int, int> sprite_ids_;   ///< 缓存 key 的哈希 -> 渲染器精灵 id
+    int sprites_ok_ = 0, sprites_miss_ = 0;
     int sidebar_tab_ = 0;    ///< Q/W/E/R
     int cursor_mode_ = 0;    ///< 0=普通 1=修理 2=变卖
     bool follow_ = false;    ///< F：镜头跟随选中的单位

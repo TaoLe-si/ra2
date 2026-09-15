@@ -175,6 +175,15 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
         std::printf("[!] 地图里没有对象\n");
     }
 
+    // 单位真图：体素走 VXL、步兵/建筑走 SHP，都带阵营色 remap
+    if (sprites_.Bind(roots_)) {
+        sprites_.Set_Remap(remap_);
+        sprites_.Set_Theater(map_.Theater());
+        std::printf("  精灵库就绪（单位模型 %d 个）\n", sprites_.Models().Unit_Count());
+    } else {
+        std::printf("[!] 精灵库绑定失败，单位退化成色块\n");
+    }
+
     camera_.Set_World_Size(terrain_w_, terrain_h_);
     // 开局镜头对准地图中心 —— 原版是对准你的基地，等有基地/起始点解析了再改。
     // "中心"是让视口中心对上世界中心，所以要减掉半个视口（按当前缩放换算成世界单位）。
@@ -325,8 +334,49 @@ void GameShell::Center_On_Cell(float cx, float cy) {
                 py + kCellHalfH - half_vh);
 }
 
+/// 画一个单位的真精灵。返回 false 表示没有可用素材（调用方退成色块）。
+///
+/// 精灵 id 按"精灵缓存里的地址"做 key：同一个 (类型,朝向档,阵营色)
+/// 一定对应同一个 ObjectSprite 实例，指针当身份既快又不会撞。
+bool GameShell::Draw_Object_Sprite(const Object& o, int sx, int sy, float scale) {
+    if (o.kind == MapObjectKind::Terrain) {
+        // 树/路灯这些走 SHP，但优先级最低 —— 先保证单位出得来
+    }
+    const int house_color = (o.house >= 0 && o.is_mine) ? player_color_ : 11;
+    const ObjectSprite* sp = sprites_.Get(o.type.c_str(), o.facing, house_color);
+    if (sp == nullptr || !sp->ok) {
+        ++sprites_miss_;
+        return false;
+    }
+
+    const auto key = reinterpret_cast<uintptr_t>(sp);
+    auto it = sprite_ids_.find(static_cast<int>(key & 0x7FFFFFFF));
+    int id = -1;
+    if (it == sprite_ids_.end()) {
+        id = renderer_.Upload_Sprite_RGBA(sp->rgba.data(), sp->w, sp->h);
+        if (id < 0) {
+            ++sprites_miss_;
+            return false;
+        }
+        sprite_ids_[static_cast<int>(key & 0x7FFFFFFF)] = id;
+    } else {
+        id = it->second;
+    }
+    ++sprites_ok_;
+
+    const int dw = static_cast<int>(sp->w * scale);
+    const int dh = static_cast<int>(sp->h * scale);
+    const int dx = sx + static_cast<int>(sp->off_x * scale);
+    const int dy = sy + static_cast<int>(sp->off_y * scale);
+    renderer_.Draw_Sprite(id, dx, dy, scale);
+    return true;
+}
+
 void GameShell::Draw_Objects() {
     objects_drawn_ = 0;
+    sprites_ok_ = 0;
+    sprites_miss_ = 0;
+    sprites_.Reset_Budget(4);
     const int view_w = win_w_ - kSidebarW;
     for (const Object& o : world_.Objects()) {
         float sx = 0.0f, sy = 0.0f;
@@ -341,13 +391,18 @@ void GameShell::Draw_Objects() {
         const int h = static_cast<int>(kCellH * scale);
         const int x = static_cast<int>(sx) - w / 2;
         const int y = static_cast<int>(sy) - h / 2;
-        const int h2 = (h > 8) ? h / 2 : 4;
-        // 用上下两个横条勾一个菱形块，比实心方块更像"站在格子上"
-        renderer_.Draw_Rect(x + w / 4, y + h / 2 - h2 / 2, w / 2, h2,
-                            Object_Color(o.kind));
-        if (o.Is_Techno()) {
-            renderer_.Draw_Rect_Outline(x + w / 4, y + h / 2 - h2 / 2, w / 2, h2,
-                                        kUiEdge, 1);
+
+        // 先试真精灵（体素车 / SHP 步兵建筑），画不出来才退成色块。
+        const bool drew = Draw_Object_Sprite(o, static_cast<int>(sx),
+                                             static_cast<int>(sy), scale);
+        if (!drew) {
+            const int h2 = (h > 8) ? h / 2 : 4;
+            renderer_.Draw_Rect(x + w / 4, y + h / 2 - h2 / 2, w / 2, h2,
+                                Object_Color(o.kind));
+            if (o.Is_Techno()) {
+                renderer_.Draw_Rect_Outline(x + w / 4, y + h / 2 - h2 / 2, w / 2,
+                                            h2, kUiEdge, 1);
+            }
         }
         if (o.selected) {
             // 选中框：比本体大一圈的绿框

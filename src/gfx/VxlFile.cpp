@@ -280,7 +280,8 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
                                 int attach_count, const VoxelLight* light,
                                 std::vector<uint8_t>* shade_out,
                                 const float* shadow_light, float ground_z,
-                                std::vector<uint8_t>* shadow_out) const {
+                                std::vector<uint8_t>* shadow_out,
+                                const float* model_xform) const {
     if (indexed == nullptr || out_w == nullptr || out_h == nullptr || scale <= 0.0f) {
         return false;
     }
@@ -394,7 +395,7 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
         return true;
     };
 
-    if (!add_model(*this, pose, nullptr)) {
+    if (!add_model(*this, pose, model_xform)) {
         return false;
     }
     for (int a = 0; a < attach_count; ++a) {
@@ -403,7 +404,15 @@ bool VxlFile::Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* o
         }
         // 附加层：炮塔/炮管没有自己的 HVA 动画帧（实测都是 1×1 的静态 HVA），
         // 所以这里固定用静态肢体尾，只叠 attach 的变换。
-        if (!add_model(*attach[a].file, nullptr, attach[a].transform)) {
+        // 车体朝向（model_xform）要**一起**叠上去，否则炮塔会留在原地、
+        // 只有车体转 —— 这是"朝向"最直觉的验收点。
+        float pre[12];
+        if (model_xform != nullptr) {
+            Mat34_Mul(model_xform, attach[a].transform, pre);
+        } else {
+            std::memcpy(pre, attach[a].transform, sizeof(pre));
+        }
+        if (!add_model(*attach[a].file, nullptr, pre)) {
             return false;
         }
     }

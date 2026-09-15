@@ -197,6 +197,13 @@ public:
     ///
     /// 【画布会变大】阴影落点在模型之外，所以 bbox 要把地面投影一起纳入，
     /// 不然阴影会被裁掉一截（画布按本体的范围算是不够的）。
+    ///
+    /// model_xform：整个模型（车体 + 所有附加层）的**前置**变换。
+    /// 单位朝向就靠它 —— 绕模型空间 Z 轴转 yaw 即为"车头朝哪边"。
+    /// 原版是 32 个朝向，各渲一套；这里把 yaw 交给调用方，
+    /// 想 32 向就传 32 个不同的 yaw，想省就量化到 8 向。
+    /// 注意它对**附加层同样生效**：炮塔必须跟着车体一起转，
+    /// 否则会出现"车体转了、炮塔留在原地"。
     bool Render_Isometric(std::vector<uint8_t>* indexed, int* out_w, int* out_h,
                           float scale = 8.0f, const float* pose = nullptr,
                           const VxlAttach* attach = nullptr,
@@ -205,7 +212,8 @@ public:
                           std::vector<uint8_t>* shade_out = nullptr,
                           const float* shadow_light = nullptr,
                           float ground_z = 0.0f,
-                          std::vector<uint8_t>* shadow_out = nullptr) const;
+                          std::vector<uint8_t>* shadow_out = nullptr,
+                          const float* model_xform = nullptr) const;
 
     void Reset();
 
