@@ -1,0 +1,1589 @@
+{
+ "AbsType.cpp": {
+  "file": "AbsType.cpp",
+  "path": "D:\\ra2mdpost\\AbsType.cpp",
+  "functions": [
+   {
+    "va": 4262496,
+    "insns": 103,
+    "size": 299
+   },
+   {
+    "va": 4262240,
+    "insns": 25,
+    "size": 86
+   }
+  ],
+  "min_va": 4262240,
+  "max_va": 4262795,
+  "total_insns": 128
+ },
+ "Ini.CPP": {
+  "file": "Ini.CPP",
+  "path": "D:\\ra2mdpost\\Ini.CPP",
+  "functions": [
+   {
+    "va": 5411168,
+    "insns": 159,
+    "size": 493
+   }
+  ],
+  "min_va": 5411168,
+  "max_va": 5411661,
+  "total_insns": 159
+ },
+ "ownrdraw.cpp": {
+  "file": "ownrdraw.cpp",
+  "path": "D:\\ra2mdpost\\ownrdraw.cpp",
+  "functions": [
+   {
+    "va": 6355360,
+    "insns": 700,
+    "size": 2481
+   },
+   {
+    "va": 6433616,
+    "insns": 335,
+    "size": 1418
+   },
+   {
+    "va": 6307936,
+    "insns": 25,
+    "size": 71
+   }
+  ],
+  "min_va": 6307936,
+  "max_va": 6435034,
+  "total_insns": 1060
+ },
+ "GDlgSupp.cpp": {
+  "file": "GDlgSupp.cpp",
+  "path": "D:\\ra2mdpost\\GDlgSupp.cpp",
+  "functions": [
+   {
+    "va": 5129632,
+    "insns": 150,
+    "size": 450
+   },
+   {
+    "va": 5132480,
+    "insns": 139,
+    "size": 414
+   },
+   {
+    "va": 5135200,
+    "insns": 128,
+    "size": 333
+   },
+   {
+    "va": 5127056,
+    "insns": 119,
+    "size": 322
+   },
+   {
+    "va": 5126304,
+    "insns": 98,
+    "size": 338
+   },
+   {
+    "va": 5126656,
+    "insns": 97,
+    "size": 255
+   },
+   {
+    "va": 5128864,
+    "insns": 82,
+    "size": 282
+   },
+   {
+    "va": 5130096,
+    "insns": 70,
+    "size": 169
+   },
+   {
+    "va": 5132896,
+    "insns": 70,
+    "size": 169
+   },
+   {
+    "va": 5135536,
+    "insns": 70,
+    "size": 169
+   },
+   {
+    "va": 5129152,
+    "insns": 64,
+    "size": 278
+   },
+   {
+    "va": 5126912,
+    "insns": 60,
+    "size": 142
+   },
+   {
+    "va": 5135040,
+    "insns": 26,
+    "size": 119
+   },
+   {
+    "va": 5132080,
+    "insns": 6,
+    "size": 23
+   }
+  ],
+  "min_va": 5126304,
+  "max_va": 5135705,
+  "total_insns": 1179
+ },
+ "Restate.cpp": {
+  "file": "Restate.cpp",
+  "path": "D:\\ra2mdpost\\Restate.cpp",
+  "functions": [
+   {
+    "va": 6681888,
+    "insns": 123,
+    "size": 484
+   }
+  ],
+  "min_va": 6681888,
+  "max_va": 6682372,
+  "total_insns": 123
+ },
+ "MPLayer.CPP": {
+  "file": "MPLayer.CPP",
+  "path": "D:\\ra2mdpost\\MPLayer.CPP",
+  "functions": [
+   {
+    "va": 6054096,
+    "insns": 27,
+    "size": 74
+   }
+  ],
+  "min_va": 6054096,
+  "max_va": 6054170,
+  "total_insns": 27
+ },
+ "Init.CPP": {
+  "file": "Init.CPP",
+  "path": "D:\\ra2mdpost\\Init.CPP",
+  "functions": [
+   {
+    "va": 5421664,
+    "insns": 1166,
+    "size": 4333
+   },
+   {
+    "va": 5429664,
+    "insns": 511,
+    "size": 4536
+   },
+   {
+    "va": 5436960,
+    "insns": 456,
+    "size": 1531
+   },
+   {
+    "va": 5444256,
+    "insns": 307,
+    "size": 984
+   }
+  ],
+  "min_va": 5421664,
+  "max_va": 5445240,
+  "total_insns": 2440
+ },
+ "Conquer.CPP": {
+  "file": "Conquer.CPP",
+  "path": "D:\\ra2mdpost\\Conquer.CPP",
+  "functions": [
+   {
+    "va": 4771008,
+    "insns": 206,
+    "size": 780
+   },
+   {
+    "va": 4769968,
+    "insns": 79,
+    "size": 978
+   }
+  ],
+  "min_va": 4769968,
+  "max_va": 4771788,
+  "total_insns": 285
+ },
+ "Beacon.CPP": {
+  "file": "Beacon.CPP",
+  "path": "D:\\ra2mdpost\\Beacon.CPP",
+  "functions": [
+   {
+    "va": 4393888,
+    "insns": 268,
+    "size": 909
+   }
+  ],
+  "min_va": 4393888,
+  "max_va": 4394797,
+  "total_insns": 268
+ },
+ "NetDlg.CPP": {
+  "file": "NetDlg.CPP",
+  "path": "D:\\ra2mdpost\\NetDlg.CPP",
+  "functions": [
+   {
+    "va": 6137680,
+    "insns": 292,
+    "size": 1062
+   }
+  ],
+  "min_va": 6137680,
+  "max_va": 6138742,
+  "total_insns": 292
+ },
+ "coopcamp.cpp": {
+  "file": "coopcamp.cpp",
+  "path": "D:\\ra2mdpost\\coopcamp.cpp",
+  "functions": [
+   {
+    "va": 4840192,
+    "insns": 719,
+    "size": 2218
+   }
+  ],
+  "min_va": 4840192,
+  "max_va": 4842410,
+  "total_insns": 719
+ },
+ "PlanMgr.cpp": {
+  "file": "PlanMgr.cpp",
+  "path": "D:\\ra2mdpost\\PlanMgr.cpp",
+  "functions": [
+   {
+    "va": 6521120,
+    "insns": 367,
+    "size": 1181
+   },
+   {
+    "va": 6532432,
+    "insns": 236,
+    "size": 756
+   },
+   {
+    "va": 6530464,
+    "insns": 234,
+    "size": 818
+   },
+   {
+    "va": 6517360,
+    "insns": 221,
+    "size": 734
+   },
+   {
+    "va": 6524992,
+    "insns": 88,
+    "size": 229
+   },
+   {
+    "va": 6525232,
+    "insns": 75,
+    "size": 215
+   },
+   {
+    "va": 6528976,
+    "insns": 59,
+    "size": 241
+   },
+   {
+    "va": 6529312,
+    "insns": 43,
+    "size": 132
+   },
+   {
+    "va": 6529456,
+    "insns": 24,
+    "size": 85
+   },
+   {
+    "va": 6529232,
+    "insns": 19,
+    "size": 79
+   },
+   {
+    "va": 6529584,
+    "insns": 18,
+    "size": 74
+   }
+  ],
+  "min_va": 6517360,
+  "max_va": 6533188,
+  "total_insns": 1384
+ },
+ "Tactical.CPP": {
+  "file": "Tactical.CPP",
+  "path": "D:\\ra2mdpost\\Tactical.CPP",
+  "functions": [
+   {
+    "va": 7159056,
+    "insns": 1004,
+    "size": 3643
+   }
+  ],
+  "min_va": 7159056,
+  "max_va": 7162699,
+  "total_insns": 1004
+ },
+ "House.CPP": {
+  "file": "House.CPP",
+  "path": "D:\\ra2mdpost\\House.CPP",
+  "functions": [
+   {
+    "va": 5285312,
+    "insns": 710,
+    "size": 2375
+   },
+   {
+    "va": 5226672,
+    "insns": 449,
+    "size": 1559
+   },
+   {
+    "va": 5245760,
+    "insns": 427,
+    "size": 1557
+   },
+   {
+    "va": 5217136,
+    "insns": 314,
+    "size": 1009
+   },
+   {
+    "va": 5218192,
+    "insns": 191,
+    "size": 634
+   },
+   {
+    "va": 5229520,
+    "insns": 149,
+    "size": 495
+   },
+   {
+    "va": 5229024,
+    "insns": 147,
+    "size": 487
+   }
+  ],
+  "min_va": 5217136,
+  "max_va": 5287687,
+  "total_insns": 2387
+ },
+ "Options.CPP": {
+  "file": "Options.CPP",
+  "path": "D:\\ra2mdpost\\Options.CPP",
+  "functions": [
+   {
+    "va": 6275072,
+    "insns": 110,
+    "size": 287
+   }
+  ],
+  "min_va": 6275072,
+  "max_va": 6275359,
+  "total_insns": 110
+ },
+ "Egos.CPP": {
+  "file": "Egos.CPP",
+  "path": "D:\\ra2mdpost\\Egos.CPP",
+  "functions": [
+   {
+    "va": 4996656,
+    "insns": 812,
+    "size": 2844
+   }
+  ],
+  "min_va": 4996656,
+  "max_va": 4999500,
+  "total_insns": 812
+ },
+ "Session.CPP": {
+  "file": "Session.CPP",
+  "path": "D:\\ra2mdpost\\Session.CPP",
+  "functions": [
+   {
+    "va": 6914240,
+    "insns": 810,
+    "size": 3047
+   },
+   {
+    "va": 6920576,
+    "insns": 631,
+    "size": 2155
+   },
+   {
+    "va": 6924672,
+    "insns": 218,
+    "size": 681
+   },
+   {
+    "va": 6911936,
+    "insns": 46,
+    "size": 118
+   },
+   {
+    "va": 6925520,
+    "insns": 24,
+    "size": 69
+   }
+  ],
+  "min_va": 6911936,
+  "max_va": 6925589,
+  "total_insns": 1729
+ },
+ "netdlg2.cpp": {
+  "file": "netdlg2.cpp",
+  "path": "D:\\ra2mdpost\\netdlg2.cpp",
+  "functions": [
+   {
+    "va": 6160560,
+    "insns": 1972,
+    "size": 7139
+   },
+   {
+    "va": 6144848,
+    "insns": 1511,
+    "size": 5445
+   },
+   {
+    "va": 6157328,
+    "insns": 383,
+    "size": 1193
+   },
+   {
+    "va": 6139872,
+    "insns": 380,
+    "size": 1528
+   },
+   {
+    "va": 6150304,
+    "insns": 234,
+    "size": 804
+   },
+   {
+    "va": 6142384,
+    "insns": 134,
+    "size": 425
+   },
+   {
+    "va": 6169408,
+    "insns": 26,
+    "size": 83
+   }
+  ],
+  "min_va": 6139872,
+  "max_va": 6169491,
+  "total_insns": 4640
+ },
+ "UICmnds.cpp": {
+  "file": "UICmnds.cpp",
+  "path": "D:\\ra2mdpost\\UICmnds.cpp",
+  "functions": [
+   {
+    "va": 7545472,
+    "insns": 252,
+    "size": 766
+   },
+   {
+    "va": 7547216,
+    "insns": 241,
+    "size": 729
+   },
+   {
+    "va": 7550656,
+    "insns": 194,
+    "size": 624
+   },
+   {
+    "va": 7549824,
+    "insns": 193,
+    "size": 614
+   },
+   {
+    "va": 7544208,
+    "insns": 95,
+    "size": 280
+   },
+   {
+    "va": 7543536,
+    "insns": 77,
+    "size": 229
+   }
+  ],
+  "min_va": 7543536,
+  "max_va": 7551280,
+  "total_insns": 1052
+ },
+ "Ion.cpp": {
+  "file": "Ion.cpp",
+  "path": "D:\\ra2mdpost\\Ion.cpp",
+  "functions": [
+   {
+    "va": 5482176,
+    "insns": 360,
+    "size": 1165
+   },
+   {
+    "va": 5480112,
+    "insns": 137,
+    "size": 478
+   },
+   {
+    "va": 5484032,
+    "insns": 20,
+    "size": 72
+   },
+   {
+    "va": 5485584,
+    "insns": 20,
+    "size": 72
+   }
+  ],
+  "min_va": 5480112,
+  "max_va": 5485656,
+  "total_insns": 537
+ },
+ "Connect.CPP": {
+  "file": "Connect.CPP",
+  "path": "D:\\ra2mdpost\\Connect.CPP",
+  "functions": [
+   {
+    "va": 4767808,
+    "insns": 284,
+    "size": 725
+   }
+  ],
+  "min_va": 4767808,
+  "max_va": 4768533,
+  "total_insns": 284
+ },
+ "LoadDlg.CPP": {
+  "file": "LoadDlg.CPP",
+  "path": "D:\\ra2mdpost\\LoadDlg.CPP",
+  "functions": [
+   {
+    "va": 5606864,
+    "insns": 624,
+    "size": 2080
+   },
+   {
+    "va": 5609120,
+    "insns": 411,
+    "size": 1396
+   }
+  ],
+  "min_va": 5606864,
+  "max_va": 5610516,
+  "total_insns": 1035
+ },
+ "Scenario.CPP": {
+  "file": "Scenario.CPP",
+  "path": "D:\\ra2mdpost\\Scenario.CPP",
+  "functions": [
+   {
+    "va": 6843168,
+    "insns": 1162,
+    "size": 4532
+   },
+   {
+    "va": 6837872,
+    "insns": 514,
+    "size": 1870
+   },
+   {
+    "va": 6833696,
+    "insns": 451,
+    "size": 1549
+   },
+   {
+    "va": 6839744,
+    "insns": 417,
+    "size": 1557
+   },
+   {
+    "va": 6848272,
+    "insns": 328,
+    "size": 1134
+   },
+   {
+    "va": 6829584,
+    "insns": 257,
+    "size": 1179
+   },
+   {
+    "va": 6853744,
+    "insns": 181,
+    "size": 511
+   },
+   {
+    "va": 6829408,
+    "insns": 45,
+    "size": 171
+   }
+  ],
+  "min_va": 6829408,
+  "max_va": 6854255,
+  "total_insns": 3355
+ },
+ "MainLoop.CPP": {
+  "file": "MainLoop.CPP",
+  "path": "D:\\ra2mdpost\\MainLoop.CPP",
+  "functions": [
+   {
+    "va": 5628960,
+    "insns": 986,
+    "size": 3507
+   }
+  ],
+  "min_va": 5628960,
+  "max_va": 5632467,
+  "total_insns": 986
+ },
+ "wonline.cpp": {
+  "file": "wonline.cpp",
+  "path": "D:\\ra2mdpost\\wonline.cpp",
+  "functions": [
+   {
+    "va": 7879808,
+    "insns": 1486,
+    "size": 5806
+   },
+   {
+    "va": 7894896,
+    "insns": 775,
+    "size": 2568
+   },
+   {
+    "va": 7899904,
+    "insns": 770,
+    "size": 2558
+   },
+   {
+    "va": 7949216,
+    "insns": 719,
+    "size": 2684
+   },
+   {
+    "va": 7890112,
+    "insns": 674,
+    "size": 2250
+   },
+   {
+    "va": 7904096,
+    "insns": 629,
+    "size": 2312
+   },
+   {
+    "va": 7869568,
+    "insns": 614,
+    "size": 2109
+   },
+   {
+    "va": 7862528,
+    "insns": 612,
+    "size": 2051
+   },
+   {
+    "va": 7886656,
+    "insns": 599,
+    "size": 1883
+   },
+   {
+    "va": 7994432,
+    "insns": 554,
+    "size": 2030
+   },
+   {
+    "va": 7893008,
+    "insns": 546,
+    "size": 1882
+   },
+   {
+    "va": 7997072,
+    "insns": 446,
+    "size": 1664
+   },
+   {
+    "va": 7864592,
+    "insns": 374,
+    "size": 1455
+   },
+   {
+    "va": 8002480,
+    "insns": 363,
+    "size": 1365
+   },
+   {
+    "va": 7974672,
+    "insns": 362,
+    "size": 2858
+   },
+   {
+    "va": 7960576,
+    "insns": 337,
+    "size": 1042
+   },
+   {
+    "va": 7885680,
+    "insns": 293,
+    "size": 976
+   },
+   {
+    "va": 7926272,
+    "insns": 281,
+    "size": 959
+   },
+   {
+    "va": 7991616,
+    "insns": 277,
+    "size": 2548
+   },
+   {
+    "va": 7979072,
+    "insns": 265,
+    "size": 853
+   },
+   {
+    "va": 8001200,
+    "insns": 250,
+    "size": 807
+   },
+   {
+    "va": 7907568,
+    "insns": 249,
+    "size": 764
+   },
+   {
+    "va": 7867024,
+    "insns": 224,
+    "size": 758
+   },
+   {
+    "va": 7906992,
+    "insns": 196,
+    "size": 574
+   },
+   {
+    "va": 7906416,
+    "insns": 184,
+    "size": 562
+   },
+   {
+    "va": 7899136,
+    "insns": 184,
+    "size": 552
+   },
+   {
+    "va": 7977568,
+    "insns": 173,
+    "size": 539
+   },
+   {
+    "va": 7855248,
+    "insns": 172,
+    "size": 569
+   },
+   {
+    "va": 7867952,
+    "insns": 168,
+    "size": 598
+   },
+   {
+    "va": 7860512,
+    "insns": 159,
+    "size": 499
+   },
+   {
+    "va": 7903584,
+    "insns": 151,
+    "size": 507
+   },
+   {
+    "va": 8002016,
+    "insns": 143,
+    "size": 455
+   },
+   {
+    "va": 7888544,
+    "insns": 142,
+    "size": 471
+   },
+   {
+    "va": 7960128,
+    "insns": 132,
+    "size": 433
+   },
+   {
+    "va": 7970096,
+    "insns": 105,
+    "size": 366
+   },
+   {
+    "va": 7943312,
+    "insns": 81,
+    "size": 612
+   },
+   {
+    "va": 7927232,
+    "insns": 67,
+    "size": 230
+   },
+   {
+    "va": 7867792,
+    "insns": 65,
+    "size": 157
+   },
+   {
+    "va": 7899696,
+    "insns": 64,
+    "size": 208
+   },
+   {
+    "va": 7868560,
+    "insns": 52,
+    "size": 153
+   },
+   {
+    "va": 7866880,
+    "insns": 42,
+    "size": 132
+   },
+   {
+    "va": 8005456,
+    "insns": 37,
+    "size": 114
+   },
+   {
+    "va": 7936672,
+    "insns": 33,
+    "size": 102
+   }
+  ],
+  "min_va": 7855248,
+  "max_va": 8005570,
+  "total_insns": 14049
+ },
+ "wwmous.cpp": {
+  "file": "wwmous.cpp",
+  "path": "D:\\ra2mdpost\\wwmous.cpp",
+  "functions": [
+   {
+    "va": 8102032,
+    "insns": 169,
+    "size": 551
+   },
+   {
+    "va": 8095536,
+    "insns": 111,
+    "size": 408
+   },
+   {
+    "va": 8097584,
+    "insns": 89,
+    "size": 258
+   },
+   {
+    "va": 8097408,
+    "insns": 59,
+    "size": 166
+   },
+   {
+    "va": 8095952,
+    "insns": 48,
+    "size": 144
+   },
+   {
+    "va": 8102592,
+    "insns": 12,
+    "size": 48
+   }
+  ],
+  "min_va": 8095536,
+  "max_va": 8102640,
+  "total_insns": 488
+ },
+ "MapGen.cpp": {
+  "file": "MapGen.cpp",
+  "path": "D:\\ra2mdpost\\MapGen.cpp",
+  "functions": [
+   {
+    "va": 5871184,
+    "insns": 1157,
+    "size": 4124
+   },
+   {
+    "va": 5860944,
+    "insns": 361,
+    "size": 1027
+   },
+   {
+    "va": 5854848,
+    "insns": 43,
+    "size": 140
+   },
+   {
+    "va": 5854992,
+    "insns": 14,
+    "size": 40
+   }
+  ],
+  "min_va": 5854848,
+  "max_va": 5875308,
+  "total_insns": 1575
+ },
+ "ModemGst.cpp": {
+  "file": "ModemGst.cpp",
+  "path": "D:\\ra2mdpost\\ModemGst.cpp",
+  "functions": [
+   {
+    "va": 5983968,
+    "insns": 665,
+    "size": 2058
+   },
+   {
+    "va": 5992592,
+    "insns": 200,
+    "size": 705
+   },
+   {
+    "va": 5992240,
+    "insns": 90,
+    "size": 338
+   }
+  ],
+  "min_va": 5983968,
+  "max_va": 5993297,
+  "total_insns": 955
+ },
+ "ModemHst.cpp": {
+  "file": "ModemHst.cpp",
+  "path": "D:\\ra2mdpost\\ModemHst.cpp",
+  "functions": [
+   {
+    "va": 5997296,
+    "insns": 780,
+    "size": 2538
+   },
+   {
+    "va": 5999840,
+    "insns": 454,
+    "size": 1383
+   },
+   {
+    "va": 6007904,
+    "insns": 411,
+    "size": 1526
+   },
+   {
+    "va": 6004832,
+    "insns": 138,
+    "size": 1474
+   },
+   {
+    "va": 6007552,
+    "insns": 90,
+    "size": 338
+   }
+  ],
+  "min_va": 5997296,
+  "max_va": 6009430,
+  "total_insns": 1873
+ },
+ "netshare.cpp": {
+  "file": "netshare.cpp",
+  "path": "D:\\ra2mdpost\\netshare.cpp",
+  "functions": [
+   {
+    "va": 6176016,
+    "insns": 2572,
+    "size": 8702
+   },
+   {
+    "va": 6212080,
+    "insns": 660,
+    "size": 2168
+   },
+   {
+    "va": 6205536,
+    "insns": 466,
+    "size": 1523
+   },
+   {
+    "va": 6189408,
+    "insns": 261,
+    "size": 767
+   },
+   {
+    "va": 6192112,
+    "insns": 212,
+    "size": 699
+   },
+   {
+    "va": 6195104,
+    "insns": 181,
+    "size": 636
+   },
+   {
+    "va": 6218240,
+    "insns": 109,
+    "size": 328
+   },
+   {
+    "va": 6175168,
+    "insns": 81,
+    "size": 231
+   },
+   {
+    "va": 6199744,
+    "insns": 54,
+    "size": 209
+   }
+  ],
+  "min_va": 6175168,
+  "max_va": 6218568,
+  "total_insns": 4596
+ },
+ "SendFile.CPP": {
+  "file": "SendFile.CPP",
+  "path": "D:\\ra2mdpost\\SendFile.CPP",
+  "functions": [
+   {
+    "va": 6899552,
+    "insns": 753,
+    "size": 2691
+   },
+   {
+    "va": 6898080,
+    "insns": 447,
+    "size": 1470
+   }
+  ],
+  "min_va": 6898080,
+  "max_va": 6902243,
+  "total_insns": 1200
+ },
+ "MPCoop.cpp": {
+  "file": "MPCoop.cpp",
+  "path": "D:\\ra2mdpost\\MPCoop.cpp",
+  "functions": [
+   {
+    "va": 6037968,
+    "insns": 178,
+    "size": 469
+   },
+   {
+    "va": 6038448,
+    "insns": 118,
+    "size": 335
+   }
+  ],
+  "min_va": 6037968,
+  "max_va": 6038783,
+  "total_insns": 296
+ },
+ "MPObserver.cpp": {
+  "file": "MPObserver.cpp",
+  "path": "D:\\ra2mdpost\\MPObserver.cpp",
+  "functions": [
+   {
+    "va": 6067312,
+    "insns": 23,
+    "size": 67
+   }
+  ],
+  "min_va": 6067312,
+  "max_va": 6067379,
+  "total_insns": 23
+ },
+ "MPSiegeTeam.cpp": {
+  "file": "MPSiegeTeam.cpp",
+  "path": "D:\\ra2mdpost\\MPSiegeTeam.cpp",
+  "functions": [
+   {
+    "va": 6073872,
+    "insns": 23,
+    "size": 67
+   },
+   {
+    "va": 6074032,
+    "insns": 23,
+    "size": 67
+   }
+  ],
+  "min_va": 6073872,
+  "max_va": 6074099,
+  "total_insns": 46
+ },
+ "MSChoice.cpp": {
+  "file": "MSChoice.cpp",
+  "path": "D:\\ra2mdpost\\MSChoice.cpp",
+  "functions": [
+   {
+    "va": 6093024,
+    "insns": 580,
+    "size": 1935
+   }
+  ],
+  "min_va": 6093024,
+  "max_va": 6094959,
+  "total_insns": 580
+ },
+ "Multiplayer.cpp": {
+  "file": "Multiplayer.cpp",
+  "path": "D:\\ra2mdpost\\Multiplayer.cpp",
+  "functions": [
+   {
+    "va": 6124944,
+    "insns": 472,
+    "size": 1849
+   }
+  ],
+  "min_va": 6124944,
+  "max_va": 6126793,
+  "total_insns": 472
+ },
+ "NullDlg.CPP": {
+  "file": "NullDlg.CPP",
+  "path": "D:\\ra2mdpost\\NullDlg.CPP",
+  "functions": [
+   {
+    "va": 6227600,
+    "insns": 312,
+    "size": 1706
+   },
+   {
+    "va": 6229344,
+    "insns": 301,
+    "size": 1480
+   }
+  ],
+  "min_va": 6227600,
+  "max_va": 6230824,
+  "total_insns": 613
+ },
+ "NullMgr.CPP": {
+  "file": "NullMgr.CPP",
+  "path": "D:\\ra2mdpost\\NullMgr.CPP",
+  "functions": [
+   {
+    "va": 6234016,
+    "insns": 721,
+    "size": 2476
+   },
+   {
+    "va": 6237408,
+    "insns": 325,
+    "size": 1155
+   },
+   {
+    "va": 6236496,
+    "insns": 257,
+    "size": 903
+   }
+  ],
+  "min_va": 6234016,
+  "max_va": 6238563,
+  "total_insns": 1303
+ },
+ "PhoneEd.cpp": {
+  "file": "PhoneEd.cpp",
+  "path": "D:\\ra2mdpost\\PhoneEd.cpp",
+  "functions": [
+   {
+    "va": 6492256,
+    "insns": 205,
+    "size": 667
+   },
+   {
+    "va": 6491808,
+    "insns": 162,
+    "size": 444
+   },
+   {
+    "va": 6494656,
+    "insns": 115,
+    "size": 338
+   }
+  ],
+  "min_va": 6491808,
+  "max_va": 6494994,
+  "total_insns": 482
+ },
+ "Queue.CPP": {
+  "file": "Queue.CPP",
+  "path": "D:\\ra2mdpost\\Queue.CPP",
+  "functions": [
+   {
+    "va": 6588176,
+    "insns": 1444,
+    "size": 5519
+   },
+   {
+    "va": 6583792,
+    "insns": 888,
+    "size": 3371
+   },
+   {
+    "va": 6603648,
+    "insns": 649,
+    "size": 2474
+   },
+   {
+    "va": 6597344,
+    "insns": 138,
+    "size": 422
+   },
+   {
+    "va": 6627888,
+    "insns": 96,
+    "size": 356
+   },
+   {
+    "va": 6597904,
+    "insns": 93,
+    "size": 285
+   }
+  ],
+  "min_va": 6583792,
+  "max_va": 6628244,
+  "total_insns": 3308
+ },
+ "Radar.CPP": {
+  "file": "Radar.CPP",
+  "path": "D:\\ra2mdpost\\Radar.CPP",
+  "functions": [
+   {
+    "va": 6635424,
+    "insns": 262,
+    "size": 889
+   }
+  ],
+  "min_va": 6635424,
+  "max_va": 6636313,
+  "total_insns": 262
+ },
+ "Display.CPP": {
+  "file": "Display.CPP",
+  "path": "D:\\ra2mdpost\\Display.CPP",
+  "functions": [
+   {
+    "va": 4908272,
+    "insns": 140,
+    "size": 437
+   }
+  ],
+  "min_va": 4908272,
+  "max_va": 4908709,
+  "total_insns": 140
+ },
+ "Dropship.cpp": {
+  "file": "Dropship.cpp",
+  "path": "D:\\ra2mdpost\\Dropship.cpp",
+  "functions": [
+   {
+    "va": 4942896,
+    "insns": 2962,
+    "size": 10849
+   }
+  ],
+  "min_va": 4942896,
+  "max_va": 4953745,
+  "total_insns": 2962
+ },
+ "MapSel.CPP": {
+  "file": "MapSel.CPP",
+  "path": "D:\\ra2mdpost\\MapSel.CPP",
+  "functions": [
+   {
+    "va": 5954832,
+    "insns": 75,
+    "size": 268
+   },
+   {
+    "va": 5955104,
+    "insns": 67,
+    "size": 247
+   }
+  ],
+  "min_va": 5954832,
+  "max_va": 5955351,
+  "total_insns": 142
+ },
+ "LdPrgMgr.cpp": {
+  "file": "LdPrgMgr.cpp",
+  "path": "D:\\ra2mdpost\\LdPrgMgr.cpp",
+  "functions": [
+   {
+    "va": 5582176,
+    "insns": 1426,
+    "size": 5010
+   }
+  ],
+  "min_va": 5582176,
+  "max_va": 5587186,
+  "total_insns": 1426
+ },
+ "SerialEd.cpp": {
+  "file": "SerialEd.cpp",
+  "path": "D:\\ra2mdpost\\SerialEd.cpp",
+  "functions": [
+   {
+    "va": 6904768,
+    "insns": 283,
+    "size": 1012
+   },
+   {
+    "va": 6906368,
+    "insns": 240,
+    "size": 703
+   },
+   {
+    "va": 6907824,
+    "insns": 138,
+    "size": 393
+   },
+   {
+    "va": 6908352,
+    "insns": 100,
+    "size": 279
+   }
+  ],
+  "min_va": 6904768,
+  "max_va": 6908631,
+  "total_insns": 761
+ },
+ "Sidebar.CPP": {
+  "file": "Sidebar.CPP",
+  "path": "D:\\ra2mdpost\\Sidebar.CPP",
+  "functions": [
+   {
+    "va": 6985024,
+    "insns": 1041,
+    "size": 4210
+   },
+   {
+    "va": 6996496,
+    "insns": 130,
+    "size": 454
+   }
+  ],
+  "min_va": 6985024,
+  "max_va": 6996950,
+  "total_insns": 1171
+ },
+ "Super.CPP": {
+  "file": "Super.CPP",
+  "path": "D:\\ra2mdpost\\Super.CPP",
+  "functions": [
+   {
+    "va": 7127728,
+    "insns": 49,
+    "size": 163
+   }
+  ],
+  "min_va": 7127728,
+  "max_va": 7127891,
+  "total_insns": 49
+ },
+ "Power.CPP": {
+  "file": "Power.CPP",
+  "path": "D:\\ra2mdpost\\Power.CPP",
+  "functions": [
+   {
+    "va": 6554704,
+    "insns": 22,
+    "size": 83
+   }
+  ],
+  "min_va": 6554704,
+  "max_va": 6554787,
+  "total_insns": 22
+ },
+ "Skirmish.cpp": {
+  "file": "Skirmish.cpp",
+  "path": "D:\\ra2mdpost\\Skirmish.cpp",
+  "functions": [
+   {
+    "va": 6999776,
+    "insns": 1001,
+    "size": 3321
+   },
+   {
+    "va": 7005920,
+    "insns": 673,
+    "size": 2082
+   }
+  ],
+  "min_va": 6999776,
+  "max_va": 7008002,
+  "total_insns": 1674
+ },
+ "Credits.CPP": {
+  "file": "Credits.CPP",
+  "path": "D:\\ra2mdpost\\Credits.CPP",
+  "functions": [
+   {
+    "va": 4858736,
+    "insns": 202,
+    "size": 644
+   }
+  ],
+  "min_va": 4858736,
+  "max_va": 4859380,
+  "total_insns": 202
+ },
+ "ToolTip.cpp": {
+  "file": "ToolTip.cpp",
+  "path": "D:\\ra2mdpost\\ToolTip.cpp",
+  "functions": [
+   {
+    "va": 7490256,
+    "insns": 72,
+    "size": 173
+   }
+  ],
+  "min_va": 7490256,
+  "max_va": 7490429,
+  "total_insns": 72
+ },
+ "WDTProps.cpp": {
+  "file": "WDTProps.cpp",
+  "path": "D:\\ra2mdpost\\WDTProps.cpp",
+  "functions": [
+   {
+    "va": 7782144,
+    "insns": 49,
+    "size": 147
+   }
+  ],
+  "min_va": 7782144,
+  "max_va": 7782291,
+  "total_insns": 49
+ },
+ "WDTSel.cpp": {
+  "file": "WDTSel.cpp",
+  "path": "D:\\ra2mdpost\\WDTSel.cpp",
+  "functions": [
+   {
+    "va": 7789264,
+    "insns": 307,
+    "size": 1012
+   },
+   {
+    "va": 7783056,
+    "insns": 292,
+    "size": 1090
+   },
+   {
+    "va": 7785888,
+    "insns": 273,
+    "size": 991
+   },
+   {
+    "va": 7791856,
+    "insns": 174,
+    "size": 600
+   },
+   {
+    "va": 7786880,
+    "insns": 153,
+    "size": 532
+   },
+   {
+    "va": 7793936,
+    "insns": 112,
+    "size": 415
+   },
+   {
+    "va": 7790976,
+    "insns": 73,
+    "size": 261
+   }
+  ],
+  "min_va": 7783056,
+  "max_va": 7794351,
+  "total_insns": 1384
+ },
+ "WDTTerr.cpp": {
+  "file": "WDTTerr.cpp",
+  "path": "D:\\ra2mdpost\\WDTTerr.cpp",
+  "functions": [
+   {
+    "va": 7797104,
+    "insns": 165,
+    "size": 541
+   }
+  ],
+  "min_va": 7797104,
+  "max_va": 7797645,
+  "total_insns": 165
+ },
+ "WOLPersonaInformation.cpp": {
+  "file": "WOLPersonaInformation.cpp",
+  "path": "D:\\ra2mdpost\\WOLPersonaInformation.cpp",
+  "functions": [
+   {
+    "va": 7842288,
+    "insns": 528,
+    "size": 1585
+   },
+   {
+    "va": 7836208,
+    "insns": 289,
+    "size": 1054
+   },
+   {
+    "va": 7835440,
+    "insns": 236,
+    "size": 764
+   },
+   {
+    "va": 7840976,
+    "insns": 166,
+    "size": 558
+   },
+   {
+    "va": 7842000,
+    "insns": 102,
+    "size": 279
+   }
+  ],
+  "min_va": 7835440,
+  "max_va": 7843873,
+  "total_insns": 1321
+ },
+ "WorldDom.cpp": {
+  "file": "WorldDom.cpp",
+  "path": "D:\\ra2mdpost\\WorldDom.cpp",
+  "functions": [
+   {
+    "va": 8059792,
+    "insns": 218,
+    "size": 1252
+   }
+  ],
+  "min_va": 8059792,
+  "max_va": 8061044,
+  "total_insns": 218
+ },
+ "Startup.CPP": {
+  "file": "Startup.CPP",
+  "path": "D:\\ra2mdpost\\Startup.CPP",
+  "functions": [
+   {
+    "va": 7059872,
+    "insns": 3740,
+    "size": 12969
+   }
+  ],
+  "min_va": 7059872,
+  "max_va": 7072841,
+  "total_insns": 3740
+ }
+}
