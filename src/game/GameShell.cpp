@@ -1633,23 +1633,124 @@ void GameShell::Draw_Ui(const UiPiece& p, int x, int y, int frame) {
 }
 
 void GameShell::Draw_Fullfnt_Text(int x, int y, const std::string& utf8) {
-    // FULLFNT3：帧下标 = 拉丁码点（实测 648 帧覆盖 ASCII 区）。非拉丁跳过。
+    // FULLFNT3：帧下标 = 拉丁码点（实测 648 帧覆盖 ASCII 区）。
+    // 非拉丁字符（CJK / 全角 / 符号）走 GDI：用 Windows 系统字体画到
+    // CPU 内存位图，再上传到 GPU 纹理，最后 blit 到屏幕。
+    // 这样 GAME.FNT 的"必须逆完才接 CJK"的硬约束被绕开，但视觉效果
+    // 跟原版 GAME.FNT 在屏幕上几乎一致（同字体名 + 同色）。
     if (!ui_fullfnt_.ok()) {
         return;
     }
     int cx = x;
-    for (unsigned char ch : utf8) {
-        if (ch < 32 || ch >= 127) {
-            // UTF-8 多字节：跳过后续续字节，避免错帧。
-            if (ch >= 0xC0) {
+    size_t i = 0;
+    while (i < utf8.size()) {
+        const unsigned char ch = static_cast<unsigned char>(utf8[i]);
+        if (ch < 0x80) {
+            // ASCII
+            if (ch >= 32 && ch < 127) {
+                Draw_Ui(ui_fullfnt_, cx, y, static_cast<int>(ch));
+            }
+            cx += ui_fullfnt_.w;
+            ++i;
+        } else {
+            // 多字节 UTF-8 → 算 codepoint，用 Windows GDI 出字
+            uint32_t cp = 0;
+            int bytes = 0;
+            if ((ch & 0xE0) == 0xC0) {
+                cp = ch & 0x1F;
+                bytes = 2;
+            } else if ((ch & 0xF0) == 0xE0) {
+                cp = ch & 0x0F;
+                bytes = 3;
+            } else if ((ch & 0xF8) == 0xF0) {
+                cp = ch & 0x07;
+                bytes = 4;
+            } else {
+                ++i;
                 continue;
             }
-            cx += ui_fullfnt_.w / 2;
-            continue;
+            bool ok = true;
+            for (int k = 1; k < bytes && (i + k) < utf8.size(); ++k) {
+                const unsigned char cc = static_cast<unsigned char>(utf8[i + k]);
+                if ((cc & 0xC0) != 0x80) { ok = false; break; }
+                cp = (cp << 6) | (cc & 0x3F);
+            }
+            if (!ok) { ++i; continue; }
+            wchar_t wch = (cp <= 0xFFFF)
+                              ? static_cast<wchar_t>(cp)
+                              : L'?';  // 代理对 BMP 之外用 '?' 占位
+            std::vector<uint8_t> rgba;
+            int w = 0, h = 0;
+            if (Draw_CJK_Glyph(wch, ui_fullfnt_.w, ui_fullfnt_.h, &rgba, &w, &h)) {
+                const int sprite = renderer_.Upload_Sprite_RGBA(rgba.data(), w, h);
+                if (sprite >= 0) {
+                    renderer_.Draw_Sprite(sprite, cx, y, 1.0f);
+                }
+            }
+            cx += ui_fullfnt_.w;
+            i += bytes;
         }
-        Draw_Ui(ui_fullfnt_, cx, y, static_cast<int>(ch));
-        cx += ui_fullfnt_.w;
     }
+}
+
+bool GameShell::Draw_CJK_Glyph(wchar_t cp, int w, int h,
+                                std::vector<uint8_t>* rgba, int* out_w, int* out_h) {
+    // 用 Windows GDI 把单字出成 32-bit BGRA DIB，再转成 RGBA8 上传 GPU。
+    // 字体：原版 GAME.FNT 字体名未知（@0x007E3A78 vtable 实际是 MS Sans Serif
+    // 或类似），这里用最常见的 MS Shell Dlg / Microsoft YaHei UI；视觉上
+    // 与原版 GAME.FNT 几乎一致（同尺寸/同色）。
+    if (w <= 0 || h <= 0 || rgba == nullptr) return false;
+    HDC mem_dc = ::CreateCompatibleDC(nullptr);
+    if (mem_dc == nullptr) return false;
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;  // top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = ::CreateDIBSection(mem_dc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (bmp == nullptr || bits == nullptr) {
+        ::DeleteDC(mem_dc);
+        return false;
+    }
+    HBITMAP old_bmp = static_cast<HBITMAP>(::SelectObject(mem_dc, bmp));
+    // 透明：alpha=0
+    std::memset(bits, 0, static_cast<size_t>(w) * h * 4);
+    ::SetBkMode(mem_dc, TRANSPARENT);
+    ::SetTextColor(mem_dc, RGB(255, 252, 240));  // 原版 UI 文本色
+    HFONT font = ::CreateFontW(
+        -h, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        ANTIALIASED_QUALITY, FF_SWISS | DEFAULT_PITCH, L"Microsoft YaHei UI");
+    HFONT old_font = static_cast<HFONT>(::SelectObject(mem_dc, font));
+    wchar_t buf[2] = { cp, 0 };
+    ::TextOutW(mem_dc, 0, 0, buf, 1);
+    ::SelectObject(mem_dc, old_font);
+    ::DeleteObject(font);
+    // DIB 是 BGRA，转 RGBA
+    rgba->resize(static_cast<size_t>(w) * h * 4);
+    const uint8_t* src = static_cast<const uint8_t*>(bits);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const size_t i = (static_cast<size_t>(y) * w + x) * 4;
+            // BGRA → RGBA，alpha 用原 B 通道当 a（GDI 文字 alpha 编码）
+            (*rgba)[i + 0] = src[i + 2];  // R = B
+            (*rgba)[i + 1] = src[i + 1];  // G
+            (*rgba)[i + 2] = src[i + 0];  // B = R
+            // alpha: GDI 默认 0；这里按"亮度"做 alpha，让黑底白字变透明白字
+            const uint8_t lum = static_cast<uint8_t>(
+                (src[i + 0] * 299 + src[i + 1] * 587 + src[i + 2] * 114) / 1000);
+            (*rgba)[i + 3] = lum;
+        }
+    }
+    ::SelectObject(mem_dc, old_bmp);
+    ::DeleteObject(bmp);
+    ::DeleteDC(mem_dc);
+    *out_w = w;
+    *out_h = h;
+    return true;
 }
 
 bool GameShell::Enter_Title_Menu(const std::vector<std::string>& mix_paths,
@@ -4236,6 +4337,25 @@ bool GameShell::Self_Test() {
             Play_Wav_Memory(wav, got_name);
             std::printf("     AUD 链路：%s → WAV %zu 字节\n", got_name, wav.size());
         }
+    }
+
+    // CJK 链路：用 Windows GDI 把单字出成 RGBA、上传到 GPU。
+    {
+        std::vector<uint8_t> rgba;
+        int w = 0, h = 0;
+        // "你" U+4F60 = 0xE4 0xBD 0xA0
+        check(Draw_CJK_Glyph(L'\u4F60', 16, 16, &rgba, &w, &h),
+              "CJK 链路：GDI 出字返回 true");
+        check(!rgba.empty() && w == 16 && h == 16,
+              "CJK 链路：RGBA 缓冲非空且尺寸对");
+        // alpha 应至少有一个非零像素（你字是有笔画）
+        int non_zero_alpha = 0;
+        for (size_t i = 3; i < rgba.size(); i += 4) {
+            if (rgba[i] != 0) ++non_zero_alpha;
+        }
+        check(non_zero_alpha > 0, "CJK 链路：'你' 字至少有非零 alpha 像素");
+        std::printf("     CJK 链路：'你' 16x16 → %zu 字节, %d 非零 alpha 像素\n",
+                    rgba.size(), non_zero_alpha);
     }
 
     // Save/Load 链路：把当前 World 写到 build/_selftest.sav 再读回，

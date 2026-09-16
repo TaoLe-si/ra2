@@ -206,6 +206,11 @@ private:
     void Draw_Money(int x, int y, int w, int amount);
     /// FULLFNT3.SHP 拉丁字形（帧下标=码点；胜负条 MessageList 文案）。
     void Draw_Fullfnt_Text(int x, int y, const std::string& utf8);
+    /// CJK 单字：用 Windows GDI 把一个 codepoint 出成 RGBA（alpha=0 = 透明），
+    /// 上传 GPU 后再 blit。这是 GAME.FNT 严格逆向没做完之前的兜底：
+    /// 系统字体的视觉效果与 GAME.FNT 在屏幕上几乎一致（同字体名 + 同色）。
+    bool Draw_CJK_Glyph(wchar_t cp, int w, int h,
+                        std::vector<uint8_t>* rgba, int* out_w, int* out_h);
     /// GOptions 对话框（.rsrc @0x489860）：画暂停面板。
     void Draw_Pause_Options();
     /// 点中暂停钮：返回 true = 已消费点击。
