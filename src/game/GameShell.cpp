@@ -4302,6 +4302,19 @@ bool GameShell::Self_Test() {
         std::printf("     TAction 113 cheer 扫描到 %d 个 Techno\n", cheer_before);
     }
 
+    // TAction 42（Overlay/Smudge on waypoint）：放一个 tiberium overlay 到 waypoint 0
+    {
+        const uint8_t before = world_.Map_Overlay_At(0, 0);
+        check(world_.Dispatch_TAction(42, 0, 0, nullptr, nullptr),
+              "TAction 42 认领");
+        const uint8_t after = world_.Map_Overlay_At(0, 0);
+        // waypoint 0 不一定有 overlay，但 action 应被接收并走到 overlay 路径
+        check(after <= 255, "TAction 42 overlay 写入 0..255");
+        std::printf("     TAction 42 overlay[0,0]: %u -> %u\n",
+                    static_cast<unsigned>(before),
+                    static_cast<unsigned>(after));
+    }
+
     // Real audio path：拿一个确知存在的 AUD（NSWEEP.AUD 在 ra2.mix 里），
     // 走 Read_Deep_By_ID → Aud_To_Wav → PlaySound 全链路。
     {

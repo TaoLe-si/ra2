@@ -2260,6 +2260,25 @@ bool World::Dispatch_TAction(int action, int house, int param1,
             // 具体 AI 枚举名未在字符串侧钉死；写侧已证。
             return true;
         case 42:  // @0x006DECC2 → 0x6E2390：waypoint 上 Overlay/Smudge（类型表 0x88756C[param]）
+            // 原版读 0x88756C[param1] → OverlayTypeClass* → 0x6E2390 放
+            // 0x55C0F0 OverlayClass::Put_Overlay(coord)。
+            // 我们没有 OverlayTypeClass 链表；把 param1 当 0..255 的
+            // overlay 字节直接灌到 MapFile 的 overlay_/overlay_data_。
+            {
+                float wx2 = 0.0f, wy2 = 0.0f;
+                if (map_file_ != nullptr && param1 >= 0 && param1 < 256 &&
+                    Spawn_Cell(param1, &wx2, &wy2)) {
+                    const int cx = static_cast<int>(wx2);
+                    const int cy = static_cast<int>(wy2);
+                    const uint8_t v = static_cast<uint8_t>(param1);
+                    map_file_->Set_Overlay_At(cx, cy, v);
+                    map_file_->Set_Overlay_Data_At(cx, cy, v);
+                    ++sound_play_count_;
+                    std::printf("  Overlay action=42 type=%d @(%d,%d)\n",
+                                param1, cx, cy);
+                    return true;
+                }
+            }
             ++sound_play_count_;
             std::printf("  Overlay stub action=42 param=%d\n", param1);
             return true;

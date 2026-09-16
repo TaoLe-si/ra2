@@ -219,6 +219,10 @@ public:
     const std::vector<MapBaseNode>& Base_Nodes() const noexcept {
         return map_file_ ? map_file_->Base_Nodes() : static_cast<const std::vector<MapBaseNode>&>(empty_nodes_);
     }
+    /// 读某格的 overlay 字节（没绑 map → 0xFF）。
+    uint8_t Map_Overlay_At(int cx, int cy) const noexcept {
+        return map_file_ ? map_file_->Overlay_At(cx, cy) : 0xFF;
+    }
     /// 本局已认领的 Voc/环境音次数（TAction 19/99/108 → 0x750920 桩）。
     int Sound_Play_Count() const noexcept { return sound_play_count_; }
 
