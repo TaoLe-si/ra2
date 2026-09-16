@@ -1825,12 +1825,54 @@ bool GameShell::Hit_Title_Menu(int x, int y) {
                 std::printf("  Title → SinglePlayerMenu\n");
                 return true;
             }
+            if (b.id == 0x55C) {
+                // Options → 复用 GOptions 对话框（和暂停里一样）。
+                paused_ = true;
+                std::printf("  Title → Options (GOptions)\n");
+                return true;
+            }
+            if (b.id == 0x686) {
+                // MoviesAndCredits 走 cinematic 跳过去（无资源时只是退一步）
+                std::printf("  Title MoviesAndCredits 暂跳\n");
+                return true;
+            }
+            if (b.id == 0x684 || b.id == 0x578) {
+                // WWOnline / Network：联机未实现，按 GOptions 一样退。
+                std::printf("  Title %s 暂跳（联机未实现）\n",
+                            b.id == 0x684 ? "WWOnline" : "Network");
+                return true;
+            }
             std::printf("  Title stub id=0x%X %s\n", b.id, b.key);
             return true;
         }
         if (b.id == 0x686) {
             title_page_ = 0;
             std::printf("  SinglePlayer → MainMenu\n");
+            return true;
+        }
+        if (b.id == 0x689) {
+            // LoadSavedGame：弹"存档列表" UI（最小实现 = 直接加载
+            // build/save0001.sav）。原版走 RT_DIALOG + GetPrivateProfileString
+            // 枚举 SAVE####.sav；这里固定路径以不发明 UI。
+            std::string sav_path = "build/save0001.sav";
+            std::string mp, e;
+            if (!Load_World(&world_, &mp, sav_path)) {
+                std::printf("  LoadSavedGame 无存档: %s\n", sav_path.c_str());
+                return true;
+            }
+            if (mp.empty() || pending_mixes_.empty()) {
+                std::printf("  LoadSavedGame 缺 map_path/mixes\n");
+                return true;
+            }
+            mixes_.clear();
+            roots_.clear();
+            title_page_ = 0;
+            if (!Load_Map(pending_mixes_, mp.c_str(), &e)) {
+                std::printf("  LoadSavedGame 载入失败: %s\n", e.c_str());
+                Enter_Title_Menu(pending_mixes_, skirmish_map_.c_str(), nullptr);
+                return true;
+            }
+            std::printf("  LoadSavedGame 命中: %s\n", sav_path.c_str());
             return true;
         }
         if (b.id == 0x688) {
@@ -2039,6 +2081,13 @@ bool GameShell::Hit_Pause_Options(int x, int y) {
             } else {
                 std::printf("  GOptions Delete 无文件: %s\n", sav_path.c_str());
             }
+            return true;
+        }
+        if (b.id == 0x521) {
+            // GameControls：键位/速度设置 —— 原版 RT_DIALOG 258 + Init_Dialog
+            // 走 OptionsClass::Show。最小实现 = 弹个读屏提示，已对齐原版
+            // 0x55C2A0 的入口；具体按键表留给后续。
+            std::printf("  GOptions GameControls：键位/速度（占位，原版 RT_DIALOG 258）\n");
             return true;
         }
         std::printf("  GOptions stub id=0x%X %s\n", b.id, b.key);
