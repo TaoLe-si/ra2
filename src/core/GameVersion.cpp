@@ -80,6 +80,14 @@ bool GameInstall::Resolve(const char* dir, GameVersion v, GamePaths* out,
         out->mixes.push_back(Join(dir, "ra2md.mix"));
         out->mixes.push_back(Join(dir, "expandmd01.mix"));
     }
+    // cameo（*ICON.SHP）在 language.mix / langmd.mix，不在 ra2.mix。
+    // 缺了不致命（侧栏格子空着），所以不算 critical。
+    if (File_Exists(Join(dir, "language.mix"))) {
+        out->mixes.push_back(Join(dir, "language.mix"));
+    }
+    if (v == GameVersion::kYuri && File_Exists(Join(dir, "langmd.mix"))) {
+        out->mixes.push_back(Join(dir, "langmd.mix"));
+    }
 
     out->map_mixes.clear();
     if (v == GameVersion::kYuri) {

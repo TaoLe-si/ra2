@@ -79,11 +79,12 @@ inline int CellDistance(CellStruct a, CellStruct b) noexcept {
 // 全局枚举：均取自二进制内嵌字符串（db/strings.json），非臆测
 // ---------------------------------------------------------------------------
 
-/// 阵营侧（rulesmd.ini 的 [Sides] 段，二进制中可见 SideClass / Side 键名）。
+/// 阵营侧（rulesmd.ini [Sides]：GDI 第一、Nod 第二、ThirdSide 第三）。
+/// RadarClass::Init_For_House @0x00652E90 用 Side==0 走盟军雷达内缩。
 enum class Side : int32_t {
-    Nod = 0,      ///< 苏联
-    GDI = 1,      ///< 盟军
-    Yuri = 2,     ///< 尤里（YR 新增）
+    GDI = 0,      ///< 盟军（[Sides] 第一）
+    Nod = 1,      ///< 苏联
+    Yuri = 2,     ///< ThirdSide / 尤里
     Civilian = 3,
     Mutant = 4,
 };

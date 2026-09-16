@@ -9,6 +9,7 @@
 #include "gfx/TmpFile.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 
 namespace ra2 {
@@ -33,20 +34,32 @@ inline uint32_t Pack_RGBA(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 }  // namespace
 
 std::vector<std::pair<int, int>> TmpFile::Row_Geometry(int cw, int ch) {
-    // 菱形顶点在 (cw/2, 0) (cw, ch/2) (cw/2, ch) (0, ch/2)，
-    // 边缘斜率 = (cw/2)/(ch/2) = cw/ch。往下走一行左右各外扩 cw/ch 个像素：
-    //     w(y) = 2 + 2*step*min(y, ch-1-y)
-    //     x(y) = (cw/2 - 1) - step*min(y, ch-1-y)
-    // RA2 (60x30, step=2)：2,6,...,58,58,...,2，合计 900 = 60*30/2 ✓
+    // 与 CNCMaps TmpRenderer / XCC 同一套文件字节序（不是对称菱形公式）：
+    //   上半：cx+=4, x-=2 → (28,4),(26,8),...,(0,60)
+    //   下半：cx-=4, x+=2 → (2,56),(4,52),...,(30,0)
+    // 合计 4+8+...+60+56+...+0 = cw*ch/2。对称式 2,6..58 或 4,8..60,60..4
+    // 都会把 Proad 黄线撕成四瓣/锯齿（Arena 路面锯齿根因）。
     std::vector<std::pair<int, int>> rows;
-    if (cw <= 0 || ch <= 0) {
+    rows.reserve(static_cast<size_t>(ch));
+    if (cw <= 0 || ch <= 0 || (ch & 1) != 0) {
         return rows;
     }
-    const int step = std::max(1, cw / std::max(1, ch));
-    rows.reserve(static_cast<size_t>(ch));
-    for (int y = 0; y < ch; ++y) {
-        const int d = std::min(y, ch - 1 - y);
-        rows.emplace_back((cw / 2 - 1) - step * d, 2 + 2 * step * d);
+    const int half = ch / 2;
+    const int step = cw / ch;  // RA2: 2
+    if (step <= 0) {
+        return rows;
+    }
+    int x = cw / 2;
+    int cx = 0;
+    for (int i = 0; i < half; ++i) {
+        cx += 2 * step;
+        x -= step;
+        rows.emplace_back(x, cx);
+    }
+    for (int i = 0; i < half; ++i) {
+        cx -= 2 * step;
+        x += step;
+        rows.emplace_back(x, cx);
     }
     return rows;
 }
@@ -260,14 +273,19 @@ std::vector<uint32_t> TmpFile::Render_Cell_RGBA(int i, const Palette& pal,
 
 std::vector<uint32_t> TmpFile::Render_Cell_Padded_RGBA(int i, const Palette& pal, int pad,
                                                        int* ox, int* oy,
-                                                       int* w, int* h) const {
+                                                       int* w, int* h,
+                                                       std::vector<uint8_t>* out_z) const {
     const int W = cell_width_ + 2 * pad;
     const int H = cell_height_ + 2 * pad;
     if (ox) *ox = pad;
     if (oy) *oy = pad;
     if (w) *w = W;
     if (h) *h = H;
-    std::vector<uint32_t> out(static_cast<size_t>(W) * static_cast<size_t>(H), 0);
+    const size_t n = static_cast<size_t>(W) * static_cast<size_t>(H);
+    std::vector<uint32_t> out(n, 0);
+    if (out_z) {
+        out_z->assign(n, 0);
+    }
     if (i < 0 || i >= static_cast<int>(tiles_.size()) || !tiles_[i].present) {
         return out;
     }
@@ -275,22 +293,43 @@ std::vector<uint32_t> TmpFile::Render_Cell_Padded_RGBA(int i, const Palette& pal
         return out;
     }
 
-    // 菱形本体
-    const std::vector<uint32_t> body = Render_Cell_RGBA(i, pal, false);
+    const TmpTile& t = tiles_[static_cast<size_t>(i)];
+    const auto rows = Row_Geometry(cell_width_, cell_height_);
+    // 菱形本体：按 Row_Geometry 展开，同步写 Z（与 iso 同序）。
+    size_t row_start = 0;
     for (int y = 0; y < cell_height_; ++y) {
-        for (int x = 0; x < cell_width_; ++x) {
-            const uint32_t px = body[static_cast<size_t>(y) * cell_width_ + x];
-            if ((px & 0xFF000000u) == 0) {
+        const int x0 = rows[static_cast<size_t>(y)].first;
+        const int rw = rows[static_cast<size_t>(y)].second;
+        for (int k = 0; k < rw; ++k) {
+            const size_t p = row_start + static_cast<size_t>(k);
+            if (p >= t.iso.size()) {
+                break;
+            }
+            const int x = x0 + k;
+            const uint8_t v = t.iso[p];
+            if (v == 0 || x < 0 || x >= cell_width_) {
                 continue;
             }
-            out[static_cast<size_t>(y + pad) * W + (x + pad)] = px;
+            const Palette::Color c = pal.Map(v);
+            const size_t di =
+                static_cast<size_t>(y + pad) * static_cast<size_t>(W) +
+                static_cast<size_t>(x + pad);
+            out[di] = Pack_RGBA(c.r, c.g, c.b, c.a);
+            if (out_z) {
+                (*out_z)[di] = (p < t.z.size()) ? t.z[p] : 0;
+            }
         }
+        row_start += static_cast<size_t>(rw);
     }
 
     // extra：画布坐标 (extra_x, extra_y) 与本 cell 的 (tile_x, tile_y) 同一套，
     // 所以相对偏移就是 (extra_x - tile_x, extra_y - tile_y)。
-    const TmpTile& t = tiles_[static_cast<size_t>(i)];
-    if (t.extra.empty() || t.header.extra_width == 0 || !t.header.Has_Extra()) {
+    static const bool kNoExtra = [] {
+        const char* e = std::getenv("RA2_NO_EXTRA");
+        return e != nullptr && e[0] == '1';
+    }();
+    if (kNoExtra || t.extra.empty() || t.header.extra_width == 0 ||
+        !t.header.Has_Extra()) {
         return out;
     }
     const int ex = static_cast<int>(t.header.extra_x) - t.header.tile_x;
@@ -307,12 +346,20 @@ std::vector<uint32_t> TmpFile::Render_Cell_Padded_RGBA(int i, const Palette& pal
             if (dx < 0 || dx >= W) {
                 continue;
             }
-            const uint8_t v = t.extra[static_cast<size_t>(y) * ew + x];
+            const size_t ep = static_cast<size_t>(y) * static_cast<size_t>(ew) +
+                              static_cast<size_t>(x);
+            const uint8_t v = t.extra[ep];
             if (v == 0) {
                 continue;
             }
             const Palette::Color c = pal.Map(v);
-            out[static_cast<size_t>(dy) * W + dx] = Pack_RGBA(c.r, c.g, c.b, c.a);
+            const size_t di =
+                static_cast<size_t>(dy) * static_cast<size_t>(W) +
+                static_cast<size_t>(dx);
+            out[di] = Pack_RGBA(c.r, c.g, c.b, c.a);
+            if (out_z) {
+                (*out_z)[di] = (ep < t.extra_z.size()) ? t.extra_z[ep] : 0;
+            }
         }
     }
     return out;

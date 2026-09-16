@@ -34,6 +34,7 @@ struct TheaterTileSet {
     std::string file_name;  ///< FileName（模板基名，如 mslop）
     int count = 0;          ///< TilesInSet
     int base = 0;           ///< 本集第一个瓦片的全局下标
+    int index = 0;          ///< 段号 nnnn（[General] GreenTile= 等用的就是这个）
 };
 
 class TheaterFile {
@@ -50,6 +51,9 @@ public:
 
     /// 全局下标 -> 所属集（用于按集做统计）。越界返回 nullptr。
     const TheaterTileSet* Set_Of(int index) const;
+
+    /// 段号（TileSet0041 的 41）-> 集。没有该段返回 nullptr。
+    const TheaterTileSet* Set_By_Num(int set_num) const;
 
     /// [General] 里的关键项：ClearTile / RoughTile / HeightBase / CliffSet ...
     int General_Int(const char* key, int def = 0) const;

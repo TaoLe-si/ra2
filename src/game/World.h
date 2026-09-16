@@ -21,8 +21,12 @@
 #include <vector>
 
 #include "map/MapFile.h"
+#include "ai/PathFinder.h"
+#include "map/Map.h"
 
 namespace ra2 {
+
+class UnitModelDB;
 
 /// 任务。原版 MissionClass 的 Mission 枚举，这里只留地图里真会出现的
 /// 和玩家能下的那几个。
@@ -37,7 +41,16 @@ enum class Mission {
     AttackMove, ///< 移动攻击（Ctrl+Shift）
     Scatter,    ///< 散开
     Deploy,     ///< 展开（基地车 / 美国大兵）
+    Harvest,    ///< 采矿（矿车自动：采满回矿厂）
     Stop,       ///< 停止
+    Hunt,       ///< MissionType=15 @0x816cac；All_To_Hunt @0x00501400 Assign 0xF
+};
+
+/// 对局结局。Flag_To_Win @0x004FC9E0（house+0x1f7）/ Flag_To_Lose @0x004FCBD0（+0x1f8）。
+enum class MatchOutcome {
+    Playing = 0,
+    Won,
+    Lost,
 };
 
 const char* Mission_Name(Mission m);
@@ -54,10 +67,31 @@ struct Object {
     int hp_max = 256;
     float speed = 0.0f;      ///< 格/秒。0 = 不能动（建筑、装饰、中立）
     float turn_rate = 0.0f;  ///< 朝向变化速度（单位/秒）
+    int sight = 0;           ///< Sight= 开雾半径（格）
+
+    // 战斗（从 Primary 武器灌入，对齐 rulesmd Damage/ROF/Range/Verses/Speed）
+    int damage = 0;
+    int rof = 0;             ///< 射击间隔（逻辑帧）
+    float range = 0.0f;      ///< 射程（格）
+    int weapon_speed = 0;    ///< [Weapon] Speed= leptons/帧
+    bool proj_inviso = false;
+    bool proj_arcing = false;
+    bool proj_proximity = false;
+    std::string proj_image;  ///< 弹道 SHP 基名（Projectile Image=）
+    int armor_index = 0;
+    int verses[11] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
+    int fire_cd = 0;         ///< 距下次可开火的剩余逻辑帧
+    std::string deploys_into;
+    bool harvester = false;
+    int storage = 0;         ///< 矿车容量
+    int cargo = 0;           ///< 当前装载矿量（bail 数）
+    int harvest_timer = 0;   ///< 装/卸计时（对应 unit+0xF8 / +0x10C）
 
     Mission mission = Mission::None;
     float dest_x = 0.0f, dest_y = 0.0f;
     bool has_dest = false;
+    std::vector<CellStruct> path;  ///< Order_Move 走 PathFinder 填的路点
+    int path_i = 0;
     int target = -1;         ///< 攻击目标 id，-1 = 无
 
     bool selectable = false; ///< 能不能被玩家选中（装饰物不能）
@@ -71,6 +105,22 @@ struct Object {
     }
 };
 
+/// 飞行弹道（BulletClass，size 0x160 @0x0046B540）。
+struct Bullet {
+    float x = 0.0f, y = 0.0f;
+    float vx = 0.0f, vy = 0.0f;  ///< 格/逻辑帧（Speed leptons / 256）
+    int target = -1;
+    int owner = -1;          ///< 发射者 Object id（Verses 来源）
+    int damage = 0;
+    int verses[11] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
+    bool proximity = false;
+    bool arcing = false;
+    std::string image;       ///< Projectile Image=（缺省类型名）
+    float arc_z = 0.0f;      ///< 仅表现；逻辑命中仍用 XY
+    float dist_left = 0.0f;  ///< 剩余平面路程（格）
+    bool alive = true;
+};
+
 /// 一个编队（Ctrl+数字建、数字选）。
 using Team = std::vector<int>;
 
@@ -79,8 +129,141 @@ public:
     /// 从地图灌对象进来。houses 来自地图的 [Houses]。
     bool Build(const MapFile& map);
 
+    /// 绑逻辑地图，给寻路 / CanPlaceHere 用。外壳在 TMP 的 LandType 填进格子之后再调。
+    void Set_Logic_Map(MapClass* map);
+
+    /// 绑 MapFile：采矿读写 OverlayPack；拷贝触发器并初始化 Elapsed 计时。
+    void Set_Map_File(MapFile* map);
+
+    /// 本机玩家资金（TEvent 45/46 / 侧栏 CREDITS）；其它房屋见 House_Credits。
+    void Set_Player_Credits(int credits) noexcept { player_credits_ = credits; }
+    int Player_Credits() const noexcept { return player_credits_; }
+    int House_Credits(int house) const;
+    void Set_House_Credits(int house, int credits);
+
+    /// 逻辑帧号（对齐 gamemd Frame @0xA8ED84，15Hz）。
+    int Logic_Frame() const noexcept { return logic_frame_; }
+
+    /// 本逻辑帧累计入账的采矿/变卖信贷（外壳每帧 Take）。
+    int Take_Credit_Delta() noexcept {
+        const int d = credit_delta_;
+        credit_delta_ = 0;
+        return d;
+    }
+    void Add_Credits(int n) noexcept { credit_delta_ += n; }
+
+    /// 用 rules.ini 的 Speed= / Strength= / Primary 武器覆盖默认值。
+    void Apply_Type_Stats(UnitModelDB& db);
+
+    /// 战斗 / 生产查询用（Update 里查武器与 DeploysInto）。
+    void Set_Models(UnitModelDB* db) noexcept { models_ = db; }
+    /// FogOfWar 下格是否已揭示（FogOfWar=no 恒真）。
+    bool Cell_Revealed(int cx, int cy) const noexcept;
+    UnitModelDB* Models() const noexcept { return models_; }
+
+    /// 玩家电力：正=盈余。由外壳在逻辑帧里刷新后写入，供 UI / 生产加速。
+    void Set_Power_State(int drained, int output) noexcept {
+        power_drain_ = drained;
+        power_output_ = output;
+    }
+    int Power_Drain() const noexcept { return power_drain_; }
+    int Power_Output() const noexcept { return power_output_; }
+    bool Low_Power() const noexcept { return power_output_ < power_drain_; }
+
+    /// 在 (x,y) 生成一个对象（生产完成 / MCV 展开）。返回新 id，失败 -1。
+    int Spawn(const char* type, MapObjectKind kind, int house, float x, float y);
+
+    /// BuildingType::CanPlaceHere @0x00464AC0 → 0x00716150 → Cell 0x0047C620。
+    /// PlaceAnywhere 或 foundation 各格 Land.Buildable，且无其它建筑重叠。
+    bool Can_Place_Building(const char* type, float x, float y) const;
+
+    /// [General] BaseUnit= 列表成员判定（ShortGame 败北 / MCVDeploy）。
+    bool Is_Base_Unit(const Object& o) const;
+
+    /// House 败北判定：ShortGame @0x004F8EC6 看建筑数+BaseUnit；否则 @0x004F8F21 全科技单位。
+    bool House_Is_Defeated(int house) const;
+
+    /// MPlayer_Defeated @0x004FC0B0：标 defeated，并按剩余阵营推 Flag_To_Win/Lose。
+    void MPlayer_Defeated(int house);
+
+    /// Flag_To_Win @0x004FC9E0 / Flag_To_Lose @0x004FCBD0（对本机玩家）。
+    void Flag_To_Win();
+    void Flag_To_Lose();
+
+    /// All_To_Hunt @0x00501400：该阵营活体 Assign Mission::Hunt(0xF)。
+    void All_To_Hunt(int house);
+
+    /// Crowd_Cheer 房屋扫描（TAction 113 → 0x50C8C0）：
+    /// 严格对齐原版的扫描集合（house + Techno 且非建筑），返回受影响个数。
+    /// 音频（@0x750920 Play_Voc + 0x8871E0[+0x1C8] 词条）尚未接到设备。
+    int Crowd_Cheer(int house);
+
+    /// TAction 分发（jmp 0x6DFDEC）：已接线见 World.cpp；未逆完则 false。
+    /// voc_name：Play Voc / 环境音等字符串参数（可空）。
+    /// link_id：Enable/Disable Trigger / TeamType ID（Actions 第 3 槽 / +0x30）。
+    bool Dispatch_TAction(int action, int house, int param1 = 0,
+                          const char* voc_name = nullptr,
+                          const char* link_id = nullptr);
+    /// 自检用：注入一张 TeamType（Arena 无 [TeamTypes]）。
+    void Add_Team_Type(MapTeamType tt);
+    const std::vector<MapTeamType>& Team_Types() const noexcept {
+        return team_types_;
+    }
+    /// 本局已认领的 Voc/环境音次数（TAction 19/99/108 → 0x750920 桩）。
+    int Sound_Play_Count() const noexcept { return sound_play_count_; }
+
+    /// 解析并执行地图 [Actions] 里已逆完的条目。
+    void Run_Trigger_Actions(const MapTrigger& trig);
+
+    /// TEvent::HasOccurred @0x0071E940：未接线 type → false。
+    bool Event_Has_Occurred(const MapTrigger& trig, const MapTriggerEvent& ev) const;
+
+    /// Make Ally @0x004F9B70：House+0x5788 |= 1<<other（互盟由 TAction 37 双边调用）。
+    void Make_Ally(int house_a, int house_b);
+    /// Make Enemy @0x004F9F90：House+0x5788 &= ~(1<<other)。
+    void Break_Ally(int house_a, int house_b);
+    /// Allies 位掩码检测（House+0x5788）。
+    bool Is_Ally(int house_a, int house_b) const;
+
+    /// 全图揭示（TAction 16 shroud sweep）。
+    void Reveal_Map();
+
+    /// Scenario 任务计时器（+0x11E8 start / +0x11F0 dur；-1=未跑）。
+    int Mission_Timer_Start() const noexcept { return mission_timer_start_; }
+    int Mission_Timer_Duration() const noexcept { return mission_timer_dur_; }
+
+    /// HouseClass::AI 电脑切片：IQ>=Production → Unload/Hunt；BaseNode 生产见下。
+    /// 生产真路径（gamemd）：BaseNode 写 House+0x564C → Building AI 0x4500F0
+    /// （门控 +0x1EE）→ Factory 0x4C98B0/0x4C9C70/0x4C9EA0；玩家侧栏则走
+    /// Event#14 → Begin_Production @0x4FA350（内亦调 FindSuitableFactory）。
+    void Tick_Computer_AI();
+
+    /// BuildingType vcall+0x94 @0x5F7900 / Begin_Production @0x4FA438：
+    /// 该阵营是否已有 Factory= 匹配的工厂建筑（"No-one can build." 拒因）。
+    bool House_Has_Suitable_Factory(int house, const char* produce_type) const;
+
+    /// Trigger 弹簧：全事件为真则执行 Actions（@0x007264C0 → 0x007265C0）。
+    void Tick_Triggers();
+
+    /// 地图触发器表（[Triggers]/[Events]/[Actions]）。
+    const std::vector<MapTrigger>& Triggers() const noexcept { return triggers_; }
+
+    MatchOutcome Outcome() const noexcept { return outcome_; }
+    /// 测试/触发：强制房屋 IQ（对齐 House+0x1D0 clamp）。
+    void Force_House_IQ(int house, int iq);
+    bool House_Defeated_Flag(int house) const;
+
+    /// 某阵营是否已有某建筑类型（Prerequisite 用）。
+    bool House_Has_Type(int house, const char* type) const;
+
+    /// Prerequisite 单项：具体类型名，或 POWER/BARRACKS/FACTORY/RADAR/TECH/PROC 抽象组。
+    bool House_Meets_Prereq(int house, const char* token) const;
+
+    int Player_House() const noexcept { return player_house_; }
+
     const std::vector<Object>& Objects() const noexcept { return objects_; }
     std::vector<Object>& Objects() noexcept { return objects_; }
+    const std::vector<Bullet>& Bullets() const noexcept { return bullets_; }
     const std::vector<std::string>& Houses() const noexcept { return houses_; }
 
     int Count() const noexcept { return static_cast<int>(objects_.size()); }
@@ -113,7 +296,7 @@ public:
     // ---- 命令 ----
 
     /// 移动命令：给所有选中单位下目标点。
-    /// 原版会做队形（同时到达），这里先直线走，队形等寻路接进来再做。
+    /// 原版会做队形（同时到达），这里先按寻路路点走。
     int Order_Move(float x, float y);
     int Order_Attack_Move(float x, float y);
     int Order_Attack(int target_id);
@@ -121,6 +304,8 @@ public:
     int Order_Guard();
     int Order_Scatter();
     int Order_Deploy();
+    /// 选中矿车开始采矿（无选中则给己方空闲矿车）。
+    int Order_Harvest();
 
     // ---- 编队 ----
 
@@ -146,16 +331,81 @@ public:
 
 private:
     void Move_Toward(Object& o, float dt);
+    void Follow_Path(Object& o, float x, float y);
+    void Tick_Combat(Object& o, float dt);
+    void Tick_Guard(Object& o);
+    void Tick_Deploy(Object& o);
+    void Tick_Harvest(Object& o, float dt);
+    void Tick_Hunt(Object& o, float dt);
+    void Tick_Defeat();
+    void Arm_Trigger_Timers(MapTrigger& trig);
+    const MapTeamType* Find_Team_Type(const char* id) const;
+    int Resolve_Team_House(const MapTeamType& tt, int fallback_house) const;
+    MapObjectKind Kind_For_Type(const char* type) const;
+    /// TAction 4/7：在 TeamType.Waypoint（或缺省出生点）投放 TaskForce 成员。
+    int Spawn_Team_Type(const MapTeamType& tt, int house);
+    bool Type_Exists(const char* type) const;
+    bool House_Owns_Type(int house, const char* type) const;
+    void Fire_Weapon(Object& attacker, Object& target);
+    void Tick_Bullets();
+    int Apply_Damage(Object& victim, int raw_damage, const Object& attacker);
+    int Apply_Damage_Verses(Object& victim, int raw_damage, const int* verses);
+
+    int Find_Enemy_In_Range(const Object& o, float range) const;
+    int Find_Nearest_Enemy(const Object& o) const;
+    bool Find_Ore_Near(float x, float y, float* ox, float* oy) const;
+    bool Find_Refinery(int house, float* rx, float* ry) const;
+    void Face_Toward(Object& o, float tx, float ty, float dt);
+    int Count_House_Buildings(int house) const;
+    int Count_House_Base_Units(int house) const;
+    int Count_House_Technos(int house) const;
+    void Init_Shroud();
+    void Tick_Shroud();
+    void Reveal_Around(float x, float y, int radius);
 
     std::vector<Object> objects_;
+    std::vector<Bullet> bullets_;
     std::vector<MapWaypoint> waypoints_;
     std::vector<std::string> houses_;
     std::vector<Team> teams_{std::vector<Team>(10)};
+    std::vector<uint8_t> house_defeated_;
+    /// 本局是否参战（有过科技单位 / 玩家阵营）。空席位不进 ShortGame 败北链。
+    std::vector<uint8_t> house_active_;
+    /// House Allies= 位掩码（house index → bit）；自联盟含本阵营。
+    std::vector<uint32_t> house_allies_;
+    /// FogOfWar：已揭示格（1=可见）。FogOfWar=no 时全 1。
+    std::vector<uint8_t> shroud_;
+    int shroud_w_ = 0;
+    int shroud_h_ = 0;
     int selected_count_ = 0;
     int next_id_ = 1;
     float camera_x_ = 0.0f, camera_y_ = 0.0f;
     bool have_camera_order_ = false;
     int player_house_ = -1;
+    PathFinder pathfinder_;
+    MapClass* logic_map_ = nullptr;
+    UnitModelDB* models_ = nullptr;
+    MapFile* map_file_ = nullptr;
+    std::vector<MapTrigger> triggers_;
+    std::vector<MapTeamType> team_types_;
+    int logic_frame_ = 0;
+    int player_credits_ = 0;
+    std::vector<int> house_credits_;
+    std::vector<int> house_iq_;
+    std::vector<uint8_t> house_human_;  ///< PlayerControl=yes → 1
+    int power_drain_ = 0;
+    int power_output_ = 0;
+    int credit_delta_ = 0;
+    MatchOutcome outcome_ = MatchOutcome::Playing;
+    /// Scenario 全局变量（+0x1cb0，stride 0x28，最多 50 @0x689760）。
+    uint8_t global_vars_[50] = {};
+    /// Scenario 局部变量（+0x24b2，stride 0x28，最多 100 @0x689a00）。
+    uint8_t local_vars_[100] = {};
+    /// TAction 19/99/108 → 0x750920 音效认领计数（设备未接）。
+    int sound_play_count_ = 0;
+    /// Scenario 任务计时器：start=+0x11E8（-1 空闲），dur=+0x11F0（帧）。
+    int mission_timer_start_ = -1;
+    int mission_timer_dur_ = 0;
 };
 
 }  // namespace ra2

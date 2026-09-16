@@ -63,7 +63,8 @@ struct PathRequest {
 /// 多个工作线程，但**按 ticket 顺序**返回结果 —— 这是保持确定性的关键。
 class PathFinder {
 public:
-    explicit PathFinder(MapClass* map) : map_(map) {}
+    explicit PathFinder(MapClass* map = nullptr) : map_(map) {}
+    void Set_Map(MapClass* map) noexcept { map_ = map; }
 
     /// 单条寻路。内部走分层规划，失败则退回常规 A*。
     PathResult Find_Path(CellStruct from, CellStruct to, int32_t max_cost = -1);

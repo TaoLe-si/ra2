@@ -30,6 +30,7 @@ class TechnoClass;
 /// 地形类型位。二进制证据：INI 键 "TerrainType"、"OverlayType"、"SmudgeType"、
 /// "IsAnimatedTiberium"、"TiberiumSpawnType"、"TiberiumSpreadRadius"
 /// 均出现在 db/strings.json 中，说明地形分类是数据驱动枚举。
+/// gamemd 0x839d68 名称表顺序（12 项，表长至 0x89ebf4 / stride 0x24）。
 enum class LandType : uint8_t {
     Clear = 0,
     Road = 1,
@@ -40,7 +41,33 @@ enum class LandType : uint8_t {
     Beach = 6,
     Rough = 7,
     Ice = 8,
+    Railroad = 9,
+    Tunnel = 10,
+    Weeds = 11,
 };
+constexpr int kLandTypeCount = 12;
+
+/// TMP cell header +41 的 land 字节 → LandType。
+/// gamemd 0x00544C05：movsx ecx,[subtile+0x29]；eax=[ecx*4+0x8288e4]。
+inline LandType LandType_From_Tmp_Byte(uint8_t tmp_land) noexcept {
+    static constexpr uint8_t kMap[16] = {
+        0,  // 0 Clear
+        8, 8, 8, 8,  // 1..4 Ice
+        10, // 5 Tunnel
+        9,  // 6 Railroad
+        3, 3,  // 7..8 Rock
+        2,  // 9 Water
+        6,  // 10 Beach
+        1, 1,  // 11..12 Road（PAVE 等）
+        0,  // 13 Clear（CLEAR01）
+        7,  // 14 Rough
+        3,  // 15 Rock
+    };
+    if (tmp_land >= 16) {
+        return LandType::Clear;
+    }
+    return static_cast<LandType>(kMap[tmp_land]);
+}
 
 /// 一个地图格子。
 ///
@@ -56,12 +83,14 @@ public:
 
     /// 高度（0..13），影响视线和移动。
     uint8_t Level() const noexcept { return level_; }
+    void Set_Level(uint8_t v) noexcept { level_ = v; }
 
     /// 该格是否可以通行。
     /// 注意：真正的可通行判定还要叠加"已被其它单位占用"，
     /// 后者是运行时状态（occupier_），不是地形属性。
     bool Is_Clear_To_Move(LandType /*for_type*/) const noexcept {
-        return land_ != LandType::Rock && land_ != LandType::Wall;
+        return land_ != LandType::Rock && land_ != LandType::Wall &&
+               land_ != LandType::Water;
     }
 
     ObjectClass* Occupier() const noexcept { return occupier_; }

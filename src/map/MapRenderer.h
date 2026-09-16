@@ -9,14 +9,15 @@
 //   TEMPERATE .tem  isotem.pal     SNOW .sno  isosno.pal    URBAN .urb isourb.pal
 //   DESERT    .des  isodes.pal     LUNAR .lun isolun.pal    NEWURBAN .ubn isoubn.pal
 //
-// 【为什么剧场 INI 要"挑"而不是按名字找】
-//   MIX 只存 CRC，temperat.ini / urban.ini 这些名字一个都没撞上，
-//   但内容里都带 TilesInSet。所以把所有候选 INI 都解出来，
-//   拿地图真正用到的 TileIndex 去问"名字+扩展名在不在包里"，命中多者胜。
+// 【剧场 INI 怎么挑】
+//   先按 Theater= 用已知文件名 CRC 撞 urbanmd.ini / temperat.ini …；
+//   撞不上再退回"TilesInSet 候选 + 瓦片命中数"模糊匹配。
+//   绝不能只靠命中数：temperat/urban 前 574 项 FileName 相同，模糊匹配会选错。
 
 #pragma once
 
 #include <cstdint>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -37,14 +38,18 @@ struct TerrainTileRGBA {
     int origin_x = 0;   ///< cell 左上角在这张图里的坐标（外扩边距）
     int origin_y = 0;
     std::vector<uint32_t> pixels;   ///< RGBA8，行优先
+    /// 与 pixels 平行的 TMP Z 值（CNCMaps TmpRenderer / gamemd ZBuffer）。
+    /// 透明像素可任意；不透明且无 Z 数据时为 0（zBufVal = zBase - 0）。
+    std::vector<uint8_t> z;
     bool ok = false;
+    uint8_t land = 0;               ///< TMP TileCellHeader.LandType
 };
 
 /// cell 位图四边外扩的像素数：extra 常见 ExtraY=-60，64 足够。
 constexpr int kCellPad = 64;
 
 /// 等距菱形的几何。原版 RA2 一格就是 60×30 的菱形，半个格子 30×15。
-/// 高度每升一级，画面向上抬 12 像素。
+/// 高度每升一级，画面向上抬 15 像素（见 MapFile.h kLevelHeightPx）。
 constexpr int kCellW = 60;
 constexpr int kCellH = 30;
 constexpr int kCellHalfW = 30;   ///< kCellW / 2
@@ -55,7 +60,7 @@ class MapRenderer {
 public:
     /// 绑定素材：顶层 MIX 列表 + 已解析的地图。
     /// 会把所有嵌套子归档打开一遍建索引，之后取瓦片就是查表。
-    bool Bind(const std::vector<MixFileClass*>& roots, const MapFile& map,
+    bool Bind(const std::vector<MixFileClass*>& roots, MapFile& map,
               std::string* err = nullptr);
 
     const std::string& Theater() const noexcept { return theater_; }
@@ -104,24 +109,42 @@ public:
     int Origin_X() const noexcept { return origin_x_; }
     int Origin_Y() const noexcept { return origin_y_; }
 
-    /// 格子 -> 画布像素（菱形左上角，不含高度抬升）。
+    /// 格子 -> 画布像素（菱形左上角）。cx=dx，cy=dy/2；完整 dy=2*cy+(cx&1)。
     static void Cell_To_Canvas(int origin_x, int origin_y, int cx, int cy, int level,
                                int* out_x, int* out_y) {
-        *out_x = origin_x + kCellHalfW * (cx - cy);
-        *out_y = origin_y + kCellHalfH * (cx + cy) - level * kLevelHeightPx;
+        const int dy = cy * 2 + (cx & 1);
+        *out_x = origin_x + cx * kCellHalfW;
+        *out_y = origin_y + (dy - level) * kCellHalfH;
     }
 
-    /// 画布像素 -> 格子。反解上面那两个式子：
-    ///   cx - cy = (x - ox) / 30        cx + cy = (y - oy) / 15
-    /// 高度会让格子整体上移，所以严格反解要先知道 level；
-    /// 这里返回 level=0 时的格子，调用方再按实际高度微调（鼠标拾取本来
-    /// 就该从近到远试，见 GameShell 的拾取逻辑）。
+    /// OverlayPack 画上的格数 / 缺 SHP 的类型数（上次 Render）。
+    int Overlays_Drawn() const noexcept { return overlays_drawn_; }
+    int Overlays_Missing() const noexcept { return overlays_missing_; }
+
+    /// [OverlayTypes] 编号 -> Image=。Render 之前设好，空表就跳过覆盖物。
+    void Set_Overlay_Images(std::vector<std::string> names) {
+        overlay_images_ = std::move(names);
+        overlay_new_theater_.assign(overlay_images_.size(), 0);
+    }
+    void Set_Overlay_Images(std::vector<std::string> names,
+                            std::vector<uint8_t> new_theater) {
+        overlay_images_ = std::move(names);
+        overlay_new_theater_ = std::move(new_theater);
+        if (overlay_new_theater_.size() < overlay_images_.size()) {
+            overlay_new_theater_.resize(overlay_images_.size(), 0);
+        }
+    }
+
+    /// 画布像素 -> 格子（level=0）。CNCMaps：dx = x/30，dy = y/15；
+    /// 行 = dy/2，列 = dx。
     static void Canvas_To_Cell(int origin_x, int origin_y, int px, int py,
                                int* out_cx, int* out_cy) {
-        const float a = static_cast<float>(px - origin_x) / kCellHalfW;
-        const float b = static_cast<float>(py - origin_y) / kCellHalfH;
-        *out_cx = static_cast<int>(std::floor((a + b) * 0.5f));
-        *out_cy = static_cast<int>(std::floor((b - a) * 0.5f));
+        const int dx = static_cast<int>(std::floor(
+            static_cast<float>(px - origin_x) / kCellHalfW));
+        const int dy = static_cast<int>(std::floor(
+            static_cast<float>(py - origin_y) / kCellHalfH));
+        *out_cx = dx;
+        *out_cy = dy / 2;
     }
 
 private:
@@ -132,6 +155,9 @@ private:
     bool Build_Index();
     bool Pick_Theater_Ini(const MapFile& map, std::string* err);
     const MixEntry* Find_Entry(uint32_t id, int* sub_index) const;
+    std::vector<uint8_t> Read_Asset(const char* filename) const;
+    void Blit_Overlays(const MapFile& map, std::vector<uint32_t>* out, int width,
+                       int height);
 
     std::vector<MixFileClass*> roots_;
     std::vector<Sub> subs_;                                        ///< 所有嵌套子归档
@@ -153,6 +179,10 @@ private:
     /// 因为 SubTile 越界而退回变体 0 的次数。这个数大就说明 TMP 的变体数没读对
     /// （SubTile 在 RA2 里是"同一块地的第几种朝向/变体"，不能一律取 0）。
     int sub_clamped_ = 0;
+    std::vector<std::string> overlay_images_;
+    std::vector<uint8_t> overlay_new_theater_;
+    int overlays_drawn_ = 0;
+    int overlays_missing_ = 0;
 };
 
 }  // namespace ra2

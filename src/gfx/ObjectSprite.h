@@ -80,6 +80,7 @@ public:
     void Set_Theater(const std::string& t) {
         if (t != theater_) {
             theater_pal_tried_ = false;
+            iso_pal_tried_ = false;
         }
         theater_ = t;
     }
@@ -89,6 +90,7 @@ public:
     const ObjectSprite* Get(const char* type, int facing, int house_color);
 
     /// 单位模型库（给外壳打印诊断用）。
+    UnitModelDB& Models() noexcept { return models_; }
     const UnitModelDB& Models() const noexcept { return models_; }
 
     /// 这个类型是不是体素单位（决定走 GPU 烘焙还是 SHP 上传）。
@@ -108,7 +110,7 @@ public:
     /// 为什么需要：一辆坦克的体素是 8 万个，解码 + 等距光栅化是毫秒级。
     /// 一帧里几十个不同单位同时第一次出现，就会直接卡住几百毫秒。
     /// 原版是进图时预渲好的，我们做成"用到了才渲"，所以必须限流：
-    /// 超预算的这一帧先退化成色块，下一帧继续补，几帧内自然补齐。
+    /// 超预算的这一帧先跳过，下一帧继续补。进图时会把预算拉高一次预热。
     void Reset_Budget(int per_frame = 4) { budget_left_ = per_frame; }
     int Budget_Left() const noexcept { return budget_left_; }
 
@@ -174,8 +176,11 @@ private:
     /// 建筑/装饰为假（帧是"正常/损毁"，不是朝向，按朝向选会抽到损毁帧）。
     /// foot_w/foot_h 是占地格数：地图里建筑的 (x,y) 是**左上格**，
     /// 大建筑要把锚点挪到足迹中心，否则整座城都偏一格。
+    /// use_unit_pal：Techno 用 unit*.pal；地形装饰用 iso*.pal。
+    /// house_remap：仅 Techno 且 Remapable≠no 时套阵营色。
     bool Build_Shp(const char* image, int house_color, bool facing_frames,
-                   int facing, int foot_w, int foot_h, ObjectSprite* out);
+                   int facing, int foot_w, int foot_h, bool house_remap,
+                   bool use_unit_pal, ObjectSprite* out);
 
     /// 剧场单位调色板（768 字节，8 位，**还没做 remap**）。
     ///
@@ -184,6 +189,8 @@ private:
     /// 实测这就是"一帧烘 4 张精灵要好几秒"的大头。
     /// 找不到时留 768 个 0，并且记下来不再重试。
     const uint8_t* Theater_Palette_Data();
+    /// 地形装饰用的 iso*.pal（和 TMP 同一套），6 位原文，用前要 Expand_Pal768。
+    const uint8_t* Iso_Palette_Data();
 
     std::vector<MixFileClass*> roots_;
     UnitModelDB models_;
@@ -192,6 +199,8 @@ private:
     Dx12Renderer* renderer_ = nullptr;
     std::vector<uint8_t> theater_pal_;
     bool theater_pal_tried_ = false;
+    std::vector<uint8_t> iso_pal_;
+    bool iso_pal_tried_ = false;
 
     // 素材缓存：同一份 VXL/HVA/SHP 会被多个朝向复用，别重复解
     std::unordered_map<uint32_t, std::unique_ptr<VxlFile>> vxl_cache_;

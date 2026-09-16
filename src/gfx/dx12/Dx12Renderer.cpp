@@ -21,9 +21,9 @@ namespace {
 /// 着色器可见 SRV 堆的槽位数（见 Create_Descriptor_Heaps 的注释）。
 constexpr UINT kSrvCapacity = 4096;
 
-/// 体素烘焙画布的最大边长。一辆坦克在 scale=8 下大约 120×90，512² 富余。
-/// 超了直接判失败（宁可退化成色块，也不要悄悄裁掉半个模型）。
-constexpr int kBakeMax = 512;
+/// 体素烘焙画布的最大边长。坦克 scale=8 约 120×90；校车 BUS 约 557×459，
+/// 512² 不够会 Bake 失败，抬到 1024²。
+constexpr int kBakeMax = 1024;
 
 // ---------------------------------------------------------------------------
 // 着色器
@@ -119,6 +119,9 @@ VOut VSVoxel(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     float3 light = c2.xyz;
     float depth_scale = c2.w;
     float ambient = c3.x, diffuse = c3.y, levels = c3.z;
+    // c3.w：阴影模式。>0.5 = 沿 -L 投到地面（与 VxlFile 0x 投影同一公式），
+    // 写出黑+alpha；本体盖住影子靠后画不透明体素（Composite_Shadow 语义）。
+    float shadow_mode = c3.w;
 
     // world = Yaw · (R·(index + min_bounds) + T)
     // min_bounds 这一步不能省：肢体局部原点在 AABB 中心，不加会散架。
@@ -130,10 +133,24 @@ VOut VSVoxel(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
                       yaw_s * p.x + yaw_c * p.y,
                       p.z);
 
+    // 阴影：t = (pz - ground_z) / Lz；落点 = P - L*t（见 VxlFile.cpp）。
+    // 阴影趟时 c1.w 塞 ground_z（本体趟仍是 dmin）。
+    float3 draw_w = w;
+    if (shadow_mode > 0.5) {
+        float gz = depth_bias;
+        float lz = light.z;
+        if (lz > 1e-4) {
+            float t = (w.z - gz) / lz;
+            draw_w = float3(w.x - light.x * t, w.y - light.y * t, gz);
+        } else {
+            draw_w.z = gz;
+        }
+    }
+
     const float kk = 0.70710678;
-    float sx = (w.x - w.y) * kk;
-    float sy = (w.x + w.y) * kk * 0.5 - w.z;
-    float dep = w.x + w.y + w.z;
+    float sx = (draw_w.x - draw_w.y) * kk;
+    float sy = (draw_w.x + draw_w.y) * kk * 0.5 - draw_w.z;
+    float dep = draw_w.x + draw_w.y + draw_w.z;
 
     // 明暗：法线先过肢体旋转、再过朝向，然后和世界光向量点乘。
     //   level = (d > 0) ? floor(d * levels) : 0
@@ -160,6 +177,17 @@ VOut VSVoxel(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     float py = floor((sy - y0) * scale) + c.y * scale;
 
     VOut o;
+    if (shadow_mode > 0.5) {
+        // 影子画在本体之前；深度写 0（最远），本体 GREATER 盖住脚下阴影
+        // —— 对齐 Composite_Shadow「本体像素不画影子」。
+        o.pos = float4(px / vp.x * 2.0 - 1.0,
+                       1.0 - py / vp.y * 2.0,
+                       0.0,
+                       1.0);
+        // 阴影趟：c3.x 塞的是 shadow_alpha，不是 ambient。
+        o.col = float4(0.0, 0.0, 0.0, (vc == 0u) ? 0.0 : ambient);
+        return o;
+    }
     o.pos = float4(px / vp.x * 2.0 - 1.0,
                    1.0 - py / vp.y * 2.0,
                    saturate((dep - depth_bias) * depth_scale),
@@ -1136,37 +1164,42 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
     }
     const float dmin = p.depth_range[0];
     const float dmax = p.depth_range[1];
+    const float depth_scale = (dmax > dmin) ? (1.0f / (dmax - dmin)) : 1.0f;
+    const float yaw_c = std::cos(p.yaw);
+    const float yaw_s = std::sin(p.yaw);
+
     // 顺序必须和着色器里的 c0/c1/c2/c3 逐个对应（每个 float4 一组）。
-    const float k[16] = {
-        // c0
-        static_cast<float>(w),
-        static_cast<float>(h),
-        p.scale,
-        std::cos(p.yaw),
-        // c1
-        std::sin(p.yaw),
-        p.bbox[0],
-        p.bbox[1],
-        dmin,
-        // c2
-        light[0], light[1], light[2],
-        (dmax > dmin) ? (1.0f / (dmax - dmin)) : 1.0f,
-        // c3
-        p.ambient,
-        p.diffuse,
-        p.levels,
-        0.0f,
+    auto fill_consts = [&](float* k, bool shadow_pass) {
+        k[0] = static_cast<float>(w);
+        k[1] = static_cast<float>(h);
+        k[2] = p.scale;
+        k[3] = yaw_c;
+        k[4] = yaw_s;
+        k[5] = p.bbox[0];
+        k[6] = p.bbox[1];
+        // 阴影趟：c1.w = ground_z；本体趟：c1.w = dmin
+        k[7] = shadow_pass ? p.ground_z : dmin;
+        k[8] = light[0];
+        k[9] = light[1];
+        k[10] = light[2];
+        k[11] = depth_scale;
+        if (shadow_pass) {
+            k[12] = p.shadow_alpha;
+            k[13] = 0.0f;
+            k[14] = 0.0f;
+            k[15] = 1.0f;  // shadow_mode
+        } else {
+            k[12] = p.ambient;
+            k[13] = p.diffuse;
+            k[14] = p.levels;
+            k[15] = 0.0f;
+        }
     };
 
     if (Debug_Trace_On()) {
         std::fprintf(stderr,
-                     "[trace] 烘焙 %d 个体素 / %zu 肢体，画布 %dx%d\n"
-                     "        c0=(%.2f %.2f %.2f %.4f) c1=(%.4f %.3f %.3f %.3f)\n"
-                     "        c2=(%.4f %.4f %.4f %.6f) c3=(%.2f %.2f %.2f)\n",
-                     g.count, voxel_geoms_[static_cast<size_t>(geom)].count > 0
-                                  ? static_cast<size_t>(g.count) : 0,
-                     w, h, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8],
-                     k[9], k[10], k[11], k[12], k[13], k[14]);
+                     "[trace] 烘焙 %d 个体素，画布 %dx%d shadow=%d\n",
+                     g.count, w, h, p.shadow ? 1 : 0);
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = Cpu_Handle(rtv_heap_.Get(), 2, rtv_size_);
@@ -1221,13 +1254,19 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
     cmd_->SetGraphicsRootDescriptorTable(1, g.limb_srv);
     cmd_->SetGraphicsRootDescriptorTable(2, normals_srv_);
     cmd_->SetGraphicsRootDescriptorTable(3, voxel_palette_srv_);
-    cmd_->SetGraphicsRoot32BitConstants(4, 16, k, 0);
-    // RA2_VOXEL_PROBE=1 只画 1 个体素：用来分辨"整条管线没通"还是"逐体素的
-    // 数学算歪了"——前者一个点都不会有，后者会有一个孤零零的小方块。
     UINT instances = static_cast<UINT>(g.count);
     if (std::getenv("RA2_VOXEL_PROBE") != nullptr) {
         instances = 1;
     }
+    float k[16] = {};
+    // 先影子后本体（与 VxlFile 先写 shadow_out 再画家序本体一致）。
+    if (p.shadow && p.shadow_alpha > 0.0f) {
+        fill_consts(k, true);
+        cmd_->SetGraphicsRoot32BitConstants(4, 16, k, 0);
+        cmd_->DrawInstanced(6, instances, 0, 0);
+    }
+    fill_consts(k, false);
+    cmd_->SetGraphicsRoot32BitConstants(4, 16, k, 0);
     cmd_->DrawInstanced(6, instances, 0, 0);
     trace("录完绘制（还没提交）");
 
@@ -1263,7 +1302,7 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
     s.pResource = bake_tex_.Get();
     s.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     // 【踩过】pSrcBox 传 nullptr 不是"拷到哪算哪"，而是"拷**整个**源子资源"，
-    // 这张源是 512×512 的复用目标，目标只有 w×h —— 越界直接把设备摘掉
+    // 这张源是 kBakeMax² 的复用目标，目标只有 w×h —— 越界直接把设备摘掉
     // （removed=0x887A0001），报错却出现在后面的 CreateCommittedResource 上。
     // 必须显式给源盒。
     const D3D12_BOX src_box = {0, 0, 0, static_cast<UINT>(w), static_cast<UINT>(h), 1};
@@ -1312,6 +1351,12 @@ int Dx12Renderer::Upload_Sprite_RGBA(const uint8_t* pixels, int width, int heigh
 int Dx12Renderer::Upload_Texture(const uint8_t* pixels, int width, int height,
                                  int bpp, DXGI_FORMAT fmt, bool rgba) {
     if (!device_ || srv_used_ >= srv_capacity_) {
+        return -1;
+    }
+    // 帧录制中途绝不能 Reset 命令分配器，否则本帧 Clear/Draw 全丢，回读全黑。
+    if (in_frame_) {
+        std::printf("[!] Upload_Texture 在帧内被调用（%dx%d），已拒绝\n", width,
+                    height);
         return -1;
     }
     // 纹理拷贝的行距必须按 D3D12_TEXTURE_DATA_PITCH_ALIGNMENT(256) 对齐 ——

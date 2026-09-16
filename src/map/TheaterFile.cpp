@@ -73,14 +73,13 @@ bool TheaterFile::Load(const uint8_t* data, size_t size) {
 
     for (const auto& kv : ordered) {
         const IniSection* s = kv.second;
-        std::string file_name = ini.Get_String(s->name.c_str(), "FileName", "");
-        if (file_name.empty()) {
-            continue;                       // 没有 FileName 的段不产生瓦片
-        }
+        // 原版 0x00545150：先读 TilesInSet，缺了就结束扫描；<=0 仍推进
+        // 段号但不占全局下标。FileName 在累加之后才读，空名字也占坑。
         TheaterTileSet ts;
         ts.section = s->name;
+        ts.index = kv.first;
         ts.set_name = ini.Get_String(s->name.c_str(), "SetName", "");
-        ts.file_name = file_name;
+        ts.file_name = ini.Get_String(s->name.c_str(), "FileName", "");
         ts.count = ini.Get_Int(s->name.c_str(), "TilesInSet", 0);
         if (ts.count < 0) {
             ts.count = 0;
@@ -113,6 +112,15 @@ const TheaterTileSet* TheaterFile::Set_Of(int index) const {
     }
     for (const TheaterTileSet& s : sets_) {
         if (index >= s.base && index < s.base + s.count) {
+            return &s;
+        }
+    }
+    return nullptr;
+}
+
+const TheaterTileSet* TheaterFile::Set_By_Num(int set_num) const {
+    for (const TheaterTileSet& s : sets_) {
+        if (s.index == set_num) {
             return &s;
         }
     }

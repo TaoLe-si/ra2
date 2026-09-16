@@ -57,6 +57,11 @@ struct VoxelBakeParams {
     float ambient = 0.6f;              ///< exe 的 0.6（见 gfx/VoxelLight.h）
     float diffuse = 0.8f;              ///< exe 的 0.8
     float levels = 16.0f;              ///< exe 的 16 级明暗
+    /// 地面投影阴影（与 VxlFile::Render_Isometric 同一套：沿 -L 投到 z=ground_z）。
+    /// alpha 原版 blit 系数尚未从 exe 抠死，沿用 VoxelShadow 默认 0.45。
+    bool shadow = false;
+    float shadow_alpha = 0.45f;
+    float ground_z = 0.0f;
 };
 
 class Dx12Renderer {
@@ -216,8 +221,8 @@ private:
     ComPtr<ID3D12RootSignature> root_sig_voxel_;
     ComPtr<ID3D12PipelineState> pso_voxel_;
     ComPtr<ID3D12DescriptorHeap> dsv_heap_;
-    ComPtr<ID3D12Resource> bake_tex_;        ///< 烘焙用临时渲染目标（512²）
-    ComPtr<ID3D12Resource> bake_depth_;      ///< 画家序用的深度缓冲（512²）
+    ComPtr<ID3D12Resource> bake_tex_;        ///< 烘焙用临时渲染目标（kBakeMax²）
+    ComPtr<ID3D12Resource> bake_depth_;      ///< 画家序用的深度缓冲（kBakeMax²）
     ComPtr<ID3D12Resource> normals_tex_;     ///< 体素法线表 256×4（RGBA32F）
     ComPtr<ID3D12Resource> voxel_palette_;   ///< 体素调色板 256×1，每烘一张重写一次
     /// 调色板的上传缓冲，**常驻 + 常驻映射**：一次烘焙里 4 次 fence 往返太贵，

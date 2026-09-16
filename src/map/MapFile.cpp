@@ -5,11 +5,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "data/Ini.h"
 #include "io/FileSystem.h"
+#include "io/Format80.h"
 #include "io/Lzo1x.h"
 
 namespace ra2 {
@@ -262,17 +265,36 @@ bool MapFile::Load_Data(const uint8_t* data, size_t size, std::string* err) {
     if (!overlay_pack.empty()) {
         const std::vector<uint8_t> raw = Base64_Decode(overlay_pack);
         const char* e = nullptr;
-        if (Lzo1x_Decompress_Chunks(raw.data(), raw.size(), &overlay_, &e) && err) {
-            // 解不开不算致命（有些地图这段是空的），记下来即可
+        // OverlayPack 外壳和 IsoMapPack5 一样是分块，块内是 Format80（LCW），
+        // 不是 LZO。Arena 首块 9 字节解出 8192 个 0xFF，整段 512×512。
+        if (!Format80_Decompress_Chunks(raw.data(), raw.size(), &overlay_, &e)) {
+            const char* e80 = e;
+            overlay_.clear();
+            if (!Lzo1x_Decompress_Chunks(raw.data(), raw.size(), &overlay_, &e)) {
+                std::printf("[!] OverlayPack 解压失败: Format80=%s LZO=%s（%zu 字节）\n",
+                            e80 ? e80 : "?", e ? e : "?", raw.size());
+                overlay_.clear();
+            }
         }
     }
     if (!overlay_data_pack.empty()) {
         const std::vector<uint8_t> raw = Base64_Decode(overlay_data_pack);
         const char* e = nullptr;
-        Lzo1x_Decompress_Chunks(raw.data(), raw.size(), &overlay_data_, &e);
+        if (!Format80_Decompress_Chunks(raw.data(), raw.size(), &overlay_data_, &e)) {
+            const char* e80 = e;
+            overlay_data_.clear();
+            if (!Lzo1x_Decompress_Chunks(raw.data(), raw.size(), &overlay_data_,
+                                         &e)) {
+                std::printf("[!] OverlayDataPack 解压失败: Format80=%s LZO=%s\n",
+                            e80 ? e80 : "?", e ? e : "?");
+                overlay_data_.clear();
+            }
+        }
     }
 
     Parse_Objects();
+    Parse_Triggers();
+    Parse_Team_Types();
 
     return !cells_.empty();
 }
@@ -293,17 +315,16 @@ bool MapFile::Decode_Iso_Pack(const std::string& b64, std::string* err) {
     const size_t usable = (flat.size() >= 4) ? flat.size() - 4 : 0;
     const size_t n = usable / 11;
 
-    // 【裁剪过的地图包】modenc 写明：高度 0 的 Clear 瓦片可以不存，
-    // 游戏读到时自己补。实测 53 张官方地图里有 3 张（EB3 / NewHghts / RiverRam）
-    // 记录条数少于 (2W-1)*H —— 那就是被裁过的。
-    // 所以先铺一张 W*H 的网格，缺省 tile=0（Clear01）、level=0，再用记录覆盖；
-    // 不补的话地图上会留下透明窟窿。
+    // 【裁剪过的地图包】modenc：高度 0 的 Clear 可省略，游戏读时补。
+    // 网格是 (2W-1)×H，与 CNCMaps tiles[,] / ModEnc 单元数一致。
+    // 旧实现只收 X+Y 奇数 → 丢掉半数瓦片 → 菱形之间留空成棋盘锯齿。
     const int W = rect_[2] > 0 ? rect_[2] : 0;
     const int H = rect_[3] > 0 ? rect_[3] : 0;
-    cells_.assign(static_cast<size_t>(W) * static_cast<size_t>(H), IsoCell{});
+    const int iso_w = (W > 0) ? (W * 2 - 1) : 0;
+    cells_.assign(static_cast<size_t>(iso_w) * static_cast<size_t>(H), IsoCell{});
     for (int cy = 0; cy < H; ++cy) {
-        for (int cx = 0; cx < W; ++cx) {
-            IsoCell& c = cells_[static_cast<size_t>(cy) * W + cx];
+        for (int cx = 0; cx < iso_w; ++cx) {
+            IsoCell& c = cells_[static_cast<size_t>(cy) * iso_w + cx];
             c.cx = cx;
             c.cy = cy;
             c.tile = 0;
@@ -318,31 +339,22 @@ bool MapFile::Decode_Iso_Pack(const std::string& b64, std::string* err) {
             static_cast<uint32_t>(p[4]) | (static_cast<uint32_t>(p[5]) << 8) |
             (static_cast<uint32_t>(p[6]) << 16) | (static_cast<uint32_t>(p[7]) << 24));
 
-        // 只有 X+Y 为奇数的才是真单元（实测 80x80 -> 6400 个）。
-        if (((x + y) & 1) == 0) {
+        // CNCMaps：dx = X-Y+W-1，dy = X+Y-W-1；存 tiles[dx, dy/2]
+        const int dx = static_cast<int>(x) - static_cast<int>(y) + W - 1;
+        const int dy = static_cast<int>(x) + static_cast<int>(y) - W - 1;
+        if (dx < 0 || dy < 0 || dx >= iso_w || (dy / 2) >= H) {
             continue;
         }
-        const int w = rect_[2];
         IsoCell c;
-        // 见 MapFile.h 顶部：cx/cy 的指派靠对象段定下来的，别随手对调。
-        c.cx = (y - 1 - (x - w)) / 2;
-        c.cy = (x + y - 1 - w) / 2;
-        // 【0xFFFF 不是"空格子"】实测 Arena 里恰好 834 条记录的 TileIndex 是
-        // 65535，和画面上 834 个散布全图的黑色菱形洞**数目完全吻合**。
-        // 它的语义是"这一格没存瓦片"，原版会拿剧场的默认 Clear 瓦片补上
-        // （和"裁剪地图省略 Clear 瓦片"是同一条规则，见上面的预填）。
-        // 之前写成 tile = -1（什么都不画），于是黑地上还压着建筑 —— 一眼就假。
-        //
-        // 判据：把 0xFFFF 当空格子时，黑洞散布全图；当 Clear 补上时，
-        // 覆盖率 6400/6400，且与 Python 参考实现（tools/mapcellstat.py）一致。
+        c.cx = dx;
+        c.cy = dy / 2;
+        // 0xFFFF = 未存瓦片 → Clear（与裁剪省略规则同一条）。
         c.tile = (tile == 0xFFFF || tile < 0) ? 0 : tile;
         c.sub = p[8];
         c.level = p[9];
         c.ice = p[10];
-        if (c.cx < 0 || c.cx >= W || c.cy < 0 || c.cy >= H) {
-            continue;                     // 越界记录：宁可丢，不要踩坏邻居
-        }
-        cells_[static_cast<size_t>(c.cy) * W + c.cx] = c;
+        cells_[static_cast<size_t>(c.cy) * static_cast<size_t>(iso_w) +
+               static_cast<size_t>(c.cx)] = c;
         ++stored_;
         if (c.tile > max_tile_) {
             max_tile_ = c.tile;
@@ -404,6 +416,7 @@ void MapFile::Parse_Objects() {
 
     const int W = rect_[2];
     const int H = rect_[3];
+    const int iso_w = (W > 0) ? (W * 2 - 1) : 0;
 
     // [Houses]：编号 -> 阵营名
     for (const auto& kv : raw_sections_) {
@@ -429,6 +442,17 @@ void MapFile::Parse_Objects() {
         break;
     }
 
+    auto to_iso = [&](int x, int y, int* out_dx, int* out_row) -> bool {
+        const int dx = x - y + W - 1;
+        const int dy = x + y - W - 1;
+        if (dx < 0 || dy < 0 || dx >= iso_w || (dy / 2) >= H) {
+            return false;
+        }
+        *out_dx = dx;
+        *out_row = dy / 2;
+        return true;
+    };
+
     // [Waypoints]：值是 X*1000+Y 的打包坐标（键是编号）
     for (const auto& kv : raw_sections_) {
         if (_stricmp(kv.first.c_str(), "Waypoints") != 0) {
@@ -444,8 +468,9 @@ void MapFile::Parse_Objects() {
             const int y = packed % 1000;
             MapWaypoint wp;
             wp.index = std::atoi(line.substr(0, eq).c_str());
-            wp.cx = (y - 1 - (x - W)) / 2;
-            wp.cy = (x + y - 1 - W) / 2;
+            if (!to_iso(x, y, &wp.cx, &wp.cy)) {
+                continue;
+            }
             waypoints_.push_back(wp);
         }
         break;
@@ -506,9 +531,7 @@ void MapFile::Parse_Objects() {
                     o.group = std::atoi(Field(v, 9).c_str());
                 }
             }
-            o.cx = (y - 1 - (x - W)) / 2;
-            o.cy = (x + y - 1 - W) / 2;
-            if (o.cx < 0 || o.cx >= W || o.cy < 0 || o.cy >= H) {
+            if (!to_iso(x, y, &o.cx, &o.cy)) {
                 ++objects_dropped_;    // 地图自带的越界摆件，丢掉（官方图里也有）
                 continue;
             }
@@ -524,6 +547,373 @@ std::string MapFile::Raw_Section(const char* name) const {
         }
     }
     return std::string();
+}
+
+void MapFile::Parse_Triggers() {
+    triggers_.clear();
+    auto section = [this](const char* name) -> std::string {
+        return Raw_Section(name);
+    };
+    const std::string trig = section("Triggers");
+    const std::string ev = section("Events");
+    const std::string act = section("Actions");
+    const std::string tags = section("Tags");
+    if (trig.empty()) {
+        return;
+    }
+    std::unordered_map<std::string, std::string> events, actions, tag_rep;
+    auto fill = [](const std::string& body,
+                   std::unordered_map<std::string, std::string>* out) {
+        std::istringstream in(body);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos || eq == 0) {
+                continue;
+            }
+            (*out)[line.substr(0, eq)] = line.substr(eq + 1);
+        }
+    };
+    fill(ev, &events);
+    fill(act, &actions);
+    {
+        std::istringstream in(tags);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            // Tags: ID=repeat,Name,TriggerID
+            const std::string val = line.substr(eq + 1);
+            std::vector<std::string> f;
+            size_t start = 0;
+            while (start <= val.size()) {
+                size_t c = val.find(',', start);
+                if (c == std::string::npos) {
+                    c = val.size();
+                }
+                f.push_back(val.substr(start, c - start));
+                if (c >= val.size()) {
+                    break;
+                }
+                start = c + 1;
+            }
+            if (f.size() >= 3) {
+                tag_rep[f[2]] = f[0];  // TriggerID -> repeat
+            }
+        }
+    }
+    {
+        std::istringstream in(trig);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos || eq == 0) {
+                continue;
+            }
+            MapTrigger t;
+            t.id = line.substr(0, eq);
+            const std::string val = line.substr(eq + 1);
+            // House,AttachedTag,Name,...
+            size_t c1 = val.find(',');
+            size_t c2 = c1 == std::string::npos ? std::string::npos
+                                                : val.find(',', c1 + 1);
+            size_t c3 = c2 == std::string::npos ? std::string::npos
+                                                : val.find(',', c2 + 1);
+            if (c1 != std::string::npos) {
+                t.house = val.substr(0, c1);
+            }
+            if (c2 != std::string::npos && c3 != std::string::npos) {
+                t.name = val.substr(c2 + 1, c3 - c2 - 1);
+            }
+            const auto eit = events.find(t.id);
+            if (eit != events.end()) {
+                t.events_raw = eit->second;
+                // TEvent::Parse @0x0071F4E0：count, type, kind, payload...
+                std::vector<std::string> tok;
+                {
+                    std::string cur;
+                    for (char ch : t.events_raw) {
+                        if (ch == ',') {
+                            tok.push_back(cur);
+                            cur.clear();
+                        } else {
+                            cur.push_back(ch);
+                        }
+                    }
+                    if (!cur.empty() || !t.events_raw.empty()) {
+                        tok.push_back(cur);
+                    }
+                }
+                size_t ti = 0;
+                if (ti < tok.size()) {
+                    const int count = std::atoi(tok[ti++].c_str());
+                    for (int e = 0; e < count && ti < tok.size(); ++e) {
+                        MapTriggerEvent ev;
+                        ev.type = std::atoi(tok[ti++].c_str());
+                        if (ti >= tok.size()) {
+                            break;
+                        }
+                        ev.kind = std::atoi(tok[ti++].c_str());
+                        if (ti >= tok.size()) {
+                            break;
+                        }
+                        if (ev.kind == 1) {
+                            ev.type_name = tok[ti++];
+                        } else if (ev.kind == 2) {
+                            ev.param = std::atoi(tok[ti++].c_str());
+                            if (ti < tok.size()) {
+                                ev.house_name = tok[ti++];
+                            }
+                        } else {
+                            ev.param = std::atoi(tok[ti++].c_str());
+                        }
+                        t.events.push_back(std::move(ev));
+                    }
+                }
+            }
+            const auto ait = actions.find(t.id);
+            if (ait != actions.end()) {
+                t.actions_raw = ait->second;
+            }
+            const auto rit = tag_rep.find(t.id);
+            if (rit != tag_rep.end()) {
+                t.repeat = std::atoi(rit->second.c_str());
+            }
+            triggers_.push_back(std::move(t));
+        }
+    }
+    if (!triggers_.empty()) {
+            std::printf("  触发器 %zu 条（TEvent 0/8/13/14/23/27/28/30/32/36/37/45-47/51/57/58/60/61；"
+                    "TAction 1-4/6-7/9/12-13/15-16/19-21/23-30/35/37-39/53-54/56/57/67-69/99/102/108/113）\n",
+                    triggers_.size());
+    }
+}
+
+
+void MapFile::Parse_Team_Types() {
+    team_types_.clear();
+    auto section = [this](const char* name) -> std::string {
+        return Raw_Section(name);
+    };
+    // Waypoint letter → index（gamemd 0x763690）：A..Z = 0..25；AA.. = 26+。
+    auto wp_letter = [](const std::string& s) -> int {
+        std::string t = s;
+        while (!t.empty() && (t.back() == ' ' || t.back() == '\t' || t.back() == '\r')) {
+            t.pop_back();
+        }
+        size_t a = 0;
+        while (a < t.size() && (t[a] == ' ' || t[a] == '\t')) {
+            ++a;
+        }
+        t = t.substr(a);
+        if (t.empty()) {
+            return -1;
+        }
+        auto up = [](char c) -> char {
+            return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+        };
+        if (t.size() >= 2 &&
+            ((t[0] >= 'A' && t[0] <= 'Z') || (t[0] >= 'a' && t[0] <= 'z')) &&
+            ((t[1] >= 'A' && t[1] <= 'Z') || (t[1] >= 'a' && t[1] <= 'z'))) {
+            const char c0 = up(t[0]);
+            const char c1 = up(t[1]);
+            return (c0 - 'A') * 26 + (c1 - 'A') + 26;
+        }
+        const char c0 = up(t[0]);
+        if (c0 >= 'A' && c0 <= 'Z' && t.size() == 1) {
+            return c0 - 'A';
+        }
+        return std::atoi(t.c_str());
+    };
+    auto ini_get = [](const std::string& body, const char* key) -> std::string {
+        const size_t klen = std::strlen(key);
+        for (size_t p = 0; p < body.size(); ++p) {
+            if (_strnicmp(body.c_str() + p, key, static_cast<unsigned>(klen)) != 0) {
+                continue;
+            }
+            if (p > 0) {
+                const char prev = body[p - 1];
+                if (prev != '\n' && prev != '\r') {
+                    continue;
+                }
+            }
+            const char* v = body.c_str() + p + klen;
+            while (*v == ' ' || *v == '\t') {
+                ++v;
+            }
+            if (*v != '=') {
+                continue;
+            }
+            ++v;
+            while (*v == ' ' || *v == '\t') {
+                ++v;
+            }
+            std::string out;
+            while (*v && *v != '\n' && *v != '\r') {
+                out.push_back(*v++);
+            }
+            while (!out.empty() && (out.back() == ' ' || out.back() == '\t')) {
+                out.pop_back();
+            }
+            return out;
+        }
+        return {};
+    };
+    auto parse_tf = [&](const std::string& tf_id) -> std::vector<MapTaskForceEntry> {
+        std::vector<MapTaskForceEntry> out;
+        if (tf_id.empty()) {
+            return out;
+        }
+        const std::string body = section(tf_id.c_str());
+        for (const std::string& line : Split_Lines(body)) {
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos || eq == 0) {
+                continue;
+            }
+            bool digits = true;
+            for (size_t i = 0; i < eq; ++i) {
+                if (line[i] < '0' || line[i] > '9') {
+                    digits = false;
+                    break;
+                }
+            }
+            if (!digits) {
+                continue;
+            }
+            const std::string val = line.substr(eq + 1);
+            const size_t c = val.find(',');
+            MapTaskForceEntry e;
+            if (c == std::string::npos) {
+                e.count = 1;
+                e.type = Trim(val);
+            } else {
+                e.count = std::atoi(val.substr(0, c).c_str());
+                e.type = Trim(val.substr(c + 1));
+            }
+            if (e.count > 0 && !e.type.empty()) {
+                out.push_back(std::move(e));
+            }
+        }
+        return out;
+    };
+
+    const std::string list = section("TeamTypes");
+    if (list.empty()) {
+        return;
+    }
+    std::vector<std::string> ids;
+    for (const std::string& line : Split_Lines(list)) {
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) {
+            continue;
+        }
+        const std::string id = Trim(line.substr(eq + 1));
+        if (!id.empty()) {
+            ids.push_back(id);
+        }
+    }
+    for (const std::string& id : ids) {
+        MapTeamType tt;
+        tt.id = id;
+        const std::string body = section(id.c_str());
+        if (body.empty()) {
+            continue;
+        }
+        tt.name = ini_get(body, "Name");
+        tt.house = ini_get(body, "House");
+        tt.taskforce_id = ini_get(body, "TaskForce");
+        tt.script_id = ini_get(body, "Script");
+        const std::string wp = ini_get(body, "Waypoint");
+        if (!wp.empty()) {
+            tt.waypoint = wp_letter(wp);
+        }
+        const std::string twp = ini_get(body, "TransportWaypoint");
+        if (!twp.empty()) {
+            tt.transport_waypoint = wp_letter(twp);
+        }
+        const std::string drop = ini_get(body, "Droppod");
+        tt.droppod = (!_stricmp(drop.c_str(), "yes") || drop == "1");
+        const std::string reinf = ini_get(body, "Reinforce");
+        tt.reinforce = (!_stricmp(reinf.c_str(), "yes") || reinf == "1");
+        tt.members = parse_tf(tt.taskforce_id);
+        team_types_.push_back(std::move(tt));
+    }
+    if (!team_types_.empty()) {
+        std::printf(
+            "  TeamTypes %zu 条（TAction 4 Create@0x6F09C0 / 7 Reinforce@0x65D8E0）\n",
+            team_types_.size());
+    }
+}
+
+namespace {
+
+size_t Overlay_Pack_Index(const MapFile& map, int dx, int row,
+                          const std::vector<uint8_t>& ov) {
+    if (ov.empty() || dx < 0 || row < 0) {
+        return static_cast<size_t>(-1);
+    }
+    const int W = map.Width();
+    const int H = map.Height();
+    const int iso_w = map.Iso_Width();
+    const size_t n = ov.size();
+    const int dy = row * 2 + (dx & 1);
+    const int iso_x = (dx + dy) / 2 + 1;
+    const int iso_y = (dy - dx) / 2 + W;
+    if (W > 0 && iso_w > 0 &&
+        n == static_cast<size_t>(iso_w) * static_cast<size_t>(H)) {
+        const size_t i = static_cast<size_t>(row) * static_cast<size_t>(iso_w) +
+                         static_cast<size_t>(dx);
+        return (i < n) ? i : static_cast<size_t>(-1);
+    }
+    if (iso_x < 0 || iso_y < 0) {
+        return static_cast<size_t>(-1);
+    }
+    size_t stride = 512;
+    if (n < 512ull * 512ull) {
+        stride = static_cast<size_t>(W + H);
+        if (stride == 0) {
+            return static_cast<size_t>(-1);
+        }
+    }
+    const size_t i = static_cast<size_t>(iso_x) + static_cast<size_t>(iso_y) * stride;
+    return (i < n) ? i : static_cast<size_t>(-1);
+}
+
+}  // namespace
+
+uint8_t MapFile::Overlay_At(int cx, int cy) const {
+    const size_t i = Overlay_Pack_Index(*this, cx, cy, overlay_);
+    return (i == static_cast<size_t>(-1)) ? 0xFF : overlay_[i];
+}
+
+uint8_t MapFile::Overlay_Data_At(int cx, int cy) const {
+    const size_t i = Overlay_Pack_Index(*this, cx, cy, overlay_data_);
+    return (i == static_cast<size_t>(-1)) ? 0xFF : overlay_data_[i];
+}
+
+void MapFile::Set_Overlay_At(int cx, int cy, uint8_t v) {
+    const size_t i = Overlay_Pack_Index(*this, cx, cy, overlay_);
+    if (i != static_cast<size_t>(-1)) {
+        overlay_[i] = v;
+    }
+}
+
+void MapFile::Set_Overlay_Data_At(int cx, int cy, uint8_t v) {
+    const size_t i = Overlay_Pack_Index(*this, cx, cy, overlay_data_);
+    if (i != static_cast<size_t>(-1)) {
+        overlay_data_[i] = v;
+    }
 }
 
 }  // namespace ra2

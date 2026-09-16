@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 #include "gfx/ShpFile.h"
 #include "gfx/VoxelLight.h"
@@ -22,6 +23,70 @@ const char* Theater_Palette(const std::string& theater) {
     if (theater == "LUNAR")     return "unitlun.pal";
     if (theater == "NEWURBAN")  return "unitubn.pal";
     return "unittem.pal";       // TEMPERATE 及兜底
+}
+
+/// 地形 TMP / 装饰 SHP 用的 iso 调色板。和 MapRenderer 那张表一致。
+const char* Iso_Palette(const std::string& theater) {
+    if (theater == "URBAN")     return "isourb.pal";
+    if (theater == "SNOW")      return "isosno.pal";
+    if (theater == "DESERT")    return "isodes.pal";
+    if (theater == "LUNAR")     return "isolun.pal";
+    if (theater == "NEWURBAN")  return "isoubn.pal";
+    return "isotem.pal";
+}
+
+/// Theater=yes 的 SHP 不叫 .SHP，后缀是剧场扩展名（TREE01.urb）。
+const char* Theater_Ext(const std::string& theater) {
+    if (theater == "URBAN")     return "urb";
+    if (theater == "SNOW")      return "sno";
+    if (theater == "DESERT")    return "des";
+    if (theater == "LUNAR")     return "lun";
+    if (theater == "NEWURBAN")  return "ubn";
+    return "tem";
+}
+
+/// NewTheater=yes：文件名第 2 个字母换成剧场字母（CAAIRP→CUAIRP）。
+/// 与 MapRenderer / Overlay 同一套（URBAN=U, SNOW=A, …）。
+char Theater_New_Letter(const std::string& theater) {
+    if (theater == "URBAN") {
+        return 'U';
+    }
+    if (theater == "SNOW") {
+        return 'A';
+    }
+    if (theater == "DESERT") {
+        return 'D';
+    }
+    if (theater == "LUNAR") {
+        return 'L';
+    }
+    if (theater == "NEWURBAN") {
+        return 'N';
+    }
+    if (theater == "TEMPERATE") {
+        return 'T';
+    }
+    return 'T';
+}
+
+std::string New_Theater_Name(const std::string& image, const std::string& theater) {
+    if (image.size() < 2) {
+        return image;
+    }
+    std::string out = image;
+    out[1] = Theater_New_Letter(theater);
+    return out;
+}
+
+std::vector<uint8_t> Read_Named(const std::vector<MixFileClass*>& roots,
+                                const char* filename) {
+    for (MixFileClass* m : roots) {
+        std::vector<uint8_t> data = m->Read_Deep(filename);
+        if (!data.empty()) {
+            return data;
+        }
+    }
+    return {};
 }
 
 }  // namespace
@@ -215,18 +280,22 @@ void SpriteCache::Geom_BBox(const VxlGpuGeom& g, float yaw, float bbox[4],
     const float k = 0.70710678f;
     const float yc = std::cos(yaw);
     const float ys = std::sin(yaw);
+    // 光向量与 Bake / VxlFile 阴影同一套（VoxelLight 默认）。
+    VoxelLight light;
+    const float lx = light.light[0], ly = light.light[1], lz = light.light[2];
+    constexpr float kGroundZ = 0.0f;
     float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
     float dmin = 1e30f, dmax = -1e30f;
     for (const VxlGpuLimb& L : g.limbs) {
         // 肢体 AABB 的 8 个角就够了：这是保守上界，多出来的只是画布边上的
         // 一圈透明像素，落点由模型原点决定、不受影响。
         for (int ci = 0; ci < 8; ++ci) {
-            const float lx = (ci & 1) ? L.max_b[0] : L.min_b[0];
-            const float ly = (ci & 2) ? L.max_b[1] : L.min_b[1];
-            const float lz = (ci & 4) ? L.max_b[2] : L.min_b[2];
-            const float px = L.m[0] * lx + L.m[1] * ly + L.m[2] * lz + L.m[3];
-            const float py = L.m[4] * lx + L.m[5] * ly + L.m[6] * lz + L.m[7];
-            const float pz = L.m[8] * lx + L.m[9] * ly + L.m[10] * lz + L.m[11];
+            const float lx0 = (ci & 1) ? L.max_b[0] : L.min_b[0];
+            const float ly0 = (ci & 2) ? L.max_b[1] : L.min_b[1];
+            const float lz0 = (ci & 4) ? L.max_b[2] : L.min_b[2];
+            const float px = L.m[0] * lx0 + L.m[1] * ly0 + L.m[2] * lz0 + L.m[3];
+            const float py = L.m[4] * lx0 + L.m[5] * ly0 + L.m[6] * lz0 + L.m[7];
+            const float pz = L.m[8] * lx0 + L.m[9] * ly0 + L.m[10] * lz0 + L.m[11];
             const float wx = yc * px - ys * py;
             const float wy = ys * px + yc * py;
             const float sx = (wx - wy) * k;
@@ -238,6 +307,19 @@ void SpriteCache::Geom_BBox(const VxlGpuGeom& g, float yaw, float bbox[4],
             if (sy > y1) y1 = sy;
             if (dp < dmin) dmin = dp;
             if (dp > dmax) dmax = dp;
+            // 阴影落点也要进 bbox，否则投到模型外的影子被裁掉（VxlFile 同款）。
+            float qx = wx, qy = wy;
+            if (lz > 1e-4f) {
+                const float t = (pz - kGroundZ) / lz;
+                qx = wx - lx * t;
+                qy = wy - ly * t;
+            }
+            const float gx = (qx - qy) * k;
+            const float gy = (qx + qy) * k * 0.5f - kGroundZ;
+            if (gx < x0) x0 = gx;
+            if (gx > x1) x1 = gx;
+            if (gy < y0) y0 = gy;
+            if (gy > y1) y1 = gy;
         }
     }
     bbox[0] = x0;
@@ -270,9 +352,21 @@ bool SpriteCache::Build_Voxel_Gpu(const char* type, const UnitModel& um, float y
     // 光影：和原版同一套（VoxelLight 的算法是从 gamemd.exe 抄的）。
     // 光向量默认 normalize(1,1,2) 就是原版那个太阳方位，别乱改。
     VoxelLight light;
+    // 校车等大体素在 scale=8 下会 >512px，把最长边钳到 ~2.5 格，
+    // 避免 BUS 盖住半个屏幕（原版体素也是按格子比例缩小的）。
+    float scale = kVoxelScale;
+    {
+        const float bw = (bbox[2] - bbox[0]) * scale;
+        const float bh = (bbox[3] - bbox[1]) * scale;
+        const float longest = (bw > bh) ? bw : bh;
+        constexpr float kMaxPx = 160.0f;
+        if (longest > kMaxPx && longest > 1.0f) {
+            scale *= kMaxPx / longest;
+        }
+    }
     VoxelBakeParams p;
     p.yaw = yaw;
-    p.scale = kVoxelScale;
+    p.scale = scale;
     p.bbox = bbox;
     p.depth_range = depth;
     p.pal768 = pal768;
@@ -280,6 +374,11 @@ bool SpriteCache::Build_Voxel_Gpu(const char* type, const UnitModel& um, float y
     p.ambient = light.ambient;
     p.diffuse = light.diffuse;
     p.levels = static_cast<float>(light.levels);
+    // 地面投影阴影：算法对齐 VxlFile（沿 -L 投到 z=0），GPU 两趟烘焙。
+    p.shadow = true;
+    VoxelShadow sh;
+    p.shadow_alpha = sh.alpha;
+    p.ground_z = sh.ground_z;
 
     int w = 0, h = 0;
     const int id = renderer_->Bake_Voxels(gg->id, p, &w, &h);
@@ -292,11 +391,11 @@ bool SpriteCache::Build_Voxel_Gpu(const char* type, const UnitModel& um, float y
     for (int i = 0; i < 4; ++i) {
         out->bbox[i] = bbox[i];
     }
-    out->scale = kVoxelScale;
+    out->scale = scale;
     // 落点：模型原点投影后恒为 (0,0)，所以精灵左上角要放在
     // 格心 + (bbox[0],bbox[1])×scale 的位置。
-    out->off_x = static_cast<int>(bbox[0] * kVoxelScale);
-    out->off_y = static_cast<int>(bbox[1] * kVoxelScale);
+    out->off_x = static_cast<int>(bbox[0] * scale);
+    out->off_y = static_cast<int>(bbox[1] * scale);
     out->ok = true;
     return true;
 }
@@ -393,15 +492,40 @@ const uint8_t* SpriteCache::Theater_Palette_Data() {
     return theater_pal_.data();
 }
 
-bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_frames,
-                            int facing, int foot_w, int foot_h, ObjectSprite* out) {
-    std::string file = std::string(image) + ".SHP";
-    std::vector<uint8_t> data;
-    for (MixFileClass* m : roots_) {
-        data = m->Read_Deep(file.c_str());
-        if (!data.empty()) {
-            break;
+const uint8_t* SpriteCache::Iso_Palette_Data() {
+    if (!iso_pal_tried_) {
+        iso_pal_tried_ = true;
+        std::vector<uint8_t> data;
+        for (MixFileClass* m : roots_) {
+            data = m->Read_Deep(Iso_Palette(theater_));
+            if (data.size() >= 768) {
+                break;
+            }
+            data.clear();
         }
+        iso_pal_.assign(768, 0);
+        if (data.size() >= 768) {
+            std::memcpy(iso_pal_.data(), data.data(), 768);
+        } else {
+            for (int i = 0; i < 256; ++i) {
+                iso_pal_[static_cast<size_t>(i) * 3 + 0] =
+                    iso_pal_[static_cast<size_t>(i) * 3 + 1] =
+                        iso_pal_[static_cast<size_t>(i) * 3 + 2] =
+                            static_cast<uint8_t>((i >> 2) & 0x3F);
+            }
+        }
+    }
+    return iso_pal_.data();
+}
+
+bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_frames,
+                            int facing, int foot_w, int foot_h, bool house_remap,
+                            bool use_unit_pal, ObjectSprite* out) {
+    std::string file = std::string(image) + ".SHP";
+    std::vector<uint8_t> data = Read_Named(roots_, file.c_str());
+    if (data.empty()) {
+        file = std::string(image) + "." + Theater_Ext(theater_);
+        data = Read_Named(roots_, file.c_str());
     }
     if (data.empty()) {
         return false;
@@ -427,28 +551,62 @@ bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_fram
         return false;
     }
 
-    // 调色板：剧场 .pal（整局只读一次，见 Theater_Palette_Data）
     uint8_t pal768[768];
-    std::memcpy(pal768, Theater_Palette_Data(), 768);
-    // .PAL 文件是 6 位分量，要展开成 8 位（expanded=false）
-    remap_.Make_Palette768(pal768, false, 16, 31, house_color, pal768);
+    if (use_unit_pal) {
+        // 建筑/单位：unit*.pal。Remapable=no 时不解阵营色（CATHOSP 等）。
+        std::memcpy(pal768, Theater_Palette_Data(), 768);
+        if (house_remap) {
+            remap_.Make_Palette768(pal768, false, 16, 31, house_color, pal768);
+        } else {
+            Expand_Pal768(pal768, pal768);
+        }
+    } else {
+        // 地形装饰：iso*.pal
+        std::memcpy(pal768, Iso_Palette_Data(), 768);
+        Expand_Pal768(pal768, pal768);
+    }
 
-    // SHP 是"画好的位图"，没有投影 / 明暗这些可搬的活，所以这里的
-    // 索引->RGBA 就是全部工作量，留在 CPU 上做（一次几十 KB，不值得上 GPU）。
-    std::vector<uint8_t> rgba;
-    Index_To_RGBA(px.data(), fi.w * fi.h, pal768, &rgba);
+    // 与 GameShell UI / CC_Draw_Shape 同一套画布语义：帧像素落到 SHP 整幅
+    // (Width×Height) 的 (fi.x, fi.y)，不能只上传紧裁矩形，否则锚点漂、
+    // 多格建筑拼缝错位（Arena 体育场那种"撕碎"）。
+    const int cw = shp.Width();
+    const int ch = shp.Height();
+    if (cw <= 0 || ch <= 0) {
+        return false;
+    }
+    std::vector<uint8_t> rgba(static_cast<size_t>(cw) * static_cast<size_t>(ch) * 4, 0);
+    for (int y = 0; y < fi.h; ++y) {
+        for (int x = 0; x < fi.w; ++x) {
+            const uint8_t idx = px[static_cast<size_t>(y) * fi.w + x];
+            if (idx == 0) {
+                continue;
+            }
+            const int dx = static_cast<int>(fi.x) + x;
+            const int dy = static_cast<int>(fi.y) + y;
+            if (dx < 0 || dy < 0 || dx >= cw || dy >= ch) {
+                continue;
+            }
+            const size_t p = (static_cast<size_t>(dy) * cw + dx) * 4;
+            const size_t c = static_cast<size_t>(idx) * 3;
+            rgba[p + 0] = pal768[c + 0];
+            rgba[p + 1] = pal768[c + 1];
+            rgba[p + 2] = pal768[c + 2];
+            rgba[p + 3] = 255;
+        }
+    }
     if (renderer_ == nullptr) {
         return false;
     }
-    const int id = renderer_->Upload_Sprite_RGBA(rgba.data(), fi.w, fi.h);
+    const int id = renderer_->Upload_Sprite_RGBA(rgba.data(), cw, ch);
     if (id < 0) {
         return false;
     }
     out->sprite_id = id;
-    out->w = fi.w;
-    out->h = fi.h;
-    out->off_x = -fi.w / 2;
-    out->off_y = -fi.h / 2;
+    out->w = cw;
+    out->h = ch;
+    // 锚点：画布中心（与原版 Draw_Shape 以 shape 宽高为参照一致）。
+    out->off_x = -cw / 2;
+    out->off_y = -ch / 2;
     // 建筑的 (x,y) 是**左上格**：把锚点挪到足迹中心。
     // +1 格 x 在屏幕上是 (+30,+15)，+1 格 y 是 (-30,+15)。
     if (foot_w > 1 || foot_h > 1) {
@@ -487,6 +645,10 @@ const ObjectSprite* SpriteCache::Get(const char* type, int facing,
     auto sp = std::make_unique<ObjectSprite>();
     bool ok = false;
     const UnitModel* um = models_.Resolve(type);
+    // Techno（category>=0）用 unit*.pal；地形装饰用 iso*.pal。
+    const bool use_unit_pal = (um != nullptr && um->category >= 0);
+    const bool house_remap =
+        use_unit_pal && (um == nullptr || um->remapable);
     if (um != nullptr && um->voxel && renderer_ != nullptr) {
         const float yaw = static_cast<float>(key.step) * 6.28318530718f /
                           static_cast<float>(kFacingSteps);
@@ -494,17 +656,30 @@ const ObjectSprite* SpriteCache::Get(const char* type, int facing,
     }
     if (!ok) {
         // 不是体素（步兵/建筑/装饰），或者体素没渲出来，退到 SHP
-        const char* image = (um != nullptr && !um->image.empty()) ? um->image.c_str()
-                                                                  : type;
+        std::string image =
+            (um != nullptr && !um->image.empty()) ? um->image : std::string(type);
+        // NewTheater=yes：先试剧场字母文件名（CUAIRP），再退回原名（CAAIRP）。
+        if (um != nullptr && um->new_theater) {
+            image = New_Theater_Name(image, theater_);
+        }
         // 步兵的 SHP 帧是朝向，要按 facing 选；建筑/装饰的帧是正常/损毁态，不能选。
         const bool face_frames = (um != nullptr && um->category == 2);
-        ok = Build_Shp(image, house_color, face_frames, key.step * (256 / kFacingSteps),
-                       (um != nullptr) ? um->width : 1,
-                       (um != nullptr) ? um->height : 1, sp.get());
+        const int foot_w = (um != nullptr) ? um->width : 1;
+        const int foot_h = (um != nullptr) ? um->height : 1;
+        ok = Build_Shp(image.c_str(), house_color, face_frames,
+                       key.step * (256 / kFacingSteps), foot_w, foot_h,
+                       house_remap, use_unit_pal, sp.get());
+        if (!ok && um != nullptr && um->new_theater && !um->image.empty() &&
+            image != um->image) {
+            ok = Build_Shp(um->image.c_str(), house_color, face_frames,
+                           key.step * (256 / kFacingSteps), foot_w, foot_h,
+                           house_remap, use_unit_pal, sp.get());
+        }
     }
     if (!ok) {
         // 同名 SHP 再试一次（有些单位的 Image= 和原名都不带 .SHP 后缀命中）
-        ok = Build_Shp(type, house_color, false, 0, 1, 1, sp.get());
+        ok = Build_Shp(type, house_color, false, 0, 1, 1, house_remap,
+                       use_unit_pal, sp.get());
     }
 
     ++built_;
@@ -513,7 +688,7 @@ const ObjectSprite* SpriteCache::Get(const char* type, int facing,
         last_failure_ = type;
         // 只报前若干个，免得几百个装饰物刷屏
         if (failed_ <= 8) {
-            std::printf("    精灵缺失: %s（退化成色块）\n", type);
+            std::printf("    精灵缺失: %s\n", type);
         }
     }
     sp->ok = ok;

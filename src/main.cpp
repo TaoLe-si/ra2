@@ -1215,16 +1215,16 @@ static int Map_Dump(const std::vector<std::string>& mix_paths, const char* map_p
                 map.Name().c_str(), map.Theater().c_str(),
                 map.Width(), map.Height(),
                 map.Local_X(), map.Local_Y(), map.Local_Width(), map.Local_Height());
-    // 判据：解压字节数 **不超过** ((W*2-1)*H)*11+4（省掉 0 高度 Clear 瓦片的
-    // 地图包会更小），并且补齐后单元数恰好 W*H。
+    // 判据：解压字节数 **不超过** ((W*2-1)*H)*11+4；补齐后单元数恰好 (2W-1)*H。
     const size_t cap = static_cast<size_t>((map.Width() * 2 - 1) * map.Height() * 11 + 4);
     std::printf("  IsoMapPack5 %zu -> %zu 字节（上限 %zu = ((%d*2-1)*%d)*11+4）%s\n",
                 map.Packed_Bytes(), map.Unpacked_Bytes(), cap,
                 map.Width(), map.Height(),
                 map.Unpacked_Bytes() <= cap ? "✓" : " ✗");
     std::printf("  单元 %zu 个 = %dx%d %s；其中记录给出 %zu 个%s；最大瓦片下标 %d\n",
-                map.Cells().size(), map.Width(), map.Height(),
-                map.Cells().size() == static_cast<size_t>(map.Width() * map.Height())
+                map.Cells().size(), map.Iso_Width(), map.Height(),
+                map.Cells().size() ==
+                        static_cast<size_t>(map.Iso_Width()) * map.Height()
                     ? "✓"
                     : " ✗",
                 map.Stored_Cells(),

@@ -25,12 +25,39 @@ namespace {
 
 constexpr int kMaxArgs = 32;
 
+bool File_Exists(const std::string& p) {
+    FILE* f = std::fopen(p.c_str(), "rb");
+    if (!f) {
+        return false;
+    }
+    std::fclose(f);
+    return true;
+}
+
+std::string Dir_Of(const std::string& p) {
+    const size_t s = p.find_last_of("\\/");
+    if (s == std::string::npos) {
+        return std::string();
+    }
+    return p.substr(0, s + 1);
+}
+
+void Add_Mix_If_Missing(std::vector<std::string>* mixes, const std::string& path) {
+    if (mixes == nullptr || path.empty() || !File_Exists(path)) {
+        return;
+    }
+    for (const std::string& m : *mixes) {
+        if (_stricmp(m.c_str(), path.c_str()) == 0) {
+            return;
+        }
+    }
+    mixes->push_back(path);
+}
+
 int Run_Offscreen(ra2::GameShell& game, const char* out_path, int warm_frames) {
     std::vector<uint8_t> rgba;
     int w = 0, h = 0;
-    // 精灵是"用到才烘"的，每帧只补几张（见 SpriteCache::Reset_Budget）。
-    // 只渲一帧的话画面上绝大多数单位还是占位色块，出不了能看的截图。
-    // 所以先空跑几帧把精灵补齐，再取帧。
+    // 进图已经把精灵预热完了，这里再渲几帧只是让 GPU 命令队列走一遍。
     const auto t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < warm_frames; ++i) {
         game.Update(1.0f / 60.0f);
@@ -202,6 +229,27 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     if (mixes.empty()) {
         mixes.push_back("D:\\westwood\\RA2YR\\ra2.mix");
     }
+    {
+        const std::string dir = Dir_Of(mixes.front());
+        if (!dir.empty()) {
+            Add_Mix_If_Missing(&mixes, dir + "ra2md.mix");
+            Add_Mix_If_Missing(&mixes, dir + "expandmd01.mix");
+            Add_Mix_If_Missing(&mixes, dir + "language.mix");
+            Add_Mix_If_Missing(&mixes, dir + "langmd.mix");
+        }
+        // 没给 --map 时默认 Arena（本地安装里有），才能直接开窗口进战场。
+        if (map_path.empty() && !dir.empty()) {
+            const std::string cand = dir + "Arena.mmx";
+            DWORD attr = GetFileAttributesA(cand.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES &&
+                (attr & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                // 有 Arena 时留给主菜单 SinglePlayer；离屏/自检仍要显式 --map。
+                if (offscreen) {
+                    map_path = cand;
+                }
+            }
+        }
+    }
 
     ra2::GameShell game;
 
@@ -267,7 +315,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             return 1;
         }
     } else {
-        std::printf("[i] 没给 --map，先进空战场（主菜单还没做）\n");
+        std::string skirmish;
+        const std::string dir = Dir_Of(mixes.front());
+        if (!dir.empty()) {
+            const std::string cand = dir + "Arena.mmx";
+            DWORD attr = GetFileAttributesA(cand.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES &&
+                (attr & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                skirmish = cand;
+            }
+        }
+        std::string err;
+        if (!game.Enter_Title_Menu(mixes, skirmish.c_str(), &err)) {
+            std::printf("[x] 主菜单失败: %s\n", err.c_str());
+            return 1;
+        }
     }
 
     ShowWindow(hwnd, SW_SHOW);
@@ -276,6 +338,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     MSG msg = {};
     DWORD last = GetTickCount();
     while (msg.message != WM_QUIT) {
+        if (game.Exit_Requested()) {
+            PostQuitMessage(0);
+        }
         if (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);

@@ -146,9 +146,13 @@ public:
     /// Render_Cell_RGBA 会把越界部分裁掉，铺出来的树就只剩树桩。
     /// 这里四边各留 pad 像素，extra 完整保留；ox/oy 回传 cell 左上角在图里的坐标，
     /// 调用方按 (落点 - ox, 落点 - oy) 贴即可。
+    ///
+    /// out_z 非空时写入与 RGBA 平行的 TMP Z（无 Z 数据的不透明像素写 0）。
+    /// 铺地图时要用 ZBuffer：zBufVal = zBase - z[i]，见 MapRenderer / CNCMaps TmpRenderer。
     std::vector<uint32_t> Render_Cell_Padded_RGBA(int i, const Palette& pal, int pad,
                                                   int* ox = nullptr, int* oy = nullptr,
-                                                  int* w = nullptr, int* h = nullptr) const;
+                                                  int* w = nullptr, int* h = nullptr,
+                                                  std::vector<uint8_t>* out_z = nullptr) const;
 
     /// 把整张模板拼成 CanvasWidth×CanvasHeight 的 RGBA。extra 同样会被画布裁掉
     /// 越界部分 —— 要看全图的调用方请用 Extra_Origin() 自己往外合成。
@@ -156,7 +160,7 @@ public:
                                             bool with_extra = false) const;
 
     /// 菱形逐行几何：返回 ch 个 (行首x, 该行宽度)。
-    /// 60x30 时得到 (29,2)(27,6)...(1,58)(1,58)...(29,2)，宽度合计 900 = 60*30/2。
+    /// CNCMaps/XCC 文件序：60x30 → (28,4)..(0,60),(2,56)..(30,0)，合计 900。
     static std::vector<std::pair<int, int>> Row_Geometry(int cell_width, int cell_height);
 
 private:
