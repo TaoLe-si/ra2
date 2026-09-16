@@ -187,6 +187,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     std::string map_path;
     bool offscreen = false;
     bool selftest = false;
+    bool menu_only = false;
     bool vxlgpu = false;
     bool grid_debug = false;
     std::string dump_map_path;
@@ -199,6 +200,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             mixes.push_back(args[++i]);
         } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < argc) {
             map_path = args[++i];
+        } else if (std::strcmp(args[i], "--menu") == 0) {
+            menu_only = true;
         } else if (std::strcmp(args[i], "--selftest") == 0) {
             selftest = true;
             offscreen = true;
@@ -256,6 +259,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     }
 
     ra2::GameShell game;
+
+    if (menu_only) {
+        // --menu：离屏渲一帧主菜单（无窗口复现菜单观感用）。
+        if (!game.Init(nullptr, 1024, 768)) {
+            return 1;
+        }
+        std::string err;
+        if (!game.Enter_Title_Menu(mixes, nullptr, &err)) {
+            std::printf("[x] 主菜单失败: %s\n", err.c_str());
+            return 1;
+        }
+        return Run_Offscreen(game, out_path.c_str(), warm_frames);
+    }
 
     if (offscreen) {
         if (!game.Init(nullptr, 1024, 768)) {

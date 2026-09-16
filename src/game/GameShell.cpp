@@ -1562,6 +1562,73 @@ bool GameShell::Load_UI() {
     ok += load("SIDEBTTN.SHP", &ui_sidebttn_) ? 1 : 0;
     ok += load("SHROUD.SHP", &ui_shroud_) ? 1 : 0;
     ok += load("FOG.SHP", &ui_fog_) ? 1 : 0;  // 与 SHROUD 二选一 @0x47F01F
+    // 主菜单按钮底板（GraphicMenu 的按钮图形）：ra2.mix 深层 0x1BB65278，
+    // 126x25×3 帧 = 青铜渐变+五角星浮雕（正常/高亮/禁用）。文件名在
+    // mix-names 里没有 —— 按 CRC 直取。125x25 的 0x2F43F08B 是孪生变体。
+    {
+        auto load_by_id = [&](uint32_t crc, UiPiece* dst) -> bool {
+            std::vector<uint8_t> data;
+            for (MixFileClass* m : roots_) {
+                data = m->Read_Deep_By_ID(crc);
+                if (!data.empty()) {
+                    break;
+                }
+            }
+            if (data.empty()) {
+                return false;
+            }
+            ShpFile shp;
+            if (!shp.Load(data.data(), data.size()) || shp.Frame_Count() <= 0) {
+                return false;
+            }
+            const int cw = shp.Width();
+            const int ch = shp.Height();
+            dst->w = cw;
+            dst->h = ch;
+            dst->frames = shp.Frame_Count();
+            dst->sprite.clear();
+            for (int f = 0; f < dst->frames; ++f) {
+                const std::vector<uint8_t>& px = shp.Frame_Pixels(f);
+                const ShpFrameInfo& fi = shp.Frame_Info(f);
+                if (cw <= 0 || ch <= 0 || fi.w <= 0 || fi.h <= 0 ||
+                    px.size() < static_cast<size_t>(fi.w) * fi.h) {
+                    dst->sprite.push_back(-1);
+                    continue;
+                }
+                std::vector<uint8_t> rgba(static_cast<size_t>(cw) * ch * 4, 0);
+                for (int y = 0; y < fi.h; ++y) {
+                    for (int x = 0; x < fi.w; ++x) {
+                        const uint8_t idx =
+                            px[static_cast<size_t>(y) * fi.w + x];
+                        if (idx == 0) {
+                            continue;
+                        }
+                        const int dx = static_cast<int>(fi.x) + x;
+                        const int dy = static_cast<int>(fi.y) + y;
+                        if (dx < 0 || dy < 0 || dx >= cw || dy >= ch) {
+                            continue;
+                        }
+                        const size_t p =
+                            (static_cast<size_t>(dy) * cw + dx) * 4;
+                        const size_t c = static_cast<size_t>(idx) * 3;
+                        rgba[p + 0] = pal768[c + 0];
+                        rgba[p + 1] = pal768[c + 1];
+                        rgba[p + 2] = pal768[c + 2];
+                        rgba[p + 3] = 255;
+                    }
+                }
+                dst->sprite.push_back(
+                    renderer_.Upload_Sprite_RGBA(rgba.data(), cw, ch));
+            }
+            return dst->ok();
+        };
+        if (!load_by_id(0x1BB65278u, &ui_menubtn_)) {
+            load_by_id(0x2F43F08Bu, &ui_menubtn_);
+        }
+        std::printf("  主菜单按钮底板 %s（%dx%d × %d 帧）\n",
+                    ui_menubtn_.ok() ? "就绪" : "缺失", ui_menubtn_.w,
+                    ui_menubtn_.h, ui_menubtn_.frames);
+    }
     // FULLFNT3：侧栏/消息拉丁字（gamemd @0x5D2F08 选 FULLFNT3 vs SIDEFNT3）。
     {
         uint8_t fpal[768];
@@ -1795,6 +1862,40 @@ bool GameShell::Load_UI() {
         }
     }
 
+    // LOGO.PCX：主菜单 Logo 叠层（0x7681E0 读 'Logo' 键；ra2.mix 深层，
+    // 640×480，中上部红色金属 "RED ALERT 2" 浮雕，索引 0 = 透明）。
+    {
+        std::vector<uint8_t> raw;
+        for (MixFileClass* m : roots_) {
+            raw = m->Read_Deep("LOGO.PCX");
+            if (!raw.empty()) {
+                break;
+            }
+        }
+        if (!raw.empty()) {
+            PcxFile pcx;
+            if (pcx.Load(raw.data(), raw.size()) && pcx.Width() > 0 &&
+                pcx.Height() > 0 && pcx.Is_Indexed()) {
+                std::vector<uint8_t> rgba = pcx.To_RGBA();
+                const std::vector<uint8_t>& idx = pcx.Indices();
+                for (size_t k = 0; k < idx.size() && k * 4 + 3 < rgba.size();
+                     ++k) {
+                    if (idx[k] == 0) {
+                        rgba[k * 4 + 3] = 0;   // 索引 0 = 透明（其余不透明）
+                    }
+                }
+                ui_logo_.w = pcx.Width();
+                ui_logo_.h = pcx.Height();
+                ui_logo_.frames = 1;
+                ui_logo_.sprite.assign(
+                    1, renderer_.Upload_Sprite_RGBA(rgba.data(), pcx.Width(),
+                                                    pcx.Height()));
+                ++ok;
+                std::printf("  LOGO.PCX %dx%d\n", ui_logo_.w, ui_logo_.h);
+            }
+        }
+    }
+
     std::printf("  界面贴图 %d 件就绪（侧栏 %d 宽，头部 %dx%d，雷达 %dx%d）\n", ok,
                 kSidebarW, ui_side1_.w, ui_side1_.h, ui_radar_.w, ui_radar_.h);
     return ok > 0;
@@ -1975,6 +2076,43 @@ bool GameShell::Enter_Title_Menu(const std::vector<std::string>& mix_paths,
     return true;
 }
 
+/// 当前悬停的主菜单按钮下标（-1 = 无）。布局数学与 Draw_Title_Menu 一致。
+int GameShell::Hovered_Title_Button() const {
+    constexpr int kDlgW2 = 533;
+    constexpr int kDlgH2 = 369;
+    const float scale =
+        (std::min)(static_cast<float>(win_w_ - 40) / kDlgW2,
+                   static_cast<float>(win_h_ - 40) / kDlgH2);
+    const int pw = static_cast<int>(kDlgW2 * scale);
+    const int ph = static_cast<int>(kDlgH2 * scale);
+    const int px = (win_w_ - pw) / 2;
+    const int py = (win_h_ - ph) / 2;
+    struct HB {
+        int dy;
+        bool button;
+    };
+    static const HB kMain[] = {{1, false},  {125, true}, {152, true}, {179, true},
+                               {206, true}, {233, true}, {330, true}};
+    static const HB kSingle[] = {{1, false}, {122, true}, {149, true},
+                                {176, true}, {346, true}};
+    const HB* btns = title_page_ == 1 ? kSingle : kMain;
+    const int nbtn = title_page_ == 1 ? 5 : 7;
+    for (int i = 0; i < nbtn; ++i) {
+        if (!btns[i].button) {
+            continue;
+        }
+        const int by = py + static_cast<int>(btns[i].dy * scale);
+        const int bh = static_cast<int>(23 * scale);
+        const int bx = px + static_cast<int>(425 * scale);
+        const int bw = static_cast<int>(108 * scale);
+        if (mouse_x_ >= bx && mouse_x_ < bx + bw && mouse_y_ >= by &&
+            mouse_y_ < by + bh) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void GameShell::Draw_Title_Menu() {
     // RT_DIALOG 226 / 256：533×369；Background=Title.PCX。
     if (ui_title_.ok()) {
@@ -1989,6 +2127,16 @@ void GameShell::Draw_Title_Menu() {
     } else {
         const float bg[4] = {0.02f, 0.02f, 0.05f, 1.0f};
         renderer_.Draw_Rect(0, 0, win_w_, win_h_, bg);
+    }
+    // LOGO.PCX 叠层：和背景同比例（640×480 源），叠在背景之上、按钮之下。
+    // 原图里 "RED ALERT 2" 浮雕在中上部，其余是透明（索引 0）。
+    if (ui_logo_.ok()) {
+        const int id = ui_logo_.Frame(0);
+        if (id >= 0) {
+            const float s = static_cast<float>(win_w_) /
+                             static_cast<float>((std::max)(1, ui_logo_.w));
+            renderer_.Draw_Sprite(id, 0, 0, s);
+        }
     }
     constexpr int kDlgW = 533;
     constexpr int kDlgH = 369;
@@ -2023,8 +2171,11 @@ void GameShell::Draw_Title_Menu() {
     };
     const MenuBtn* btns = title_page_ == 1 ? kSingle : kMain;
     const int nbtn = title_page_ == 1 ? 5 : 7;
+    // 原版按钮 = GraphicMenu 的青铜渐变底板（Load_UI 里按 CRC 挂的 ui_menubtn_），
+    // 文字画在板中央。底板没有时退回半透明色块（保底，不遮功能）。
     const float btn_bg[4] = {0.15f, 0.15f, 0.2f, 0.85f};
     const float btn_hi[4] = {0.4f, 0.4f, 0.5f, 1.0f};
+    const int hovered = Hovered_Title_Button();
     for (int i = 0; i < nbtn; ++i) {
         const MenuBtn& b = btns[i];
         const int bx = px + static_cast<int>(b.dx * scale);
@@ -2032,8 +2183,23 @@ void GameShell::Draw_Title_Menu() {
         const int bw = static_cast<int>(b.dw * scale);
         const int bh = static_cast<int>(b.dh * scale);
         if (b.button) {
-            renderer_.Draw_Rect(bx, by, bw, bh, btn_bg);
-            renderer_.Draw_Rect_Outline(bx, by, bw, bh, btn_hi, 1);
+            if (ui_menubtn_.ok()) {
+                // 底板 126×25，按钮逻辑区 108×23 —— 底板略宽，居中贴。
+                // 高亮帧 = 帧 1，悬停时换。帧序（正常/高亮/禁用）由素材
+                // 三帧的亮度序定，见 Load_UI 注释。
+                const int frame = (i == hovered) ? 1 : 0;
+                const int id = ui_menubtn_.Frame(frame);
+                if (id >= 0) {
+                    const float bsc =
+                        static_cast<float>(bw) / static_cast<float>(ui_menubtn_.w);
+                    const int draw_h = static_cast<int>(ui_menubtn_.h * bsc);
+                    renderer_.Draw_Sprite(id, bx + (bw - bw) / 2,
+                                          by + (bh - draw_h) / 2, bsc);
+                }
+            } else {
+                renderer_.Draw_Rect(bx, by, bw, bh, btn_bg);
+                renderer_.Draw_Rect_Outline(bx, by, bw, bh, btn_hi, 1);
+            }
         }
         if (!ui_fullfnt_.ok()) {
             continue;
@@ -2045,8 +2211,11 @@ void GameShell::Draw_Title_Menu() {
         if (line.empty()) {
             line = b.key;
         }
-        Draw_Fullfnt_Text(bx + 4, by + (std::max)(0, (bh - ui_fullfnt_.h) / 2),
-                          line);
+        // 文字画在按钮板中央；CSF 中文比 FULLFNT3 的字宽，往里收 6px 防溢出。
+        const int tw = static_cast<int>(line.size()) * ui_fullfnt_.w;
+        Draw_Fullfnt_Text(
+            bx + (std::max)(6, (bw - tw) / 2),
+            by + (std::max)(2, (bh - ui_fullfnt_.h) / 2), line);
     }
 }
 

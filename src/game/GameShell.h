@@ -224,6 +224,7 @@ private:
     bool Hit_Ask_Abort(int x, int y);
     /// 主菜单（RT_DIALOG 226 / 0xE2）：Title.PCX + 按钮列。
     void Draw_Title_Menu();
+    int Hovered_Title_Button() const;   ///< 悬停的菜单按钮下标（-1 无）
     /// 点中主菜单钮。返回 true = 已消费。
     bool Hit_Title_Menu(int x, int y);
     /// 从 MAPS*.MIX 抽出 Brief:ALL01 战役图到临时 .map（NewCampaign）。
@@ -353,6 +354,9 @@ private:
     UiPiece ui_shroud_;     ///< SHROUD.SHP（FogOfWar 地形遮罩帧）
     UiPiece ui_fog_;        ///< FOG.SHP（0x47F01F 位选：Scenario flags bit4 → FOG）
     UiPiece ui_title_;      ///< Title.PCX 主菜单背景（GraphicMenu Background）
+    UiPiece ui_logo_;       ///< LOGO.PCX 主菜单 Logo 叠层（'Logo' 键，索引0透明）
+    UiPiece ui_menubtn_;    ///< 主菜单按钮底板（ra2.mix 深层 0x1BB65278，
+                            ///< 126×25×3：青铜渐变+五角星，正常/高亮/禁用）
     bool exit_requested_ = false;  ///< GUI:ExitGame
     UiPiece ui_tab_[4];     ///< 四个页签（28×27，5 帧）
     UiPiece ui_btn_[12];    ///< 单位指令按钮（52×32，2 帧）
