@@ -9,13 +9,63 @@
 
 #include <windows.h>
 
+#include "game/AudioDevice.h"
 #include "gfx/MouseShapeTable.h"
 #include "gfx/PcxFile.h"
 #include "gfx/ShpFile.h"
+#include "io/FileSystem.h"
 #include "map/Cell.h"
 
 namespace ra2 {
 namespace {
+
+// 全局播放入口：World 通过 Set_Sound_Player 注入。
+// 这里要从 World 里拿不到 roots_，所以走一个反向注入：
+//   GameShell::Init 里用 s_sound_player_target 设进去，
+//   World::Dispatch_TAction 命中 19/99/108/113 时再回调。
+//   注意 s_sound_player_target 是指向 GameShell 实例的指针，World 完全不知道 GameShell。
+struct Sound_Play_Ctx {
+    const std::vector<MixFileClass*>* roots = nullptr;
+};
+static Sound_Play_Ctx s_audio_ctx;
+
+void On_Sound_Request(const char* voc_name) {
+    if (voc_name == nullptr || voc_name[0] == '\0') {
+        return;
+    }
+    if (s_audio_ctx.roots == nullptr || s_audio_ctx.roots->empty()) {
+        return;  // 没挂 MIX 也发声就是凭空响，留作 debug 桩
+    }
+    // 原版约定名：'_Voc_Xxx' / '_Amb_Xxx' / '_EVA_Xxx'。混音包名都带前缀 `_`，
+    // 文件名约定是去掉前缀后小写、扩展名 .AUD。所以 _Voc_Cheer → cheer.aud。
+    std::string base = voc_name;
+    if (!base.empty() && base[0] == '_') {
+        base.erase(0, 1);  // 去 `_`
+    }
+    // _Voc_Cheer → "Voc_Cheer" → 文件名大写开头小写续。Westwood 实际是全大写 + .AUD。
+    // 规则："vocname.aud" 全小写找不到就用全大写 + .AUD。
+    std::string lc_name = base;
+    for (char& c : lc_name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::vector<uint8_t> aud;
+    for (MixFileClass* m : *s_audio_ctx.roots) {
+        aud = m->Read_Deep_By_ID(MixFileClass::CRC_Of((lc_name + ".aud").c_str()));
+        if (!aud.empty()) break;
+        aud = m->Read_Deep_By_ID(MixFileClass::CRC_Of((base + ".AUD").c_str()));
+        if (!aud.empty()) break;
+    }
+    if (aud.empty()) {
+        std::printf("  [aud] %s 找不到 AUD（已尝试 %s.aud / %s.AUD）\n",
+                    voc_name, lc_name.c_str(), base.c_str());
+        return;
+    }
+    std::vector<uint8_t> wav = Aud_To_Wav(aud.data(), aud.size());
+    if (wav.empty()) {
+        std::printf("  [aud] %s AUD 解码失败（可能 ADPCM 或 magic 非 0）\n", voc_name);
+        return;
+    }
+    Play_Wav_Memory(wav, voc_name);
+    std::printf("  [aud] 播放 %s (%zu 字节)\n", voc_name, wav.size());
+}
 
 // 界面配色。取的是原版 RA2 那套"深灰金属 + 阵营色点缀"的观感，
 // 具体数值没有从 exe 里逆（原版界面是 PCX 贴图，不是纯色），
@@ -573,6 +623,12 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
     }
 
     screen_ = GameScreen::Battle;
+    // 把 MIX 根挂上 + 把音效回调注入 World。回调走 On_Sound_Request
+    // （定义在文件顶部 anonymous ns），原版 0x750920 的"按名字拿 AUD
+    // 转 PCM 再混音"这里压缩成"AUD → WAV → PlaySound"，
+    // 不保证 1:1 等价，但至少能让 TAction 99/108/113 真出声。
+    s_audio_ctx.roots = &roots_;
+    world_.Set_Sound_Player(&On_Sound_Request);
     return true;
 }
 
@@ -4062,6 +4118,43 @@ bool GameShell::Self_Test() {
         const int snd_after = world_.Sound_Play_Count();
         check(snd_after >= snd_before + 1, "TAction 113 触发一次 sound_play");
         std::printf("     TAction 113 cheer 扫描到 %d 个 Techno\n", cheer_before);
+    }
+
+    // Real audio path：拿一个确知存在的 AUD（NSWEEP.AUD 在 ra2.mix 里），
+    // 走 Read_Deep_By_ID → Aud_To_Wav → PlaySound 全链路。
+    {
+        // 多试几个名字：raw AUD / Format80 chunked / .wav 后缀 / 不同名
+        std::vector<uint8_t> raw;
+        const char* names[] = {"NSWEEP.AUD", "NSWEEP.WAV", "BESTBOX.AUD",
+                               "GSWEEP.AUD", "INTRO.AUD"};
+        const char* got_name = nullptr;
+        for (const char* n : names) {
+            for (MixFileClass* m : roots_) {
+                raw = m->Read_Deep_By_ID(MixFileClass::CRC_Of(n));
+                if (!raw.empty()) { got_name = n; break; }
+            }
+            if (!raw.empty()) break;
+        }
+        check(!raw.empty(), "AUD 链路：MIX 拿得到 AUD（任一名）");
+        if (!raw.empty()) {
+            std::printf("     %s raw size=%zu, first 16 bytes: ", got_name, raw.size());
+            for (size_t i = 0; i < 16 && i < raw.size(); ++i) {
+                std::printf("%02X ", raw[i]);
+            }
+            std::printf("\n");
+            // Aud_To_Wav 内部做 Format80 解 + raw AUD 头解析 + 裸 PCM 兜底。
+            std::vector<uint8_t> wav = Aud_To_Wav(raw.data(), raw.size());
+            check(!wav.empty(), "AUD 链路：Format80/裸 PCM 解出非空 WAV");
+            check(wav.size() >= 44 + 1000, "AUD 链路：WAV 至少有 1KB PCM");
+            check(std::memcmp(wav.data(), "RIFF", 4) == 0 &&
+                  std::memcmp(wav.data() + 8, "WAVE", 4) == 0 &&
+                  std::memcmp(wav.data() + 12, "fmt ", 4) == 0 &&
+                  std::memcmp(wav.data() + 36, "data", 4) == 0,
+                  "AUD 链路：WAV RIFF/WAVE/fmt/data 标识正确");
+            // 走一遍真播放（异步、不阻塞）。
+            Play_Wav_Memory(wav, got_name);
+            std::printf("     AUD 链路：%s → WAV %zu 字节\n", got_name, wav.size());
+        }
     }
 
     std::printf(ok ? "[OK] 行为自检全过\n" : "[x] 行为自检有不过的\n");

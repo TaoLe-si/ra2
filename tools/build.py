@@ -33,6 +33,7 @@ CORE_SOURCES = [
     "src/io/FileSystem.cpp",
     "src/io/MixCrypto.cpp",
     "src/io/Lzo1x.cpp",
+    "src/io/Format80.cpp",
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
     "src/gfx/TmpFile.cpp",
@@ -47,6 +48,7 @@ CORE_SOURCES = [
     "src/map/TheaterFile.cpp",
     "src/map/MapFile.cpp",
     "src/map/MapRenderer.cpp",
+    "src/map/LatTiles.cpp",
     "src/data/Ini.cpp",
     "src/data/UnitModel.cpp",
     "src/core/GameVersion.cpp",
@@ -59,6 +61,7 @@ VIEW_SOURCES = [
     "src/io/FileSystem.cpp",
     "src/io/MixCrypto.cpp",
     "src/io/Lzo1x.cpp",
+    "src/io/Format80.cpp",
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
     "src/gfx/TmpFile.cpp",
@@ -72,6 +75,7 @@ VIEW_SOURCES = [
     "src/map/TheaterFile.cpp",
     "src/map/MapFile.cpp",
     "src/map/MapRenderer.cpp",
+    "src/map/LatTiles.cpp",
     "src/data/Ini.cpp",
     "src/data/UnitModel.cpp",
     "src/core/GameVersion.cpp",
@@ -80,11 +84,16 @@ VIEW_SOURCES = [
 # ra2game：真正的游戏（打开就是原版那个界面）
 GAME_SOURCES = [
     "src/game/GameMain.cpp",
+    "src/game/AudioDevice.cpp",
     "src/game/GameShell.cpp",
     "src/game/World.cpp",
+    "src/ai/PathFinder.cpp",
+    "src/map/Map.cpp",
+    "src/threading/TaskSystem.cpp",
     "src/io/FileSystem.cpp",
     "src/io/MixCrypto.cpp",
     "src/io/Lzo1x.cpp",
+    "src/io/Format80.cpp",
     "src/gfx/Palette.cpp",
     "src/gfx/ShpFile.cpp",
     "src/gfx/TmpFile.cpp",
@@ -99,13 +108,15 @@ GAME_SOURCES = [
     "src/map/TheaterFile.cpp",
     "src/map/MapFile.cpp",
     "src/map/MapRenderer.cpp",
+    "src/map/LatTiles.cpp",
     "src/data/Ini.cpp",
     "src/data/UnitModel.cpp",
+    "src/data/CsfFile.cpp",
     "src/core/GameVersion.cpp",
 ]
 
 # 只有查看器需要这些库；ra2core 保持零系统依赖。
-VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib"]
+VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib", "winmm.lib"]
 
 CFLAGS = ["/nologo", "/std:c++17", "/EHsc", "/W3", "/O2", "/GL-", "/bigobj",
           "/D_CRT_SECURE_NO_WARNINGS", "/DUNICODE", "/D_UNICODE"]

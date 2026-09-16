@@ -2368,6 +2368,9 @@ bool World::Dispatch_TAction(int action, int house, int param1,
             ++sound_play_count_;
             if (voc_name != nullptr && voc_name[0] != '\0') {
                 std::printf("  Sound stub action=%d voc=%s\n", action, voc_name);
+                if (sound_player_ != nullptr) {
+                    sound_player_(voc_name);
+                }
             } else {
                 std::printf("  Sound stub action=%d param=%d\n", action, param1);
             }

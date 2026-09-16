@@ -204,6 +204,12 @@ public:
     bool Dispatch_TAction(int action, int house, int param1 = 0,
                           const char* voc_name = nullptr,
                           const char* link_id = nullptr);
+
+    /// 注册一个声音回放钩子。TAction 19/99/108/113 命中时会调它，
+    /// 把 voc_name 字符串原样喂回去（去前缀 `_` 也是调用方的事）。
+    /// 默认是 nullptr → 与原先"音频桩"等价：不发声，只打印。
+    using Sound_Player = void (*)(const char* voc_name);
+    void Set_Sound_Player(Sound_Player fn) noexcept { sound_player_ = fn; }
     /// 自检用：注入一张 TeamType（Arena 无 [TeamTypes]）。
     void Add_Team_Type(MapTeamType tt);
     const std::vector<MapTeamType>& Team_Types() const noexcept {
@@ -403,6 +409,8 @@ private:
     uint8_t local_vars_[100] = {};
     /// TAction 19/99/108 → 0x750920 音效认领计数（设备未接）。
     int sound_play_count_ = 0;
+    /// 真实音频回放钩子（注册后 TAction 19/99/108/113 会调它）。
+    Sound_Player sound_player_ = nullptr;
     /// Scenario 任务计时器：start=+0x11E8（-1 空闲），dur=+0x11F0（帧）。
     int mission_timer_start_ = -1;
     int mission_timer_dur_ = 0;
