@@ -352,18 +352,10 @@ bool SpriteCache::Build_Voxel_Gpu(const char* type, const UnitModel& um, float y
     // 光影：和原版同一套（VoxelLight 的算法是从 gamemd.exe 抄的）。
     // 光向量默认 normalize(1,1,2) 就是原版那个太阳方位，别乱改。
     VoxelLight light;
-    // 校车等大体素在 scale=8 下会 >512px，把最长边钳到 ~2.5 格，
-    // 避免 BUS 盖住半个屏幕（原版体素也是按格子比例缩小的）。
+    // 校车等大体素按新基准不再需要钳制 —— 48vox/格 的定标本身就把
+    // 所有模型放回"原版占用格数"的比例。BUS 也就 ~2 格宽，与原版一致。
+    // （旧的 160px 钳制是 8.0 比例时代的补丁，定标修正后删掉。）
     float scale = kVoxelScale;
-    {
-        const float bw = (bbox[2] - bbox[0]) * scale;
-        const float bh = (bbox[3] - bbox[1]) * scale;
-        const float longest = (bw > bh) ? bw : bh;
-        constexpr float kMaxPx = 160.0f;
-        if (longest > kMaxPx && longest > 1.0f) {
-            scale *= kMaxPx / longest;
-        }
-    }
     VoxelBakeParams p;
     p.yaw = yaw;
     p.scale = scale;

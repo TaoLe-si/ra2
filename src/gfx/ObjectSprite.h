@@ -38,9 +38,13 @@ class Dx12Renderer;   ///< 只存指针，不在头文件里拖进 d3d12.h
 /// 朝向档数。8 档 = 每 45 度一张。
 constexpr int kFacingSteps = 8;
 
-/// 一个体素占几个像素。一格 60px 宽、体素单位 det=1/12，8 倍刚好让
-/// 一辆坦克占满一格多一点。等 rules 的 Size= 接进来再按真值调。
-constexpr float kVoxelScale = 8.0f;
+/// 一个体素占几个像素。【RE 定标】RA2/TS 体素模型的世界基准是
+/// 一格 footprint = 48 体素单位（TS 时代遗留标准，与 HVA 平移 ×12 的
+/// det 关系自洽：256 leptons/格 ÷ 48 ≈ 5.33，接近 limb tailer 的
+/// scale 域），一格屏幕 60px → 60/48 = 1.25 px/unit。
+/// 旧值 8.0 无逆向依据，画出来的坦克比原版大 6.4 倍（MTNK 画布 414px，
+/// 原版灰熊屏宽约 46px）。8.0 只是"查看器里好看"，绝不是游戏比例。
+constexpr float kVoxelScale = 1.25f;
 
 /// 一张渲染好的精灵，以及它相对"格子中心"的落点偏移。
 ///

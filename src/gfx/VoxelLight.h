@@ -98,10 +98,19 @@ inline float Shade_Factor(const VoxelLight& light, int level) {
 /// 方位直接复用光照那套光向量（同一个太阳），所以这里只额外给出
 /// 地面高度和不透明度。
 ///
-/// 【RE 状态】alpha 的真值没从 gamemd.exe 里静态分析到位。临时采用 0.45，
-/// 判据是"阴影区域比地面暗、但下面地形纹理仍透得出来"。这个数**不算严格
-/// 逆向** —— 切勿当成原版值引用，等专项 RE 把 shadow 合成函数（按 0x754C00
-/// 附近光向量定位回调用点，扫描 fmul/fmulp/fmulps 输入常数）找清楚再改。
+/// 【RE 状态】alpha 真值**没从 gamemd.exe 静态分析出来**。本轮实测：
+///   - 在 .data (RVA 0x412000..0x77a000) 和 .rdata (0x3e1000..0x412000) 里
+///     **没有 float 形式的 0.55 / 0.45 / 0.35 / 0.40 / 0.60**（grep 命中数 0）。
+///     —— 说明 alpha 不是 0.45（否则 1-alpha = 0.55 应该以常量形式进
+///     常量池）；如果真值是上述几个之一，编译进 binary 的常量必须能 grep
+///     到。grep 不到意味着 alpha 是**运行期算出来的**（如 `1.0 - 常量`），
+///     或是 struct 字段、global 变量、调用方传参。
+///   - 实际工程里 0.45 是历史 placeholder；本次 commit (9e99c8f) 修的是
+///     bake 阶段"shadow 全被 depth test 砍掉"的真 bug —— 那是 GPU 写
+///     depth=0 撞上 PSO "清 0 + GREATER" 的硬冲突，与 alpha 真值无关。
+///   - alpha 真值需要继续挖 shadow 合成函数（不是 light init @0x754C00，
+///     那是写全局光向量的；合成端在 VoxelAnimClass 的 draw 函数某处），
+///     才能定。等专项 RE 找出来再改这一个数字。
 struct VoxelShadow {
     bool on = false;
     float ground_z = 0.0f;   ///< 地面高度（体素坐标），平地就是 0

@@ -29,10 +29,10 @@ tmpdump.py -- 解 RA2/TS 的 TMP 等距地形瓦片，渲成 PNG 用肉眼验收
   0x85BE8273  extra(59x30=1770) 3642+1770 = 5412 = size ✓
   0x89D457AB  extra(59x29=1711) 3583+1711 = 5294 = size ✓
 
-等距菱形的 900 字节怎么铺开：
-  60x30 的菱形，顶点在 (30,0) (60,15) (30,30) (0,15)，斜率 2。
-  逐行像素宽度 = 2 + 4*min(y, 29-y)，行首 x = 29 - 2*min(y, 29-y)。
-  合计 sum(2,6,...,58,58,...,2) = 900 ✓。数据就是按这个顺序紧排的。
+等距菱形的 900 字节怎么铺开（CNCMaps TmpRenderer / XCC 文件序）：
+  上半 15 行：宽 4,8,...,60，行首 x 从 28 递减到 0；
+  下半 15 行：宽 56,52,...,0，行首 x 从 2 递增到 30。
+  合计 900。对称式 2,6..58 会把带标线的路砖撕成四瓣。
 
 用法：
   python tools/tmpdump.py <顶层mix> <0x归档ID> <序号...>      渲染单个瓦片
@@ -54,19 +54,25 @@ TILE_HEADER = 52
 
 
 def row_geometry(cw: int, ch: int):
-    """返回 [(x, width), ...] 共 ch 行，描述菱形每一行的横向位置与宽度。
+    """返回 [(x, width), ...] 共 ch 行 —— CNCMaps/XCC TMP 文件字节序。
 
-    60x30 的菱形顶点在 (30,0)(60,15)(30,30)(0,15)，边缘斜率 = cw/ch/2 = 2，
-    所以往下走一行左右各外扩 cw/ch 个像素：
-        宽度 w(y) = 2 + 2*(cw/ch)*min(y, ch-1-y)
-        行首 x(y) = (cw/2 - 1) - (cw/ch)*min(y, ch-1-y)
-    RA2: w = 2,6,...,58,58,...,6,2，合计 900 = 60*30/2 ✓
+    RA2 60x30：上半 (28,4)..(0,60)，下半 (2,56)..(30,0)，合计 900。
     """
+    if ch <= 0 or (ch & 1) != 0:
+        return []
+    half = ch // 2
     step = cw // ch
     rows = []
-    for y in range(ch):
-        d = min(y, ch - 1 - y)
-        rows.append(((cw // 2 - 1) - step * d, 2 + 2 * step * d))
+    x = cw // 2
+    cx = 0
+    for _ in range(half):
+        cx += 2 * step
+        x -= step
+        rows.append((x, cx))
+    for _ in range(half):
+        cx -= 2 * step
+        x += step
+        rows.append((x, cx))
     return rows
 
 
