@@ -4221,6 +4221,21 @@ bool GameShell::Self_Test() {
                     mp.c_str(), world_.Player_Credits());
     }
 
+    // [Base] 段解析：电脑 AI 蓝图节点。Arena 这种剧情图无 [Base]，
+    // 这里只验证"解析器就位"——空集合法，找到非空条也合法。
+    {
+        const auto& nodes = world_.Base_Nodes();
+        // 不强制要求非空：剧情图/教程图没 [Base] 是正常现象。
+        std::printf("     [Base] 段：%zu 条\n", nodes.size());
+        if (!nodes.empty()) {
+            int with_b = 0;
+            for (const auto& n : nodes) {
+                if (!n.building.empty()) ++with_b;
+            }
+            check(with_b > 0, "[Base] 段：非空时至少一条 Building 名非空");
+        }
+    }
+
     std::printf(ok ? "[OK] 行为自检全过\n" : "[x] 行为自检有不过的\n");
     return ok;
 }

@@ -119,6 +119,19 @@ struct MapTrigger {
     uint32_t events_done = 0; ///< Trigger+0x40 已满足事件位
 };
 
+/// BaseNode（[Base] 段）：电脑 AI 的建造蓝图。
+/// 一行："x,y,Building,Refinery,Owner,Weapon,WeaponCount"。
+/// 原版 BaseNodeClass @0x006DF100 + BaseClass @0x0069E8A0；
+/// 这里只把数据读进来，AI 真正的"按 BaseNode 出建筑"留给 HouseClass::AI 接。
+struct MapBaseNode {
+    int cx = 0, cy = 0;
+    std::string building;
+    std::string refinery;
+    std::string owner_house;
+    std::string weapon;
+    int weapon_count = 0;
+};
+
 /// TaskForce 一条：`N=count,Type`（gamemd TaskForce+0xA4/+0xA8 stride 8）。
 struct MapTaskForceEntry {
     int count = 0;
@@ -203,6 +216,8 @@ public:
     const std::vector<MapTeamType>& Team_Types() const noexcept {
         return team_types_;
     }
+    /// [Base] 电脑 AI 蓝图节点（电脑据此盖建筑 + 摆防御）。
+    const std::vector<MapBaseNode>& Base_Nodes() const noexcept { return base_nodes_; }
 
     /// 原始文本段（[Terrain] / [Units] / [Infantry] / [Structures] 等）。
     /// 目前只原样留着，等对象系统接进来再解析。
@@ -223,6 +238,7 @@ private:
     void Parse_Objects();
     void Parse_Triggers();
     void Parse_Team_Types();
+    void Parse_Base_Nodes();
 
     std::string name_;
     std::string theater_;
@@ -235,6 +251,7 @@ private:
     std::vector<std::string> houses_;
     std::vector<MapTrigger> triggers_;
     std::vector<MapTeamType> team_types_;
+    std::vector<MapBaseNode> base_nodes_;
     int max_tile_ = -1;
     std::vector<uint8_t> overlay_;
     std::vector<uint8_t> overlay_data_;

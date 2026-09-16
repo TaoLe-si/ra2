@@ -295,6 +295,7 @@ bool MapFile::Load_Data(const uint8_t* data, size_t size, std::string* err) {
     Parse_Objects();
     Parse_Triggers();
     Parse_Team_Types();
+    Parse_Base_Nodes();
 
     return !cells_.empty();
 }
@@ -914,6 +915,59 @@ void MapFile::Set_Overlay_Data_At(int cx, int cy, uint8_t v) {
     if (i != static_cast<size_t>(-1)) {
         overlay_data_[i] = v;
     }
+}
+
+void MapFile::Parse_Base_Nodes() {
+    // [Base] 段一行：`id=x,y,Building,Refinery,Owner,Weapon,WeaponCount`
+    // 原版 BaseNodeClass @0x006DF100 / BaseClass @0x0069E8A0：
+    //   先 [Base] → BaseNode 链表，再 BaseNode::Read_INI 每行 tokenize 7 段。
+    // 这里我们只解数据；真让 HouseClass::AI 拿这个去 Queue_Build 是后续工作。
+    base_nodes_.clear();
+    const std::string body = Raw_Section("Base");
+    if (body.empty()) {
+        return;
+    }
+    size_t pos = 0;
+    while (pos < body.size()) {
+        size_t nl = body.find('\n', pos);
+        if (nl == std::string::npos) nl = body.size();
+        std::string line = body.substr(pos, nl - pos);
+        // 去注释 / 前后空白
+        const size_t sc = line.find(';');
+        if (sc != std::string::npos) line = line.substr(0, sc);
+        // Trim
+        size_t a = 0;
+        while (a < line.size() && (line[a] == ' ' || line[a] == '\t' || line[a] == '\r')) ++a;
+        size_t b = line.size();
+        while (b > a && (line[b-1] == ' ' || line[b-1] == '\t' || line[b-1] == '\r')) --b;
+        line = line.substr(a, b - a);
+        if (!line.empty()) {
+            const size_t eq = line.find('=');
+            if (eq != std::string::npos) {
+                std::string val = line.substr(eq + 1);
+                // 切 7 段
+                std::vector<std::string> tok;
+                std::string cur;
+                for (char c : val) {
+                    if (c == ',') { tok.push_back(cur); cur.clear(); }
+                    else { cur += c; }
+                }
+                tok.push_back(cur);
+                while (tok.size() < 7) tok.push_back(std::string());
+                MapBaseNode n;
+                n.cx = std::atoi(tok[0].c_str());
+                n.cy = std::atoi(tok[1].c_str());
+                n.building = tok[2];
+                n.refinery = tok[3];
+                n.owner_house = tok[4];
+                n.weapon = tok[5];
+                n.weapon_count = std::atoi(tok[6].c_str());
+                base_nodes_.push_back(n);
+            }
+        }
+        pos = nl + 1;
+    }
+    std::printf("  [Map] [Base] %zu 条\n", base_nodes_.size());
 }
 
 }  // namespace ra2

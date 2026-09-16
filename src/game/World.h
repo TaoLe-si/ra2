@@ -215,6 +215,10 @@ public:
     const std::vector<MapTeamType>& Team_Types() const noexcept {
         return team_types_;
     }
+    /// 透传 MapFile::Base_Nodes，没绑 map 就空。
+    const std::vector<MapBaseNode>& Base_Nodes() const noexcept {
+        return map_file_ ? map_file_->Base_Nodes() : static_cast<const std::vector<MapBaseNode>&>(empty_nodes_);
+    }
     /// 本局已认领的 Voc/环境音次数（TAction 19/99/108 → 0x750920 桩）。
     int Sound_Play_Count() const noexcept { return sound_play_count_; }
 
@@ -405,6 +409,7 @@ private:
     MapClass* logic_map_ = nullptr;
     UnitModelDB* models_ = nullptr;
     MapFile* map_file_ = nullptr;
+    std::vector<MapBaseNode> empty_nodes_;  ///< Base_Nodes() 没 map 时的空 fallback
     std::vector<MapTrigger> triggers_;
     std::vector<MapTeamType> team_types_;
     int logic_frame_ = 0;
