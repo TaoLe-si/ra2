@@ -244,6 +244,47 @@ bool MixFileClass::Parse_Plain(const uint8_t* head) {
     return !entries_.empty();
 }
 
+/// TS 老格式明文 MIX（无 flags 双字）。
+///
+/// 布局（THEME.MIX 实测定标，逐字节验算）：
+///     +0  u16 count
+///     +2  u32 body_size
+///     +6  count × 12 字节索引 { id, offset, size }
+/// THEME.MIX：count=16，body=76,862,464，6+16*12+body = 76,862,662 = 文件大小 ✓
+bool MixFileClass::Parse_Plain_Old(const uint8_t* head) {
+    const uint32_t count = RdU16(head);
+    data_size_ = RdU32(head + 2);
+    if (count == 0 || count > 20000u) {
+        return false;
+    }
+    const uint64_t idx_len = static_cast<uint64_t>(count) * 12;
+    data_start_ = 6 + idx_len;
+    if (file_size_ > 0 && data_start_ + data_size_ > file_size_ + 64) {
+        return false;
+    }
+    // 老格式条目的 offset 必须都落在数据区里（复用明文路径的自洽理由：
+    // 拿普通文件的前两字节当 count 很容易碰出小数字）。
+    std::vector<uint8_t> raw(static_cast<size_t>(idx_len));
+    if (!Read_At(6, raw.data(), static_cast<size_t>(idx_len))) {
+        return false;
+    }
+    entries_.clear();
+    entries_.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint8_t* e = raw.data() + i * 12;
+        MixEntry m;
+        m.id = RdU32(e);
+        m.offset = RdU32(e + 4);
+        m.size = RdU32(e + 8);
+        if (m.offset + 64 > data_size_ + 64 || m.offset + m.size > data_size_ + 64) {
+            entries_.clear();
+            return false;
+        }
+        entries_.push_back(m);
+    }
+    return !entries_.empty();
+}
+
 bool MixFileClass::Parse_Header() {
     // 先读 flags + 8 字节密文索引头（够解出文件数）。
     uint8_t head[kMixBody + 8];
@@ -256,7 +297,15 @@ bool MixFileClass::Parse_Header() {
     if (!(flags_ & kEncrypted)) {
         // 明文 MIX：头部只有 10 字节，索引是小端明文。
         // 注意 flags 的高位也可能是 0x00010000（带 SHA1），仍属明文路径。
-        return Parse_Plain(head);
+        if (Parse_Plain(head)) {
+            return true;
+        }
+        // 【TS 老格式】THEME.MIX 实测：文件头没有 flags 双字，直接就是
+        // [u16 count][u32 body_size][count×12B 索引]。16 首曲目 76,862,464
+        // 数据 + 6+16*12=198 头 = 76,862,662 = 文件大小，逐字节验算成立。
+        // 旗标按 0xd4000010 解出来全是垃圾（既非明文头也非加密头），
+        // 明文解析失败后必须再试一次"老格式"假设，否则 THEME.MIX 打不开。
+        return Parse_Plain_Old(head);
     }
 
     std::vector<uint8_t> key = Derive_Mix_Key(head);

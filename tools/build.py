@@ -117,7 +117,7 @@ GAME_SOURCES = [
 ]
 
 # 只有查看器需要这些库；ra2core 保持零系统依赖。
-VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib", "winmm.lib"]
+VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib", "winmm.lib", "msacm32.lib"]
 
 CFLAGS = ["/nologo", "/std:c++17", "/EHsc", "/W3", "/O2", "/GL-", "/bigobj",
           "/D_CRT_SECURE_NO_WARNINGS", "/DUNICODE", "/D_UNICODE"]

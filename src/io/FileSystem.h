@@ -247,6 +247,10 @@ private:
     /// 明文 MIX 索引解析（head 至少 10 字节）。见 FileSystem.cpp 里的布局说明。
     bool Parse_Plain(const uint8_t* head);
 
+    /// TS 老格式明文 MIX：无 flags 双字，[u16 count][u32 body_size][12B 索引]。
+    /// THEME.MIX 是这一种（16 曲 WAV，头 198 字节，逐字节验算过）。
+    bool Parse_Plain_Old(const uint8_t* head);
+
     std::string path_;
     std::vector<MixEntry> entries_;
     uint64_t data_start_ = 0;

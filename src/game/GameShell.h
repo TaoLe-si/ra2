@@ -128,6 +128,10 @@ public:
     bool Load_Map(const std::vector<std::string>& mix_paths, const char* map_path,
                   std::string* err);
 
+    /// 进战场后的背景音乐：THEME(MD).INI 选曲 → THEME(MD).MIX 读
+    /// IMA ADPCM WAV → 解码循环播放（ThemeClass 的压缩版）。
+    void Start_Battle_Music();
+
     /// 每帧调用。dt 是真实经过的秒数，内部按 kLogicDt 切成逻辑帧。
     void Update(float dt);
     /// 画一帧。
@@ -310,6 +314,8 @@ private:
     /// MouseCursorType（gamemd 表 0x82D028 / YRpp 同序）：Default=0 Repair=0x21 Sell=0x1E。
     int mouse_cursor_ = 0;
     bool hide_os_cursor_ = false;
+    /// Init 时 hwnd 为空 → 离屏模式（选曲要确定性，不 rand）。
+    bool offscreen_ = false;
     bool follow_ = false;    ///< F：镜头跟随选中的单位
     bool power_warn_ = false;  ///< 电力欠费（表盘画第 1 帧）
     bool grid_debug_ = false;  ///< --grid：画格子中心网 + 对象落点十字

@@ -236,6 +236,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             Add_Mix_If_Missing(&mixes, dir + "expandmd01.mix");
             Add_Mix_If_Missing(&mixes, dir + "language.mix");
             Add_Mix_If_Missing(&mixes, dir + "langmd.mix");
+            // 背景音乐（ThemeClass）：THEME.MIX 是 RA2 曲库（16 首 IMA ADPCM WAV），
+            // thememd.mix 是 YR 曲库（10 首）。两者都是 TS 老格式明文 MIX。
+            Add_Mix_If_Missing(&mixes, dir + "THEME.MIX");
+            Add_Mix_If_Missing(&mixes, dir + "thememd.mix");
         }
         // 没给 --map 时默认 Arena（本地安装里有），才能直接开窗口进战场。
         if (map_path.empty() && !dir.empty()) {

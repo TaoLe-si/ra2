@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 
 #include <windows.h>
 
@@ -27,8 +28,76 @@ namespace {
 //   注意 s_sound_player_target 是指向 GameShell 实例的指针，World 完全不知道 GameShell。
 struct Sound_Play_Ctx {
     const std::vector<MixFileClass*>* roots = nullptr;
+    /// soundmd.ini 的 [条目名] → Sounds= 文件名列表（懒加载，只解析一次）。
+    /// 原版语义：触发器/引擎回调给的是 VocClass 条目名（带 `_` 前缀），
+    /// 真正的 .aud 文件名在条目的 Sounds= 里（通常多个变体随机挑一个）。
+    std::map<std::string, std::vector<std::string>> entries;
+    bool ini_tried = false;
 };
 static Sound_Play_Ctx s_audio_ctx;
+
+/// 懒加载 soundmd.ini（expandmd01.mix 深层）。失败保持空表 —— 查找链退回
+/// "条目名直接当文件名"的老路。
+static void Ensure_Sound_Ini(Sound_Play_Ctx& ctx) {
+    if (ctx.ini_tried || ctx.roots == nullptr) {
+        return;
+    }
+    ctx.ini_tried = true;
+    for (MixFileClass* m : *ctx.roots) {
+        std::vector<uint8_t> d = m->Read_Deep("SOUNDMD.INI");
+        if (d.empty()) {
+            d = m->Read_Deep("SOUND.INI");
+        }
+        if (d.empty()) {
+            continue;
+        }
+        IniFile ini;
+        if (!ini.Load(d.data(), d.size())) {
+            continue;
+        }
+        // INI 段名集合：IniFile 没有"列段名"接口，用 [SoundList] 风格不可靠 ——
+        // soundmd.ini 每段自带 Sounds=，靠条目名查段即可。这里只预建
+        // 名字索引：把整份 INI 文本重扫一遍抽 [section] + Sounds=。
+        const char* text = reinterpret_cast<const char*>(d.data());
+        const char* p = text;
+        const char* end = text + d.size();
+        std::string cur;
+        while (p < end) {
+            const char* nl = static_cast<const char*>(std::memchr(p, '\n', end - p));
+            size_t len = nl ? static_cast<size_t>(nl - p) : static_cast<size_t>(end - p);
+            std::string line(p, len);
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+                line.pop_back();
+            }
+            if (!line.empty() && line[0] == '[' && line.back() == ']') {
+                cur = line.substr(1, line.size() - 2);
+            } else if (!cur.empty() && _strnicmp(line.c_str(), "Sounds=", 7) == 0) {
+                std::vector<std::string> toks;
+                std::string rest = line.substr(7);
+                size_t s = 0;
+                while (s < rest.size()) {
+                    size_t e = rest.find(' ', s);
+                    std::string tok = rest.substr(s, (e == std::string::npos)
+                                                        ? std::string::npos : e - s);
+                    if (!tok.empty()) {
+                        toks.push_back(tok);
+                    }
+                    if (e == std::string::npos) {
+                        break;
+                    }
+                    s = e + 1;
+                }
+                if (!toks.empty()) {
+                    ctx.entries[cur] = toks;
+                }
+            }
+            p = nl ? nl + 1 : end;
+        }
+        std::printf("  [aud] soundmd.ini 就绪（%zu 个声音条目）\n",
+                    ctx.entries.size());
+        return;
+    }
+}
 
 void On_Sound_Request(const char* voc_name) {
     if (voc_name == nullptr || voc_name[0] == '\0') {
@@ -37,26 +106,48 @@ void On_Sound_Request(const char* voc_name) {
     if (s_audio_ctx.roots == nullptr || s_audio_ctx.roots->empty()) {
         return;  // 没挂 MIX 也发声就是凭空响，留作 debug 桩
     }
+    Ensure_Sound_Ini(s_audio_ctx);
     // 原版约定名：'_Voc_Xxx' / '_Amb_Xxx' / '_EVA_Xxx'。混音包名都带前缀 `_`，
-    // 文件名约定是去掉前缀后小写、扩展名 .AUD。所以 _Voc_Cheer → cheer.aud。
+    // soundmd.ini 段名不带 —— 去掉前缀查表，命中 Sounds= 列表（多变体随机挑）。
     std::string base = voc_name;
     if (!base.empty() && base[0] == '_') {
         base.erase(0, 1);  // 去 `_`
     }
-    // _Voc_Cheer → "Voc_Cheer" → 文件名大写开头小写续。Westwood 实际是全大写 + .AUD。
-    // 规则："vocname.aud" 全小写找不到就用全大写 + .AUD。
-    std::string lc_name = base;
-    for (char& c : lc_name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::vector<std::string> tries;   // 按优先级排的候选文件名（不带扩展名）
+    // soundmd.ini 段名带 `_` 前缀（[_Amb_BirdsPark]），先带前缀查，再裸名查。
+    auto it = s_audio_ctx.entries.find(voc_name);
+    if (it == s_audio_ctx.entries.end()) {
+        it = s_audio_ctx.entries.find(base);
+    }
+    if (it != s_audio_ctx.entries.end()) {
+        for (const std::string& tok : it->second) {
+            tries.push_back(tok);
+        }
+    } else {
+        // 表里没有：老路 —— 条目名直接当文件名试。
+        tries.push_back(base);
+    }
     std::vector<uint8_t> aud;
-    for (MixFileClass* m : *s_audio_ctx.roots) {
-        aud = m->Read_Deep_By_ID(MixFileClass::CRC_Of((lc_name + ".aud").c_str()));
-        if (!aud.empty()) break;
-        aud = m->Read_Deep_By_ID(MixFileClass::CRC_Of((base + ".AUD").c_str()));
-        if (!aud.empty()) break;
+    std::string used;
+    for (const std::string& stem : tries) {
+        std::string lc = stem;
+        for (char& c : lc) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (MixFileClass* m : *s_audio_ctx.roots) {
+            aud = m->Read_Deep_By_ID(MixFileClass::CRC_Of((lc + ".aud").c_str()));
+            if (!aud.empty()) break;
+            aud = m->Read_Deep_By_ID(MixFileClass::CRC_Of((stem + ".AUD").c_str()));
+            if (!aud.empty()) break;
+        }
+        if (!aud.empty()) {
+            used = stem;
+            break;
+        }
     }
     if (aud.empty()) {
-        std::printf("  [aud] %s 找不到 AUD（已尝试 %s.aud / %s.AUD）\n",
-                    voc_name, lc_name.c_str(), base.c_str());
+        std::printf("  [aud] %s 找不到 AUD（soundmd 条目%s，试了 %zu 个文件名）\n",
+                    voc_name,
+                    (it != s_audio_ctx.entries.end()) ? "命中" : "未命中",
+                    tries.size());
         return;
     }
     std::vector<uint8_t> wav = Aud_To_Wav(aud.data(), aud.size());
@@ -65,7 +156,8 @@ void On_Sound_Request(const char* voc_name) {
         return;
     }
     Play_Wav_Memory(wav, voc_name);
-    std::printf("  [aud] 播放 %s (%zu 字节)\n", voc_name, wav.size());
+    std::printf("  [aud] 播放 %s -> %s (%zu 字节)\n", voc_name, used.c_str(),
+                wav.size());
 }
 
 // 界面配色。取的是原版 RA2 那套"深灰金属 + 阵营色点缀"的观感，
@@ -240,7 +332,8 @@ void Camera::Clamp() {
 bool GameShell::Init(void* hwnd, int width, int height) {
     win_w_ = width;
     win_h_ = height;
-    const bool ok = (hwnd == nullptr)
+    offscreen_ = (hwnd == nullptr);
+    const bool ok = offscreen_
                         ? renderer_.Init_Offscreen(width, height)
                         : renderer_.Init(static_cast<HWND>(hwnd), width, height);
     if (!ok) {
@@ -630,7 +723,82 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
     // 不保证 1:1 等价，但至少能让 TAction 99/108/113 真出声。
     s_audio_ctx.roots = &roots_;
     world_.Set_Sound_Player(&On_Sound_Request);
+    Start_Battle_Music();
     return true;
+}
+
+void GameShell::Start_Battle_Music() {
+    // ThemeClass（@0x752800 一族）：进战场从 Normal=yes 的曲子里挑一首循环。
+    // 素材链：THEMEMD.INI/THEME.INI（在 ra2md.mix / ra2.mix 深层）给出
+    // 每曲的 Sound= 文件名；thememd.mix / THEME.MIX 是 TS 老格式明文 MIX
+    //（无 flags 双字），曲目是 IMA ADPCM WAV（tag 0x11），解码后循环播放。
+    IniFile ini;
+    bool have_ini = false;
+    static const char* kIniNames[] = {"THEMEMD.INI", "THEME.INI"};
+    for (const char* n : kIniNames) {
+        for (MixFileClass* m : roots_) {
+            std::vector<uint8_t> d = m->Read_Deep(n);
+            if (!d.empty() && ini.Load(d.data(), d.size())) {
+                have_ini = true;
+                break;
+            }
+        }
+        if (have_ini) break;
+    }
+    if (!have_ini) {
+        std::printf("  [music] 没找到 THEME(MD).INI，跳过背景音乐\n");
+        return;
+    }
+    // 收集 Normal=yes 的曲子（[Themes] 的编号列表给顺序，逐段查 Sound=）。
+    std::vector<std::string> candidates;
+    for (int i = 1; i < 64; ++i) {
+        char key[8];
+        std::snprintf(key, sizeof(key), "%d", i);
+        const std::string name = ini.Get_String("Themes", key, "");
+        if (name.empty() || name[0] == ';') {
+            continue;
+        }
+        const std::string sound = ini.Get_String(name.c_str(), "Sound", "");
+        const std::string normal = ini.Get_String(name.c_str(), "Normal", "");
+        if (sound.empty() || _stricmp(normal.c_str(), "yes") != 0) {
+            continue;
+        }
+        candidates.push_back(sound);
+    }
+    if (candidates.empty()) {
+        std::printf("  [music] THEME INI 里没有 Normal=yes 的曲子\n");
+        return;
+    }
+    // 原版是随机挑曲；offscreen/自检模式下要确定性，用列表第一首。
+    const std::string pick = (offscreen_ ? candidates.front()
+                                         : candidates[std::rand() % candidates.size()]);
+    // 到已挂的根里找 <Sound>.WAV（thememd.mix / THEME.MIX 由入口自动挂上）。
+    const std::string fname = pick + ".WAV";
+    const uint32_t id = MixFileClass::CRC_Of(fname.c_str());
+    for (MixFileClass* m : roots_) {
+        std::vector<uint8_t> wav = m->Read_Deep_By_ID(id);
+        if (wav.empty()) {
+            continue;
+        }
+        std::vector<uint8_t> pcm = Ima_Adpcm_To_Pcm_Wav(wav.data(), wav.size());
+        if (pcm.empty()) {
+            std::printf("  [music] %s 不是 IMA ADPCM WAV（%zu 字节），跳过\n",
+                        fname.c_str(), wav.size());
+            return;
+        }
+        if (std::getenv("RA2_DUMP_MUSIC") != nullptr) {
+            FILE* out = std::fopen("build/music_decoded.wav", "wb");
+            if (out) {
+                std::fwrite(pcm.data(), 1, pcm.size(), out);
+                std::fclose(out);
+                std::printf("  [music] 解码样本落盘 build/music_decoded.wav\n");
+            }
+        }
+        Play_Music_Loop(pcm, pick.c_str());
+        return;
+    }
+    std::printf("  [music] %s 在任何根里都找不到（THEME(MD).MIX 挂了吗？）\n",
+                fname.c_str());
 }
 
 void GameShell::Set_Viewport(int w, int h) {

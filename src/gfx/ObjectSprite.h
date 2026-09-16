@@ -35,8 +35,9 @@ namespace ra2 {
 
 class Dx12Renderer;   ///< 只存指针，不在头文件里拖进 d3d12.h
 
-/// 朝向档数。8 档 = 每 45 度一张。
-constexpr int kFacingSteps = 8;
+/// 朝向档数。原版 256 分度、HVA 每模型 32 帧 —— 体素朝向也按 32 档烘
+/// （旧 8 档转向会一格一格跳，与原版 32 帧动画对不上）。
+constexpr int kFacingSteps = 32;
 
 /// 一个体素占几个像素。【RE 定标】RA2/TS 体素模型的世界基准是
 /// 一格 footprint = 48 体素单位（TS 时代遗留标准，与 HVA 平移 ×12 的

@@ -47,4 +47,15 @@ std::vector<uint8_t> Aud_To_Wav(const uint8_t* data, size_t size);
 /// 不阻塞主线程：返回前只是把 buffer 交给系统。
 void Play_Wav_Memory(const std::vector<uint8_t>& wav, const char* snd_alias);
 
+/// 背景音乐通道：独立缓冲（不被音效截断）+ SND_LOOP 循环。
+/// 原版 ThemeClass 也是独立于 VocClass 的音乐通道（@0x752800 ThemeClass::Play，
+/// 每曲一个 DirectSound 大缓冲流式循环）；这里压缩成整块内存循环。
+void Play_Music_Loop(const std::vector<uint8_t>& wav, const char* name);
+
+/// 把 WAVE_FORMAT_IMA_ADPCM (tag 0x11) 的 WAV 解成 16-bit PCM WAV。
+/// THEME.MIX 里 16 首曲目全是这个格式（22050Hz 立体声 4-bit，块 1024B），
+/// PlaySound/waveOut 都不解 ADPCM，必须自己转。
+/// 失败（非 IMA、头损坏）返回空。
+std::vector<uint8_t> Ima_Adpcm_To_Pcm_Wav(const uint8_t* wav, size_t size);
+
 }  // namespace ra2
