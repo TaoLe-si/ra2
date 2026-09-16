@@ -1046,10 +1046,17 @@ bool Dx12Renderer::Create_Voxel_Pipeline() {
     pd.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
     pd.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
     pd.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    // 画家序：depth = px+py+pz，**越大越近**，所以清 0、测 GREATER。
+    // 画家序：depth = px+py+pz，**越大越近**，所以清 0、测 GREATER_EQUAL。
+    //
+    // 【踩过的坑】原版写的是 GREATER。Shadow 趟 vertex shader 把 depth=0
+    // （NDC 最远端）写进去，配 "清 0 + GREATER" 会让 `0 > 0` 失败 —— shadow
+    // 一个像素都进不了 bake RT。dump `build/_arena_off.raw`：全部 786432
+    // 个像素 alpha 只是 {0, 255}，中间值（即 0.45*255 ≈ 115）一条都没有，
+    // 那正是 shadow 被静默踢掉的现场。改 GREATER_EQUAL（`0 >= 0` 通过）后，
+    // 本体 depth > 0 仍按 GREATER 严格通过 —— 画家序"近盖远"语义不变。
     pd.DepthStencilState.DepthEnable = TRUE;
     pd.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-    pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
+    pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
     pd.DSVFormat = DXGI_FORMAT_D32_FLOAT;
     pd.NumRenderTargets = 1;
     pd.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
