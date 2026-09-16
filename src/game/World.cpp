@@ -1347,6 +1347,53 @@ void World::Tick_Computer_AI() {
         if (need_hunt) {
             All_To_Hunt(static_cast<int>(hi));
         }
+
+        // AI 出建筑：@0x004FBD80 Building AI 路径的最小落地
+        //   BaseNode@0x4FE3E0 → House+0x564C 排表 → FindSuitableFactory@0x5F7900
+        //   → 0x4FA350 Begin_Production 写入 FactoryType+0xEB8。
+        //   真实路径要 FactoryClass 实例 + 进度条 + ExitCell。这版我们没有
+        //   FactoryClass，所以走"在 BaseNode 坐标直接 Spawn"：每帧电脑按
+        //   BaseNode 表对照一下，没有的就补一个。
+        if (can_prod) {
+            const int this_house = static_cast<int>(hi);
+            for (const MapBaseNode& bn : Base_Nodes()) {
+                if (bn.owner_house.empty() ||
+                    _stricmp(bn.owner_house.c_str(), houses_[this_house].c_str()) != 0) {
+                    continue;
+                }
+                if (bn.building.empty() || bn.building == "None") {
+                    continue;
+                }
+                // 是否已经在（cx,cy）附近有同类建筑？
+                bool already = false;
+                for (const Object& o : objects_) {
+                    if (o.house != this_house) continue;
+                    if (o.kind != MapObjectKind::Building) continue;
+                    if (o.type != bn.building) continue;
+                    const float dx = o.x - static_cast<float>(bn.cx);
+                    const float dy = o.y - static_cast<float>(bn.cy);
+                    if (dx * dx + dy * dy < 4.0f * 4.0f) {
+                        already = true;
+                        break;
+                    }
+                }
+                if (already) continue;
+                // 检查地形 + 不与别的建筑重叠（用现有的 Can_Place_Building）
+                if (!Can_Place_Building(bn.building.c_str(),
+                                         static_cast<float>(bn.cx),
+                                         static_cast<float>(bn.cy))) {
+                    continue;
+                }
+                const int id = Spawn(bn.building.c_str(), MapObjectKind::Building,
+                                     this_house,
+                                     static_cast<float>(bn.cx),
+                                     static_cast<float>(bn.cy));
+                if (id >= 0) {
+                    std::printf("  AI 建造 house=%d %s @(%d,%d)\n",
+                                this_house, bn.building.c_str(), bn.cx, bn.cy);
+                }
+            }
+        }
     }
 }
 
