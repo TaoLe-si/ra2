@@ -90,6 +90,9 @@ struct Object {
     Mission mission = Mission::None;
     float dest_x = 0.0f, dest_y = 0.0f;
     bool has_dest = false;
+    /// 行走里程（格）。Move_Toward 累加；渲染端用它推步兵 SHP 的行走相位
+    /// （0 = 站立帧，1..5 = 行走循环帧 —— 见 SpriteCache::Build_Shp）。
+    float walk_dist = 0.0f;
     std::vector<CellStruct> path;  ///< Order_Move 走 PathFinder 填的路点
     int path_i = 0;
     int target = -1;         ///< 攻击目标 id，-1 = 无

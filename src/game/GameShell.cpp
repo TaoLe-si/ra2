@@ -1135,7 +1135,14 @@ std::vector<int> GameShell::Objects_In_Painter_Order() const {
 /// SHP 是 CPU 解完索引图传上去的。这里只负责 blit。
 bool GameShell::Draw_Object_Sprite(const Object& o, int sx, int sy, float scale) {
     const int house_color = (o.house >= 0 && o.is_mine) ? player_color_ : 11;
-    const ObjectSprite* sp = sprites_.Get(o.type.c_str(), o.facing, house_color);
+    // 步兵行走相位：移动中 = 行走循环（6 帧），静止 = 站立帧。
+    // 里程每 1/3 格推进一相位 —— 原版步兵 6 帧走完约 2 格。
+    int phase = 0;
+    if (o.has_dest && o.speed > 0.0f) {
+        phase = 1 + (static_cast<int>(o.walk_dist * 3.0f) % 6);
+    }
+    const ObjectSprite* sp =
+        sprites_.Get(o.type.c_str(), o.facing, house_color, phase);
     if (sp == nullptr || !sp->ok || sp->sprite_id < 0) {
         ++sprites_miss_;
         return false;

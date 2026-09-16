@@ -90,9 +90,11 @@ public:
         theater_ = t;
     }
 
-    /// 取一张精灵。facing 是 0..255（原版 256 分度），内部量化成 8 档。
+    /// 取一张精灵。facing 是 0..255（原版 256 分度），内部量化成 32 档。
+    /// phase 是步兵行走相位：0 = 站立，1..5 = 行走循环帧（体素单位忽略）。
     /// 返回的指针缓存在内部，下次同 key 直接命中。**不要在外面改它**。
-    const ObjectSprite* Get(const char* type, int facing, int house_color);
+    const ObjectSprite* Get(const char* type, int facing, int house_color,
+                           int phase = 0);
 
     /// 单位模型库（给外壳打印诊断用）。
     UnitModelDB& Models() noexcept { return models_; }
@@ -138,14 +140,17 @@ private:
         std::string type;
         int step;
         int color;
+        int phase = 0;   // 步兵行走相位（0=站立，1..5=行走循环）。体素不用。
         bool operator==(const Key& o) const {
-            return step == o.step && color == o.color && type == o.type;
+            return step == o.step && color == o.color && type == o.type &&
+                   phase == o.phase;
         }
     };
     struct KeyHash {
         size_t operator()(const Key& k) const {
             return std::hash<std::string>()(k.type) ^ (static_cast<size_t>(k.step) << 8) ^
-                   (static_cast<size_t>(k.color) << 16);
+                   (static_cast<size_t>(k.color) << 16) ^
+                   (static_cast<size_t>(k.phase) << 24);
         }
     };
 
@@ -183,9 +188,10 @@ private:
     /// 大建筑要把锚点挪到足迹中心，否则整座城都偏一格。
     /// use_unit_pal：Techno 用 unit*.pal；地形装饰用 iso*.pal。
     /// house_remap：仅 Techno 且 Remapable≠no 时套阵营色。
+    /// phase：步兵行走相位（0 = 站立帧，1..5 = 行走循环帧）。
     bool Build_Shp(const char* image, int house_color, bool facing_frames,
                    int facing, int foot_w, int foot_h, bool house_remap,
-                   bool use_unit_pal, ObjectSprite* out);
+                   bool use_unit_pal, ObjectSprite* out, int phase = 0);
 
     /// 剧场单位调色板（768 字节，8 位，**还没做 remap**）。
     ///

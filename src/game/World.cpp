@@ -432,9 +432,11 @@ void World::Move_Toward(Object& o, float dt) {
         o.x = o.dest_x;
         o.y = o.dest_y;
         o.has_dest = false;
+        o.walk_dist += dist;
     } else {
         o.x += dx / dist * move;
         o.y += dy / dist * move;
+        o.walk_dist += move;
     }
 }
 

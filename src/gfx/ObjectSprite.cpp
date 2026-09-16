@@ -512,7 +512,7 @@ const uint8_t* SpriteCache::Iso_Palette_Data() {
 
 bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_frames,
                             int facing, int foot_w, int foot_h, bool house_remap,
-                            bool use_unit_pal, ObjectSprite* out) {
+                            bool use_unit_pal, ObjectSprite* out, int phase) {
     std::string file = std::string(image) + ".SHP";
     std::vector<uint8_t> data = Read_Named(roots_, file.c_str());
     if (data.empty()) {
@@ -526,15 +526,28 @@ bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_fram
     if (!shp.Load(data.data(), data.size()) || shp.Frame_Count() <= 0) {
         return false;
     }
-    // 【帧不是随便挑的】SHP 有两类多帧：
-    //   * 步兵：帧 = 朝向（8 向），要按 facing 选 —— 不选就是"所有兵都朝一个方向"
-    //   * 建筑/装饰：帧 = 正常态/损毁态，按 facing 选会随机抽到损毁帧
-    // 所以由调用方（拿着 rules 里的类别）决定要不要按朝向选帧。
+    // 【帧不是随便挑的】SHP 有多类多帧布局（实测 GI.SHP 744 帧）：
+    //   * 步兵（帧多）：[0..7] 站立 8 朝向；[8..55] 行走 8 朝向 × 6 相位；
+    //     [56..] 趴下/开火/死亡等（**绝不能按旧式 facing*总数/256 摊平** ——
+    //     那会随机抽到趴下和死亡帧）。
+    //   * 简单朝向件（帧少）：帧 = 朝向。
+    //   * 建筑/装饰：帧 = 正常态/损毁态，恒 0。
+    // 步兵的行走相位由调用方传：phase=0 站立，1..5 行走。
     int frame = 0;
     if (facing_frames && shp.Frame_Count() > 1) {
-        frame = (facing * shp.Frame_Count()) / 256;
-        if (frame >= shp.Frame_Count()) {
-            frame = shp.Frame_Count() - 1;
+        const int dir = ((facing + 16) & 255) >> 5;   // 8 朝向，0 = 北
+        if (shp.Frame_Count() >= 56) {
+            // 标准步兵布局（站 8 + 走 48）。
+            frame = (phase > 0) ? (8 + dir * 6 + (phase - 1) % 6) : dir;
+            if (frame >= shp.Frame_Count()) {
+                frame = dir;
+            }
+        } else {
+            // 小 SHP（雷达指针之类）：帧 = 朝向。
+            frame = (facing * shp.Frame_Count()) / 256;
+            if (frame >= shp.Frame_Count()) {
+                frame = shp.Frame_Count() - 1;
+            }
         }
     }
     const std::vector<uint8_t>& px = shp.Frame_Pixels(frame);
@@ -615,14 +628,15 @@ bool SpriteCache::Build_Shp(const char* image, int house_color, bool facing_fram
 // Get
 // ---------------------------------------------------------------------------
 
-const ObjectSprite* SpriteCache::Get(const char* type, int facing,
-                                     int house_color) {
+const ObjectSprite* SpriteCache::Get(const char* type, int facing, int house_color,
+                                     int phase) {
     Key key;
     key.type = type;
     key.step = (facing * kFacingSteps) / 256;
     if (key.step < 0) key.step = 0;
     if (key.step >= kFacingSteps) key.step = kFacingSteps - 1;
     key.color = house_color;
+    key.phase = phase;
 
     auto it = cache_.find(key);
     if (it != cache_.end()) {
@@ -660,12 +674,12 @@ const ObjectSprite* SpriteCache::Get(const char* type, int facing,
         const int foot_h = (um != nullptr) ? um->height : 1;
         ok = Build_Shp(image.c_str(), house_color, face_frames,
                        key.step * (256 / kFacingSteps), foot_w, foot_h,
-                       house_remap, use_unit_pal, sp.get());
+                       house_remap, use_unit_pal, sp.get(), key.phase);
         if (!ok && um != nullptr && um->new_theater && !um->image.empty() &&
             image != um->image) {
             ok = Build_Shp(um->image.c_str(), house_color, face_frames,
                            key.step * (256 / kFacingSteps), foot_w, foot_h,
-                           house_remap, use_unit_pal, sp.get());
+                           house_remap, use_unit_pal, sp.get(), key.phase);
         }
     }
     if (!ok) {
