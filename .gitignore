@@ -50,3 +50,4 @@ rmcache/
 *.obj
 *.exe
 *.pdb
+re/
