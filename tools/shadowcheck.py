@@ -51,7 +51,7 @@ def main() -> None:
         base = run(unit)
         sh = run(unit, ["--shadow"])
         # 换个光方位：方位反转，影子该跑到另一侧，露出面积得变
-        alt = run(unit, ["--shadow", "--light", "-1,-1,2"])
+        alt = run(unit, ["--shadow", "--light", "1,-1,2"])
         print("单位 %s" % unit)
         print("  无阴影  画布 %dx%d 本体 %d" % (base["w"], base["h"], base["body"]))
         print("  有阴影  画布 %dx%d 本体 %d 阴影 %d 露出 %d"

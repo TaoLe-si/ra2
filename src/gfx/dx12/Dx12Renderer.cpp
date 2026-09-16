@@ -1163,7 +1163,7 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
     trace("调色板上传后");
 
     // 2) 渲染到临时目标
-    float light[3] = {0.40824829f, 0.40824829f, 0.81649658f};
+    float light[3] = {-0.40824829f, -0.40824829f, 0.81649658f};
     if (p.light != nullptr) {
         light[0] = p.light[0];
         light[1] = p.light[1];
