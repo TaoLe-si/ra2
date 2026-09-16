@@ -10,6 +10,7 @@
 #include <windows.h>
 
 #include "game/AudioDevice.h"
+#include "game/SaveLoad.h"
 #include "gfx/MouseShapeTable.h"
 #include "gfx/PcxFile.h"
 #include "gfx/ShpFile.h"
@@ -2008,7 +2009,38 @@ bool GameShell::Hit_Pause_Options(int x, int y) {
             ask_abort_ = true;
             return true;
         }
-        // Load/Save/Controls/Delete：文件/控件 UI 未逆完，认领点击防穿透。
+        // Load/Save/Controls/Delete：Controls（0x521）留 UI；Save/Load/Delete 走真实 .sav。
+        if (b.id == 0x51e) {
+            // LoadGame：找最近的 SAVE0001.SAV 之类（暂时固定目录）
+            std::string sav_path = "build/save0001.sav";
+            std::string mp;
+            if (Load_World(&world_, &mp, sav_path)) {
+                std::printf("  GOptions Load 命中: %s\n", sav_path.c_str());
+                return true;
+            }
+            std::printf("  GOptions Load 失败: %s\n", sav_path.c_str());
+            return true;
+        }
+        if (b.id == 0x51f) {
+            // SaveGame：把当前 World 写到 build/save0001.sav
+            std::string sav_path = "build/save0001.sav";
+            if (Save_World(world_, current_map_path_, sav_path)) {
+                std::printf("  GOptions Save 成功: %s\n", sav_path.c_str());
+            } else {
+                std::printf("  GOptions Save 失败: %s\n", sav_path.c_str());
+            }
+            return true;
+        }
+        if (b.id == 0x520) {
+            // DeleteGame：留 UI，最小实现 = 文件存在就删
+            std::string sav_path = "build/save0001.sav";
+            if (std::remove(sav_path.c_str()) == 0) {
+                std::printf("  GOptions Delete 删除: %s\n", sav_path.c_str());
+            } else {
+                std::printf("  GOptions Delete 无文件: %s\n", sav_path.c_str());
+            }
+            return true;
+        }
         std::printf("  GOptions stub id=0x%X %s\n", b.id, b.key);
         return true;
     }
@@ -4155,6 +4187,38 @@ bool GameShell::Self_Test() {
             Play_Wav_Memory(wav, got_name);
             std::printf("     AUD 链路：%s → WAV %zu 字节\n", got_name, wav.size());
         }
+    }
+
+    // Save/Load 链路：把当前 World 写到 build/_selftest.sav 再读回，
+    // 验魔数 + 版本 + map_path 复原 + player_credits 复原。
+    {
+        const std::string sav_path = "build/_selftest.sav";
+        const int cr_before = world_.Player_Credits();
+        check(Save_World(world_, current_map_path_, sav_path),
+              "Save/Load 链路：Save_World 写文件成功");
+        std::ifstream is(sav_path, std::ios::binary);
+        check(is.good(), "Save/Load 链路：写出来的文件能再打开");
+        if (is) {
+            uint32_t mlo = 0, mhi = 0, ver = 0;
+            is.read(reinterpret_cast<char*>(&mlo), 4);
+            is.read(reinterpret_cast<char*>(&mhi), 4);
+            is.read(reinterpret_cast<char*>(&ver), 4);
+            const uint64_t magic = (static_cast<uint64_t>(mhi) << 32) | mlo;
+            // 'R','A','2','S','A','V','E',0 LE → 0x0045564153324152ULL
+            check(magic == 0x0045564153324152ULL,
+                  "Save/Load 链路：magic = RA2SAVE");
+            check(ver == 1, "Save/Load 链路：version = 1");
+        }
+        // 改 Player_Credits 验"读回"覆盖。
+        world_.Set_Player_Credits(cr_before + 999);
+        std::string mp;
+        check(Load_World(&world_, &mp, sav_path),
+              "Save/Load 链路：Load_World 读文件成功");
+        check(!mp.empty(), "Save/Load 链路：map_path 复原非空");
+        check(world_.Player_Credits() == cr_before,
+              "Save/Load 链路：player_credits 复原到 save 时的值");
+        std::printf("     Save/Load：mp=\"%s\" cr=%d\n",
+                    mp.c_str(), world_.Player_Credits());
     }
 
     std::printf(ok ? "[OK] 行为自检全过\n" : "[x] 行为自检有不过的\n");

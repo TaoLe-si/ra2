@@ -258,6 +258,19 @@ public:
     /// 测试/触发：强制房屋 IQ（对齐 House+0x1D0 clamp）。
     void Force_House_IQ(int house, int iq);
     bool House_Defeated_Flag(int house) const;
+    /// 直接读 0/1 标记（Save/Load 用；不查 Is_House_Defeated 的语义）。
+    uint8_t House_Defeated(int house) const noexcept {
+        return (house >= 0 && house < static_cast<int>(house_defeated_.size()))
+                   ? house_defeated_[house] : 0;
+    }
+    uint8_t House_Active(int house) const noexcept {
+        return (house >= 0 && house < static_cast<int>(house_active_.size()))
+                   ? house_active_[house] : 0;
+    }
+    uint8_t House_Human(int house) const noexcept {
+        return (house >= 0 && house < static_cast<int>(house_human_.size()))
+                   ? house_human_[house] : 0;
+    }
 
     /// 某阵营是否已有某建筑类型（Prerequisite 用）。
     bool House_Has_Type(int house, const char* type) const;

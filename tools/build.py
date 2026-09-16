@@ -86,6 +86,7 @@ GAME_SOURCES = [
     "src/game/GameMain.cpp",
     "src/game/AudioDevice.cpp",
     "src/game/GameShell.cpp",
+    "src/game/SaveLoad.cpp",
     "src/game/World.cpp",
     "src/ai/PathFinder.cpp",
     "src/map/Map.cpp",
