@@ -49,6 +49,41 @@
 
 namespace ra2 {
 
+// ---------------------------------------------------------------------------
+// 值串解析原语
+//
+// 为什么单独暴露出来：P2 打表（src/data/TypeDB.*）拿到的是一条条**孤立的**
+// 值串，不带段名。如果那边自己写一套 atoi/strtod，两条路迟早给出不同的数字
+// （例如空值到底算 0 还是算缺省、bool 的词表收哪些）。所以统一走这里 ——
+// IniFile::Get_* 与打表共用同一套语义，差异无从产生。
+//
+// 【空串的语义必须区分】"键不存在" 与 "键存在但值为空" 是两回事：
+//   Get_Int  ：不存在 -> def；存在但空 -> 0   （Atoi 对空串就是 0）
+//   Get_Double：不存在 -> def；存在但空 -> def（strtod 一个字符都没吃）
+//   Get_Bool ：不存在 -> def；存在但空 -> def
+// 实测原始 INI 里有 214 处形如 `Report=` 的空值，这条区分不是纸面上的。
+// ---------------------------------------------------------------------------
+namespace ini_value {
+
+std::string As_String(const char* v);
+
+/// atoi 语义：遇到非数字字符就停（"100%" -> 100）。
+int As_Int(const char* v);
+
+/// strtod 语义；一个字符都没吃进去时返回 def。
+double As_Double(const char* v, double def);
+
+/// 词表 yes/no/true/false/1/0；其余按 atoi != 0 判；空串返回 def。
+bool As_Bool(const char* v, bool def);
+
+/// 逗号分隔的整数列表；空元素跳过。
+int As_Int_List(const char* v, std::vector<int>* out);
+
+/// 逗号分隔的字符串列表；两端空白吃掉，空元素跳过。
+int As_String_List(const char* v, std::vector<std::string>* out);
+
+}  // namespace ini_value
+
 /// 一段里的一条键值。
 struct IniEntry {
     std::string key;

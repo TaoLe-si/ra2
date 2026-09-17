@@ -51,6 +51,7 @@ CORE_SOURCES = [
     "src/map/LatTiles.cpp",
     "src/data/Ini.cpp",
     "src/data/UnitModel.cpp",
+    "src/data/TypeDB.cpp",
     "src/core/GameVersion.cpp",
     "src/core/Subsystems.cpp",
 ]

@@ -406,3 +406,93 @@ cmd->DrawInstanced(6, n, 0, 0);
 exe 里既没有 `*.MAP` 通配串、也没有 `Maps` 目录名串，
 "引擎自己扫这几个目录"尚未证实（谁在扫留到 P3 读 `MapSelect` 反汇编再定）。
 落地为 `GamePaths::map_dirs` + `GameInstall::Find_First_Map`。
+
+## 类型表打表的实证（2026-09-17）
+
+### 键的清点是"数据即证据"
+
+P2 打表最容易犯的错是**按印象编键名**。所以先清点：`tools/inikeys.py`
+把 rules.ini / rulesmd.ini / art.ini / artmd.ini 全扫一遍，数出
+**单位段 477 种键 / art 的 `[Image]` 段 206 种键**（原始输出 `build/_inikeys.txt`）。
+`src/data/TypeDB.h` 的 X-macro 里每一个键都能在那份清点里找到，
+且有个自检反过来卡：**声明了却在数据里一次都不命中的键必须为 0**。
+
+### 键的真实类型只能看数据
+
+不看数据会犯的错，实测抓到一个：
+
+```
+Occupier=yes ; I can Occupy UC buildings       ← 是布尔，不是武器名
+Assaulter=no ; I clear out UC buildings        ← 同上
+OccupyWeapon=UCPara                            ← 这个才是武器名
+EliteOccupyWeapon=...
+```
+
+`Occupier` 名字长得像"占领武器"，第一版就当武器字段收了。现在改成 BOOL，
+并新增 `occupy_weapon`（`OccupyWeapon=`）。同类还有：
+
+| 键 | 真实类型 | 取值样本 |
+|---|---|---|
+| `ExtraDamageStage` | BOOL | `no` |
+| `EntryDamageStage`（若有） | — | — |
+| `AllowedToStartInMultiplayer` | BOOL | `no` |
+| `LightVisibility` | INT | `5000`（lepton 距离） |
+| `LightIntensity`/`LightRedTint`… | DBL | `0.2` / `0.05` |
+| `SpecialThreatValue` | DBL | `1`（注释写 "between 0 and 1"） |
+| `NumberImpassableRows` | INT | `3` |
+
+**空值要分两种**：`Report=` 这种"键在、值为空"与"键不存在"是两回事
+（`Atoi("")==0`，但 `strtod("")` 一个字符都没吃 → 返回缺省）。
+实测原始 INI 有 214 处空值，所以这条区分不是纸面上的。
+
+### 列表里有名字、rules 里没有段（原版数据自身的不一致）
+
+四个类型列表共 559 个名字，其中 **6 个在全库找不到对应段**：
+
+```
+YDUM  APACHE  CASYDN01  CATIME  CALA02  CALOND02
+```
+
+`[AircraftTypes]` 里明明白白写着 `1=APACHE`，但 `[APACHE]` 段在
+rules.ini / rulesmd.ini 里都不存在（RA2 时代的老机型，YR 的 rulesmd
+列表没清干净）。这不是解析错 —— 打表时跳过并**如实记名**，
+`--typetable` 会把它们印出来。
+
+### `[Warheads]` 是权威登记表，武器没有对应列表
+
+- 弹头：`[Warheads]` 编号列表 **105** 项（引擎自己的名单），
+  加上武器引用到的，去重后 116 个。
+- 武器：**没有** `[Weapons]` 列表。全库里"有 `Damage=` 且 `Warhead=`"的段有
+  **272** 个，但游戏实际引用的（Primary/Secondary/Elite*/Weapon1..5/
+  DeathWeapon/OccupyWeapon）只有 **189** 个。表收后者（P3 需要的集合），
+  前者只作统计参照报出来。
+
+### theme 的同名曲目是**真的重复**，不是合并 bug
+
+`[Themes]` 是编号列表，合并后同时存在：
+
+```
+1=INTRO  2=SCORE  3=LOADING  4=CREDITS      ← RA2 的 theme.ini
+21=BrainFreeze … 28=TranceLVania            ← RA2MD 新增
+31=INTRO 32=Grinder … 47=RA2Options 48=Motorized 50=HM2 … 56=Rollout
+```
+
+于是 `INTRO / SCORE / LOADING / CREDITS` 各出现两次（编号不同）。
+**引擎按编号索引，所以它看到的也是这样** —— 忠实还原，不做去重。
+另有 `49=`（值为空）与 `47=RA2Options`（无同名段）两种边角，都已按原样处理。
+
+### 探针本身的 bug：顶层 `find` 漏掉嵌套条目
+
+`tools/inikeys.py` 第一版用 `MixFile.find()` 找 INI 名字，那是**只看顶层**的；
+C++ 侧走的是 `Read_Deep`（`Build_Deep_Index` 建的全局平表，会进嵌套 MIX）。
+结果：探针报 `THEME.INI 未找到`，C++ 却多读出一份 RA2 的主题表（12 条）。
+**不是代码 bug，是探针覆盖不全。** 现在 `tools/techno.py` 里照抄了
+`Build_Deep_Index` 的顺序（先本层全部、再按条目顺序逐个子归档，
+一律先到先得），两边才真正对齐。
+
+### `AI.INI` / `AIMD.INI`：本安装里不存在
+
+旧基线的名字表里有这两个 CRC（`AI.INI=0x9E11E49A @ra2.mix`、
+`AIMD.INI=0x116F3F76 @ra2md.mix`），但 Reunion 2023 的 8 个归档
+（ra2/ra2md/expandmd01/94/95/96/97/thememd）**一个都没有**。
+加载器已就绪，`--typetable` 如实打 `ai.ini 无`，不假装读过。

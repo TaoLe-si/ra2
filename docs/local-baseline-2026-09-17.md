@@ -48,6 +48,9 @@
 | 7 | `ra2core.exe --pcxhash <ra2.mix>` | 159 个 PCX，**解码失败 0** |
 | 8 | `ra2core.exe --ini <expandmd01> 0x8218F9F4` | 743218 字节 → **1477 段 / 23392 条目 / 畸形行 0** |
 | 9 | `ra2view.exe --gamedir <目录> --unit YTNK --turretyaw 40 --offscreen` | 10 包挂载 → INI 解析 → YTNK.VXL+YTNKTUR.VXL → HVA → DX12 离屏 1024×768 → `build/frame.raw`，出图正常 |
+| 10 | `ra2core.exe --typetable <8 个包>` | `TechnoType 553`（列表 559 名字，6 个无段）；rules 477 键种 / 15315 次、art 206 键种 / 7322 次；**逐键对账 0 处不一致**；武器 189 / 弹头 116 / 抛射体 38 / 声音 1018 / 曲目 36 / ai.ini 无 |
+| 11 | `python tools/techno.py <目录> --check build/type_raw.txt` | **22637 行逐行一致**（独立实现，从 MIX 字节重新读起） |
+| 12 | `python tools/inikeys.py <目录>` | 键直方图落 `build/_inikeys.txt`：rules 477 种 / art 206 种 / 武器 52 / 弹头 85 / 抛射体 35 |
 
 第 4 项复现了文档基线**逐项完全相同**（`1482/1594/559/86/17/7/0`）。
 第 1 项的帧 CRC 也逐位一致 —— 这两条是"代码无回归"的硬证据。
@@ -99,11 +102,10 @@ python tools/raw2png.py build/frame.raw build/ytnk_40.png
 
 ## 6. 后续待办
 
-1. **P1 收尾**：精灵批渲染（`SpriteBatch`）—— 一个 draw call 画几千个精灵；
-   以及与原版截图逐像素比对（当前体素出图已通，但明暗/阴影尚未对拍）。
-2. **P2 剩余**：把 INI 全量填进 `TechnoTypeClass`（现在只到"模型组成"这一跳），
-   然后 `ai.ini` / `sound(md).ini` / `theme(md).ini`。
-3. `GamePaths::map_mixes` 仍指向不存在的 `MAPSMD03.MIX` —— 本机地图在
-   `Maps/`（`Standard` / `Custom` / `Cooperative` / `MadHQ` / `DDLY` 五个子目录），
-   应该改成扫目录。目前只影响 `--map` 的默认查找，不影响其它回归。
-4. 代码尚未 commit（本次改动全在工作区）。
+1. **P1 收尾**：与原版截图逐像素比对（当前体素出图已通，但明暗/阴影尚未对拍，
+   需要一份原版运行时的参考截图）。
+2. **P2 收尾**：`ai.ini` / `aimd.ini` **本安装没有这两个文件**
+   （旧基线里有：`AI.INI=0x9E11E49A @ra2.mix`、`AIMD.INI=0x116F3F76 @ra2md.mix`），
+   加载器已就绪、缺素材；剩余 164 种 rules 键 / 95 种 art 键的类型化
+   （顺序见 `--typetable --top N` 表尾）；声音/曲目接进 AudioDevice。
+3. P3 逻辑层（字段偏移是主要工作量）、P4 锁步、P5 多核并行。

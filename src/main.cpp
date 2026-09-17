@@ -21,6 +21,7 @@
 #include "core/GameVersion.h"
 #include "core/VTableMap.h"
 #include "data/Ini.h"
+#include "data/TypeDB.h"
 #include "data/UnitModel.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
@@ -1010,6 +1011,66 @@ static int Unit_DB(const std::vector<std::string>& mix_paths, const char* dump_p
     return s.body_missing == 0 ? 0 : 1;
 }
 
+/// P2 全量打表：把 rules / art / sound / theme 装进 TypeDB，并**逐键对账**。
+///
+/// 验收标准不是"看着对"，而是可数的：
+///   1. 每个单位的 rules 段与 art 段，**去重键数**必须与表里一致（不丢键、不添键）；
+///   2. 每个键的**值必须逐字节相等**（不改值）。
+/// 打印那一行 `逐键对账：不一致 0 处` 就是这一阶段的通过判据。
+///
+/// --raw <out>：把全量键值按 `单位/来源/键/值` 落盘，供独立实现（tools/techno.py）
+///              逐行 diff。两边都排序输出，所以不依赖插入顺序。
+static int Type_Table(const std::vector<std::string>& mix_paths, const char* raw_dump,
+                      const char* summary_path, int top_keys) {
+    std::vector<ra2::MixFileClass> mixes(mix_paths.size());
+    std::vector<const ra2::MixFileClass*> ptrs(mix_paths.size());
+    for (size_t i = 0; i < mix_paths.size(); ++i) {
+        if (!mixes[i].Open(mix_paths[i].c_str())) {
+            std::printf("[x] 打不开 %s\n", mix_paths[i].c_str());
+            return 1;
+        }
+        ptrs[i] = &mixes[i];
+    }
+    ra2::UnitModelDB unitdb;
+    if (!unitdb.Load(ptrs.data(), static_cast<int>(ptrs.size()))) {
+        return 1;
+    }
+    ra2::TypeDB db;
+    if (!db.Load(unitdb, ptrs.data(), static_cast<int>(ptrs.size()))) {
+        return 1;
+    }
+
+    db.Dump_Summary(stdout, top_keys);
+
+    // 逐键对账：表是从这两个 IniFile 建的，所以直接拿它们回查。
+    const int bad = db.Verify(unitdb.Rules(), unitdb.Art(), stdout);
+    std::printf("\n逐键对账：不一致 %d 处（%d 个 TechnoType × rules+art）\n", bad,
+                db.Stats_().types);
+    if (bad == 0) {
+        std::printf("OK   键一个不丢、值一个不改\n");
+    }
+
+    if (summary_path) {
+        std::FILE* f = std::fopen(summary_path, "wb");
+        if (f) {
+            db.Dump_Summary(f, top_keys);
+            std::fclose(f);
+            std::printf("已写出 %s\n", summary_path);
+        }
+    }
+    if (raw_dump) {
+        std::FILE* f = std::fopen(raw_dump, "wb");
+        if (!f) {
+            std::printf("[x] 写不了 %s\n", raw_dump);
+            return 1;
+        }
+        db.Dump_Raw(f);
+        std::fclose(f);
+        std::printf("已写出 %s\n", raw_dump);
+    }
+    return bad == 0 ? 0 : 1;
+}
+
 /// 体素光影：渲染一个单位并出图，同时做"顶面亮 / 底面暗"的硬判据自检。
 ///
 /// 为什么要自检而不是"看着差不多"：本环境看不到图，判断只能靠数值。
@@ -1654,6 +1715,38 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Unit_DB(mixes, dump);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--typetable") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --typetable <顶层mix> [更多mix...]"
+                        " [--raw <out.txt>] [--summary <out.txt>] [--top <N>]\n");
+            std::printf("  例：ra2core --typetable D:/RA2/\"Reunion 2023\"/ra2.mix"
+                        " D:/RA2/\"Reunion 2023\"/ra2md.mix ...\n");
+            std::printf("  把 rules/art/sound/theme 全量装进类型表，并逐键对账\n");
+            return 1;
+        }
+        std::vector<std::string> mixes;
+        const char* raw = nullptr;
+        const char* summary = nullptr;
+        int top = 20;
+        for (int i = 2; i < argc; ++i) {
+            if (argv[i][0] == '-' && argv[i][1] == '-') {
+                if (std::strcmp(argv[i], "--raw") == 0 && i + 1 < argc) {
+                    raw = argv[++i];
+                } else if (std::strcmp(argv[i], "--summary") == 0 && i + 1 < argc) {
+                    summary = argv[++i];
+                } else if (std::strcmp(argv[i], "--top") == 0 && i + 1 < argc) {
+                    top = std::atoi(argv[++i]);
+                }
+                continue;
+            }
+            mixes.push_back(argv[i]);
+        }
+        if (mixes.empty()) {
+            std::printf("[x] 至少要给一个 .mix\n");
+            return 1;
+        }
+        return Type_Table(mixes, raw, summary, top);
     }
     if (argc > 1 && std::strcmp(argv[1], "--vxlhash") == 0) {
         if (argc < 3) {

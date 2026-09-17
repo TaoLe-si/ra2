@@ -146,6 +146,12 @@ public:
 
     bool Loaded() const noexcept { return loaded_; }
 
+    /// 合并好的 rules(md) / art(md)。**给 P2 的 TypeDB 复用** ——
+    /// 它要做全量打表，但绝不能再解析一遍 rules：两份数据一旦分叉，
+    /// "同一个单位在两张表里不一样"这种 bug 会极其难查。
+    const IniFile& Rules() const noexcept { return rules_; }
+    const IniFile& Art() const noexcept { return art_; }
+
     /// 解析一个单位。结果缓存在表里（同名只算一次）。找不到段返回 nullptr。
     const UnitModel* Resolve(const char* unit);
 

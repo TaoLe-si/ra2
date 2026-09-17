@@ -33,6 +33,10 @@ tools/           逆向分析工具（Python）
   analyze.py       总控：字符串/函数/虚表/命名 -> db/*.json
   sourcemap.py     从 assert 路径恢复原始源码结构 -> docs/source-map.md
   query.py         检索：按字符串找函数、查调用者、列热点
+  mixdump.py       MIX 解密（加密/明文/嵌套）+ 深度索引（C++ 侧的对账基准）
+  inidump.py       INI 参考解析 + 逐行对账
+  inikeys.py       清点 INI 里**真实出现**的键（P2 打表的证据来源）
+  techno.py        类型表打表的独立实现（与 C++ 逐行 diff）
   build-msvc.bat   用本机 MSVC 编译 src/
 
 db/              分析数据库（JSON，脚本可重跑）
@@ -119,6 +123,29 @@ build\ra2game.exe --gamedir "<游戏目录>"          # 开窗口玩
 `--gamedir` 走 `GameInstall::Resolve`（`src/core/GameVersion.cpp`）：
 枚举 `expandmd%02d.mix`、按号升序挂载，缺哪个包会直接报出来。
 `build\ra2core.exe --detect "<游戏目录>"` 可以先看一眼挂载列表。
+
+**P2 数据层（INI → 类型表）**：
+
+```bash
+# 把 rules / art / sound / theme 全量装进类型表，并逐键对账
+# （--gamedir 只有 ra2game/ra2view 认；ra2core 这里是显式列包）
+G="<游戏目录>"
+build\ra2core.exe --typetable "$G/ra2.mix" "$G/ra2md.mix" "$G/expandmd01.mix" \
+    "$G/expandmd94.mix" "$G/expandmd95.mix" "$G/expandmd96.mix" \
+    "$G/expandmd97.mix" "$G/thememd.mix" \
+    --raw build/type_raw.txt --summary build/type_summary.txt --top 40
+
+# 独立实现对账（Python 从 MIX 字节重新读起，与上面那份逐行 diff）
+python tools\techno.py "$G" --check build/type_raw.txt
+
+# 键的清点（数据即证据：原版到底写了哪些键）
+python tools\inikeys.py "$G"
+```
+
+`--typetable` 的通过判据是**两行**：`逐键对账：不一致 0 处`，以及
+`X-macro 声明 N 个键，其中 0 个在数据里一次都没出现`
+（后者是防"键名打错"的闸 —— 打错的键永远不会命中，也不会报任何错）。
+`--top N` 表尾会印"还没类型化的键 Top N"，补字段照着加就行。
 
 渲染层的诊断开关（都是环境变量，默认关）：
 

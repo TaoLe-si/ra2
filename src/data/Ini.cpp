@@ -455,4 +455,110 @@ int IniFile::Read_Numbered_List(const char* section, std::vector<std::string>* o
     return static_cast<int>(out->size());
 }
 
+// ---------------------------------------------------------------------------
+// 值串解析原语（见 Ini.h 的说明）。实现与上面的 Get_* 逐行同源 ——
+// 这里刻意把原逻辑抄下来而不是让 Get_* 转调，是为了**不动已回归通过的代码**；
+// 两边语义一旦分叉，tools/inidump.py 的逐行对账会立刻发现。
+// ---------------------------------------------------------------------------
+
+namespace ini_value {
+
+std::string As_String(const char* v) {
+    return std::string(v ? v : "");
+}
+
+int As_Int(const char* v) {
+    if (v == nullptr) {
+        return 0;
+    }
+    const char* b = v;
+    return Atoi(b, b + std::strlen(v));
+}
+
+double As_Double(const char* v, double def) {
+    if (v == nullptr) {
+        return def;
+    }
+    const char* b = v;
+    const char* p = b;
+    const char* end = b + std::strlen(v);
+    while (p < end && Is_Space(*p)) {
+        ++p;
+    }
+    char tmp[64];
+    const size_t n = std::min(sizeof(tmp) - 1, static_cast<size_t>(end - p));
+    std::memcpy(tmp, p, n);
+    tmp[n] = '\0';
+    char* stop = nullptr;
+    const double d = std::strtod(tmp, &stop);
+    return (stop == tmp) ? def : d;
+}
+
+bool As_Bool(const char* v, bool def) {
+    if (v == nullptr) {
+        return def;
+    }
+    const std::string s = To_Lower(v, v + std::strlen(v));
+    if (s.empty()) {
+        return def;
+    }
+    if (s == "yes" || s == "true" || s == "1") {
+        return true;
+    }
+    if (s == "no" || s == "false" || s == "0") {
+        return false;
+    }
+    return As_Int(v) != 0;
+}
+
+int As_Int_List(const char* v, std::vector<int>* out) {
+    if (out == nullptr) {
+        return 0;
+    }
+    out->clear();
+    if (v == nullptr) {
+        return 0;
+    }
+    const char* b = v;
+    const char* end = b + std::strlen(v);
+    for (int n = 0;; ++n) {
+        const char* fb = nullptr;
+        const char* fe = nullptr;
+        if (!Nth_Field(b, end, n, fb, fe)) {
+            break;
+        }
+        if (fb >= fe) {
+            continue;
+        }
+        out->push_back(Atoi(fb, fe));
+    }
+    return static_cast<int>(out->size());
+}
+
+int As_String_List(const char* v, std::vector<std::string>* out) {
+    if (out == nullptr) {
+        return 0;
+    }
+    out->clear();
+    if (v == nullptr) {
+        return 0;
+    }
+    const char* b = v;
+    const char* end = b + std::strlen(v);
+    for (int n = 0;; ++n) {
+        const char* fb = nullptr;
+        const char* fe = nullptr;
+        if (!Nth_Field(b, end, n, fb, fe)) {
+            break;
+        }
+        if (fb >= fe) {
+            continue;
+        }
+        out->emplace_back(fb, fe);
+    }
+    return static_cast<int>(out->size());
+}
+
+}  // namespace ini_value
+
 }  // namespace ra2
