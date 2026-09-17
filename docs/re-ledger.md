@@ -263,3 +263,24 @@ ctl10  id=0x071D STATIC 'GUI:Blank'            (425,357 108x10) 底部右侧条
 - 0x531D89 = SendMessage(0x4E3) 的另一个调用点（对话框流程切换）
 - 0x46DF40 = 控件可见性/禁用批量链（0x522/0x6A3/0x6A4/0x6D1/0x5A8/0x71C/0x468
   逐个 GetDlgItem → EnableWindow/ShowWindow）
+
+## 对话框文本/颜色系统（2026-09-17 第四轮，已解）
+
+**文本绘制 @0x5BD3D0**（对话框框架的文字 blit）：
+- 逐字符绘制：`TextOutA(hdc, x*0xABF1E0 + 10, y*(0xABF1C8+0xABF1D8) + 10, &ch)`
+- 颜色选择：色索引 0 → SetTextColor(0xABF110)、1 → 反色（先 SetBkColor 再 SetTextColor 互换）
+- **颜色 = GetSysColor**（@0x5BC618/0x5BC621 初始化）：
+  `0xABF128 = GetSysColor(0xF = COLOR_BTNTEXT)`、`0xABF110 = GetSysColor(8 = COLOR_WINDOWTEXT)`
+  —— 对话框文字是**系统色**，非硬编码
+- 字体：CreateFontIndirectA（LOGFONT 从对话框模板的 font 字段），GetTextMetricsA
+  填 0xABF1C8/0xABF1D8（宽高步进）→ 像素步进公式 *(w + dw) / x*dw? （0x5BD45E 的
+  `imul eax, esi` + `imul ecx, ebx`）
+
+**初始化链 @0x5BC5C0**：CreateFontIndirect → SelectObject → GetTextMetrics →
+GetSysColor(15/8) → AdjustWindowRect（对话框客户区对齐）——**整个对话框文本
+渲染是 GDI 真窗口系统**（CreateDialogIndirectParamA + TextOutA），不是游戏
+DirectDraw 表面上的自绘！对话框（含主菜单 226）是**真 Win32 窗口**。
+
+**架构结论**：原版主菜单 = 真 Win32 对话框（CreateDialogIndirectParamA）
+叠在游戏表面上；按钮是标准 BUTTON 控件、文字走 GDI TextOut、颜色系统色。
+"还原"它的 1:1 路径 = 保留 GDI 窗口方案或完全复刻其绘制参数（字体/颜色/步进）。
