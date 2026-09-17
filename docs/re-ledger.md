@@ -187,3 +187,31 @@
 | WorldDom | 1 | 218 |
 | coopcamp | 1 | 719 |
 | **合计** | **6740** | — |
+
+## 主菜单子系统（2026-09-17 深挖定案）
+
+**数据源已全部定位（WDT.MIX，6.2MB，TS 加密头 0x00030000，126 条）：**
+
+| 内容 | 证据 |
+|---|---|
+| 菜单布局（二进制 WDT 格式，~80 条） | 头 `{u16 0, u16 w, u16 h, u16 type}`，每分辨率一套 |
+| BIK 视频（菜单动画，3 条：120K/133K/133K） | 条目头 "BIKi" |
+| PCX 背景（每分辨率，~17 条，8K~780K） | 条目头 0x0A 05 01 08（ZSoft PCX） |
+| 调色板（768B，6 条） | 条目 3f003f... |
+| 文本定义（3 条） | `[FactionChoiceMenu640/800]`（Background/Theme/Items×Image/Origin/ActiveRect/Highlighted/HighlightSound）、`[LAYOUTS]`（战役地图屏）、`[PublicKey/PrivateKey]` |
+
+**exe 侧对应机制（gamemd）：**
+- WDT.MIX 挂载 @0x7AFC54（还有 WDTVOX.MIX、Local.MIX、'WDTTheater%02.VQA'）
+- 每分辨率初始化跳转表 @0x7B0074（5 档）
+- GraphicMenu 类：Background/Intro/Theme/Palette 键（ctor @0x4F1CA0/0x4F2140）
+- GraphicMenuItem：Type=Image/Anim、Image（如 sdbtnanm.shp）、Origin、ActiveRect、
+  Highlighted（高亮态图）、HighlightSound（如 Choice1.AUD）、Rate=5、Loop
+- 主菜单 = RT_DIALOG 226（.rsrc，533×369 du，11 控件）
+- 加载器链：0x7AF500（WDT 加载）、0x52FEC0、0x6241F0
+
+**1:1 还原所需实现清单（按依赖序）：**
+1. WDT.MIX 挂载（已有 TS 加密 MIX 支持）+ WDT 二进制布局解析
+2. SDBTNANM.SHP 按钮动画（Rate=5 帧/步，hover 升起动画）+ xyz.pal
+3. 高亮态图切换 + HighlightSound（Choice1.AUD —— AUD 解码器已就绪）
+4. BIK 视频解码（菜单背景动画）—— Bink 格式，最大单项
+5. 每分辨率美术选择（0x7B0074 跳转表语义）
