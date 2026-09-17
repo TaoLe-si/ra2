@@ -158,6 +158,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
+    // 重定向到文件时 stdout 是块缓冲 —— 窗口模式的调试日志要等退出才落盘。
+    setvbuf(stdout, nullptr, _IONBF, 0);
     // 拆命令行。宽->窄，按空格切，支持引号。
     char args[kMaxArgs][MAX_PATH] = {};
     int argc = 0;
@@ -242,8 +244,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             Add_Mix_If_Missing(&mixes, dir + "expandmd01.mix");
             Add_Mix_If_Missing(&mixes, dir + "language.mix");
             Add_Mix_If_Missing(&mixes, dir + "langmd.mix");
-            // 背景音乐（ThemeClass）：THEME.MIX 是 RA2 曲库（16 首 IMA ADPCM WAV），
-            // thememd.mix 是 YR 曲库（10 首）。两者都是 TS 老格式明文 MIX。
+            // 背景音乐：THEME.MIX（16 曲）/thememd.mix（10 曲），
+            // TS 老格式明文 MIX（逐字节验算过——这是 RE）。
             Add_Mix_If_Missing(&mixes, dir + "THEME.MIX");
             Add_Mix_If_Missing(&mixes, dir + "thememd.mix");
         }
@@ -332,12 +334,20 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         return 1;
     }
 
+    // 客户区 = 1024×768（外框加标题栏/边框）。把外框尺寸当客户区会让
+    // 鼠标坐标（客户区 ~1008×729）与渲染坐标（1024×768）错位——按钮
+    // 画在哪和点在哪不是同一处，越靠下偏得越多，表现为"点了没反应"。
     const int w = 1024, h = 768;
+    RECT rc = {0, 0, w, h};
+    AdjustWindowRect(&rc,
+                     WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+                     FALSE);
     HWND hwnd = CreateWindowExW(0, kClass, L"Red Alert 2",
                                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU |
                                     WS_MINIMIZEBOX,
-                                CW_USEDEFAULT, CW_USEDEFAULT, w, h, nullptr,
-                                nullptr, hInst, &game);
+                                CW_USEDEFAULT, CW_USEDEFAULT,
+                                rc.right - rc.left, rc.bottom - rc.top,
+                                nullptr, nullptr, hInst, &game);
     if (!hwnd) {
         std::printf("[x] 创建窗口失败\n");
         return 1;

@@ -229,7 +229,6 @@ private:
     /// 主菜单（RT_DIALOG 226 / 0xE2）：Title.PCX + 按钮列。
     void Draw_Title_Menu();
     int Hovered_Title_Button() const;   ///< 悬停的菜单按钮下标（-1 无）
-    void Play_Hover_Click();            ///< 悬停起始的 UI 点击音（HighlightSound 语义）
     /// 点中主菜单钮。返回 true = 已消费。
     bool Hit_Title_Menu(int x, int y);
     /// 从 MAPS*.MIX 抽出 Brief:ALL01 战役图到临时 .map（NewCampaign）。

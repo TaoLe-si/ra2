@@ -163,6 +163,9 @@ void On_Sound_Request(const char* voc_name) {
 // 界面配色。取的是原版 RA2 那套"深灰金属 + 阵营色点缀"的观感，
 // 具体数值没有从 exe 里逆（原版界面是 PCX 贴图，不是纯色），
 // 等界面贴图接进来再换成精灵。
+// 【编造-待逆向】本组 UI 颜色全是自配色（原版侧栏底是贴图，框选/小地图
+// 点色应从 exe 的 RadarClass/TacticalClass 绘制函数逆向）。逐项逆向任务
+// 在 docs/fabrication-audit.md。
 constexpr float kUiBackdrop[4] = {0.16f, 0.16f, 0.18f, 1.0f};   // 边栏底
 constexpr float kUiTopBar[4] = {0.10f, 0.10f, 0.12f, 1.0f};     // 顶栏底
 constexpr float kUiEdge[4] = {0.35f, 0.35f, 0.38f, 1.0f};       // 分隔线
@@ -728,7 +731,10 @@ bool GameShell::Load_Map(const std::vector<std::string>& mix_paths,
 }
 
 void GameShell::Start_Battle_Music() {
-    // ThemeClass（@0x752800 一族）：进战场从 Normal=yes 的曲子里挑一首循环。
+    // ThemeClass（@0x752800 一族）。
+    // 【编造-待逆向】"进战场立即挑 Normal=yes 曲循环"是编造：
+    // ① 触发时机（进图/开战/菜单）未逆向；② 选曲策略（随机？列表？）
+    // 未逆向；③ Normal=yes 过滤是否适用主流程未证实（INI 字段本身是 RE）。
     // 素材链：THEMEMD.INI/THEME.INI（在 ra2md.mix / ra2.mix 深层）给出
     // 每曲的 Sound= 文件名；thememd.mix / THEME.MIX 是 TS 老格式明文 MIX
     //（无 flags 双字），曲目是 IMA ADPCM WAV（tag 0x11），解码后循环播放。
@@ -769,7 +775,8 @@ void GameShell::Start_Battle_Music() {
         std::printf("  [music] THEME INI 里没有 Normal=yes 的曲子\n");
         return;
     }
-    // 原版是随机挑曲；offscreen/自检模式下要确定性，用列表第一首。
+    // 【编造-待逆向】"随机挑曲"是猜的：ThemeClass::Queue_Song 的选曲
+    // 策略未逆向。offscreen/自检取第一首是工程决定（确定性）。
     const std::string pick = (offscreen_ ? candidates.front()
                                          : candidates[std::rand() % candidates.size()]);
     // 到已挂的根里找 <Sound>.WAV（thememd.mix / THEME.MIX 由入口自动挂上）。
@@ -819,7 +826,7 @@ void GameShell::Update(float dt) {
     // 边缘滚动（鼠标贴到视口边上就平移）。原版就是这么做的。
     if (edge_scroll_ && screen_ == GameScreen::Battle) {
         const int margin = 8;
-        const float speed = 600.0f * dt;
+        const float speed = 600.0f * dt;   // 【编造】滚屏速度未逆向
         int dx = 0, dy = 0;
         if (mouse_x_ >= 0 && mouse_x_ < win_w_ - kSidebarW) {
             if (mouse_x_ < margin) dx = -1;
@@ -1136,7 +1143,9 @@ std::vector<int> GameShell::Objects_In_Painter_Order() const {
 bool GameShell::Draw_Object_Sprite(const Object& o, int sx, int sy, float scale) {
     const int house_color = (o.house >= 0 && o.is_mine) ? player_color_ : 11;
     // 步兵行走相位：移动中 = 行走循环（6 帧），静止 = 站立帧。
-    // 里程每 1/3 格推进一相位 —— 原版步兵 6 帧走完约 2 格。
+    // 【编造-待逆向】相位速率（1/3 格/相位）是拍的：步兵动画速率
+    // 应来自 DoormanClass/FootClass 的 walk 计时（未逆向）。帧序布局
+    //（站8+走8×6）是 RE，速率不是。
     int phase = 0;
     if (o.has_dest && o.speed > 0.0f) {
         phase = 1 + (static_cast<int>(o.walk_dist * 3.0f) % 6);
@@ -1562,9 +1571,9 @@ bool GameShell::Load_UI() {
     ok += load("SIDEBTTN.SHP", &ui_sidebttn_) ? 1 : 0;
     ok += load("SHROUD.SHP", &ui_shroud_) ? 1 : 0;
     ok += load("FOG.SHP", &ui_fog_) ? 1 : 0;  // 与 SHROUD 二选一 @0x47F01F
-    // 主菜单按钮底板（GraphicMenu 的按钮图形）：ra2.mix 深层 0x1BB65278，
-    // 126x25×3 帧 = 青铜渐变+五角星浮雕（正常/高亮/禁用）。文件名在
-    // mix-names 里没有 —— 按 CRC 直取。125x25 的 0x2F43F08B 是孪生变体。
+    // 【编造-待逆向】0x1BB65278（126x25×3 青铜板）当"菜单按钮底板"是
+    // 按尺寸相似挑的（108du×23du ≈ 130×28px），无证据链。3 帧被解读为
+    // 正常/高亮/禁用也是视觉猜测。逆向任务同 SDBTNANM：按钮 owner-draw。
     {
         auto load_by_id = [&](uint32_t crc, UiPiece* dst) -> bool {
             std::vector<uint8_t> data;
@@ -1900,11 +1909,10 @@ bool GameShell::Load_UI() {
         }
     }
 
-    // 主菜单背景。gamemd.exe = 尤里的复仇：背景是尤里主题图
-    // （ra2.mix 本地归档 0x2FB23764，640×400，右侧自带按钮暗区）。
-    // Title.PCX（苏军士兵）是**原版 RA2** 的菜单背景 —— 不能用，
-    // 否则就是原版/资料片素材混用。优先按 CRC 取 YR 图，
-    // 取不到（缺归档）才退回 Title.PCX 保底。
+    // 【编造-待逆向】主菜单背景 0x2FB23764 是"视觉工具看图猜的尤里主题图"，
+    // 不是 RE 结论：GraphicMenu ctor 硬编码默认 Background="Title.PCX"
+    //（0x4F1CA0 → 0x8241C8），实际值来自菜单 INI 数据（数据源未定位）。
+    // 逆向任务：找到 GraphicMenu 的 INI（节名/文件），读出 Background 真值。
     {
         std::vector<uint8_t> raw;
         for (MixFileClass* m : roots_) {
@@ -1944,8 +1952,9 @@ bool GameShell::Load_UI() {
         }
     }
 
-    // LOGO.PCX：主菜单 Logo 叠层（0x7681E0 读 'Logo' 键；ra2.mix 深层，
-    // 640×480，中上部红色金属 "RED ALERT 2" 浮雕，索引 0 = 透明）。
+    // 【编造-待逆向】LOGO.PCX 当主菜单叠层是猜的：'Logo' 键出现在
+    // 0x7681E0（战役选图屏的读取函数），不是主菜单对话框 226 的数据。
+    // 叠加位置（全屏同比例）也无依据。逆向任务：主菜单 Logo 的真源与坐标。
     {
         std::vector<uint8_t> raw;
         for (MixFileClass* m : roots_) {
@@ -2037,13 +2046,26 @@ void GameShell::Draw_Fullfnt_Text(int x, int y, const std::string& utf8) {
             wchar_t wch = (cp <= 0xFFFF)
                               ? static_cast<wchar_t>(cp)
                               : L'?';  // 代理对 BMP 之外用 '?' 占位
-            std::vector<uint8_t> rgba;
-            int w = 0, h = 0;
-            if (Draw_CJK_Glyph(wch, ui_fullfnt_.w, ui_fullfnt_.h, &rgba, &w, &h)) {
-                const int sprite = renderer_.Upload_Sprite_RGBA(rgba.data(), w, h);
-                if (sprite >= 0) {
-                    renderer_.Draw_Sprite(sprite, cx, y, 1.0f);
+            // 字形按 codepoint 缓存成常驻精灵 —— 每帧重新 GDI+上传
+            // 会被 Upload_Texture 的帧内保护拒绝（CJK 文字整段不显示），
+            // 而且就算允许也是每字每帧一次纹理上传，量级不可接受。
+            static std::map<uint32_t, int> s_glyph_sprites;
+            const auto it = s_glyph_sprites.find(cp);
+            int sprite;
+            if (it != s_glyph_sprites.end()) {
+                sprite = it->second;
+            } else {
+                std::vector<uint8_t> rgba;
+                int gw = 0, gh = 0;
+                sprite = -1;
+                if (Draw_CJK_Glyph(wch, ui_fullfnt_.w, ui_fullfnt_.h, &rgba,
+                                   &gw, &gh)) {
+                    sprite = renderer_.Upload_Sprite_RGBA(rgba.data(), gw, gh);
                 }
+                s_glyph_sprites[cp] = sprite;
+            }
+            if (sprite >= 0) {
+                renderer_.Draw_Sprite(sprite, cx, y, 1.0f);
             }
             cx += ui_fullfnt_.w;
             i += bytes;
@@ -2162,27 +2184,6 @@ bool GameShell::Enter_Title_Menu(const std::vector<std::string>& mix_paths,
 /// 悬停起始时播一次 UI 点击音（原版 HighlightSound=Choice1.AUD 的语义；
 /// Choice1.AUD 本体在未破解的 AUDIO 容器里，这里用 ra2.mix 里可读的
 /// 0x74C8E6F2 —— 0.07 秒短促点击，与 UI 点击音特征一致）。
-void GameShell::Play_Hover_Click() {
-    if (roots_.empty()) {
-        return;
-    }
-    static std::vector<uint8_t> s_click;
-    if (s_click.empty()) {
-        for (MixFileClass* m : roots_) {
-            s_click = m->Read_Deep_By_ID(0x74C8E6F2u);
-            if (!s_click.empty()) {
-                break;
-            }
-        }
-        if (s_click.empty()) {
-            return;   // 下一帧还会重试（条目缺失时每次空查，可接受）
-        }
-    }
-    std::vector<uint8_t> wav = Aud_To_Wav(s_click.data(), s_click.size());
-    if (!wav.empty()) {
-        Play_Wav_Memory(wav, "UIHover");
-    }
-}
 
 int GameShell::Hovered_Title_Button() const {
     constexpr int kDlgW2 = 533;
@@ -2291,29 +2292,12 @@ void GameShell::Draw_Title_Menu() {
         const int bh = static_cast<int>(b.dh * scale);
         if (b.button) {
             if (ui_sdbtn_.ok()) {
-                // 【原版真按钮】SDBTNANM 156×42×17 帧升起动画（[AnimTest]
-                // Rate=5, Loop=false）：常态帧 0（半沉），悬停后沿帧序列
-                // 升起并停在最后一帧。按钮逻辑区 108×23 du，SDBTNANM 板更大
-                // —— 以按钮区中心为锚整块绘制（GDlgSupp 对话框按钮语义）。
-                static int s_hover = -1;        // 上帧悬停的按钮
-                static unsigned s_hover_start = 0;
-                if (hovered != s_hover) {
-                    if (hovered >= 0) {
-                        s_hover_start = frame_;
-                        Play_Hover_Click();
-                    }
-                    s_hover = hovered;
-                }
-                int frame = 0;
-                if (i == hovered) {
-                    // Rate=5：每 5 帧推进一格动画（60fps 逻辑帧）。
-                    const unsigned elapsed = frame_ - s_hover_start;
-                    frame = static_cast<int>(elapsed / 5);
-                    if (frame >= ui_sdbtn_.frames) {
-                        frame = ui_sdbtn_.frames - 1;
-                    }
-                }
-                const int id = ui_sdbtn_.Frame(frame);
+                // 【编造-待逆向】用 SDBTNANM 当对话框 226 的按钮是**尺寸
+                // 相似推断**，不是 RE 结论——没有任何证据链把 dialog 226 的
+                // 11 个控件和这张 SHP 连起来。悬停动画+悬停音效（编造自
+                // [AnimTest] 测试条目）已删。逆向任务：GDlgSupp 一族的按钮
+                // owner-draw 链（哪个 SHP、哪几帧、什么状态机、什么音效）。
+                const int id = ui_sdbtn_.Frame(0);
                 if (id >= 0) {
                     renderer_.Draw_Sprite(id, bx + bw / 2 - ui_sdbtn_.w / 2,
                                           by + bh / 2 - ui_sdbtn_.h / 2, 1.0f);
