@@ -255,6 +255,15 @@ private:
     bool headless_ = false;
     ComPtr<ID3D12Resource> rt_texture_;   ///< 离屏模式下的渲染目标
     bool in_frame_ = false;
+    /// 帧内的精灵上传请求排队到这里，Begin_Frame（录制开始前）统一执行。
+    /// GDI 字形这类"绘制时才知道内容"的上传走这条路：当帧画不出，
+    /// 下一帧起就有 —— 比直接拒绝（文字永久缺失）正确。
+    struct Deferred_Upload {
+        std::vector<uint8_t> pixels;
+        int width = 0;
+        int height = 0;
+    };
+    std::vector<Deferred_Upload> deferred_uploads_;
 
     bool capture_requested_ = false;
     std::vector<uint8_t> capture_;

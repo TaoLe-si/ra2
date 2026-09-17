@@ -1362,8 +1362,15 @@ int Dx12Renderer::Upload_Texture(const uint8_t* pixels, int width, int height,
     }
     // 帧录制中途绝不能 Reset 命令分配器，否则本帧 Clear/Draw 全丢，回读全黑。
     if (in_frame_) {
-        std::printf("[!] Upload_Texture 在帧内被调用（%dx%d），已拒绝\n", width,
-                    height);
+        // GDI 字形等"绘制期才知道内容"的上传：排队到下一帧首执行，
+        // 不再直接拒绝（拒绝 = 该纹理永久缺失，菜单 CJK 文字整段不显示）。
+        // 当帧返回 -1；调用方字形缓存会在下一帧重试并拿到句柄。
+        Deferred_Upload du;
+        du.pixels.assign(pixels,
+                         pixels + static_cast<size_t>(bpp) * width * height);
+        du.width = width;
+        du.height = height;
+        deferred_uploads_.push_back(std::move(du));
         return -1;
     }
     // 纹理拷贝的行距必须按 D3D12_TEXTURE_DATA_PITCH_ALIGNMENT(256) 对齐 ——
@@ -1524,6 +1531,15 @@ void Dx12Renderer::Set_Palette(const Palette& pal) {
 void Dx12Renderer::Begin_Frame(const float clear_color[4]) {
     if (!device_ || in_frame_) {
         return;
+    }
+    // 上一帧排队的上传：趁命令录制还没开始先落地（此刻 in_frame_ 仍为假）。
+    if (!deferred_uploads_.empty()) {
+        std::vector<Deferred_Upload> pend = std::move(deferred_uploads_);
+        deferred_uploads_.clear();
+        for (const Deferred_Upload& du : pend) {
+            Upload_Texture(du.pixels.data(), du.width, du.height, 4,
+                           DXGI_FORMAT_R8G8B8A8_UNORM, true);
+        }
     }
     in_frame_ = true;
     frame_index_ = headless_ ? 0 : swapchain_->GetCurrentBackBufferIndex();

@@ -2062,7 +2062,10 @@ void GameShell::Draw_Fullfnt_Text(int x, int y, const std::string& utf8) {
                                    &gw, &gh)) {
                     sprite = renderer_.Upload_Sprite_RGBA(rgba.data(), gw, gh);
                 }
-                s_glyph_sprites[cp] = sprite;
+                // -1（帧内排队中）不缓存：下一帧重试，第二帧起就能画。
+                if (sprite >= 0) {
+                    s_glyph_sprites[cp] = sprite;
+                }
             }
             if (sprite >= 0) {
                 renderer_.Draw_Sprite(sprite, cx, y, 1.0f);

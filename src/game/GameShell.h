@@ -290,6 +290,13 @@ private:
     std::vector<std::unique_ptr<MixFileClass>> mixes_;
     std::vector<MixFileClass*> roots_;
     std::vector<std::string> pending_mixes_;  ///< 主菜单后 Load_Map 用
+    /// 菜单点击触发的延迟载图。Skirmish/NewCampaign 的 Load_Map 若在
+    /// WM_LBUTTONUP 里同步执行，可能落在 Begin_Frame..End_Frame 之间，
+    /// 51MB 的战场纹理会被帧内保护拒绝（表现为"载入失败"退回菜单）。
+    /// 主循环 Update（帧外）里消费。
+    bool pending_load_ = false;
+    std::vector<std::string> pending_load_mixes_;
+    std::string pending_load_map_;
     std::string skirmish_map_;                ///< GUI:SinglePlayer → 默认图
     std::string current_map_path_;            ///< 当前战场图（AskAbort Restart 重载）
     MapFile map_;
