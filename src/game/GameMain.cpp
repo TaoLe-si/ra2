@@ -188,6 +188,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     bool offscreen = false;
     bool selftest = false;
     bool menu_only = false;
+    std::string aud_test;
     bool vxlgpu = false;
     bool grid_debug = false;
     std::string dump_map_path;
@@ -202,6 +203,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             map_path = args[++i];
         } else if (std::strcmp(args[i], "--menu") == 0) {
             menu_only = true;
+        } else if (std::strcmp(args[i], "--audtest") == 0 && i + 1 < argc) {
+            aud_test = args[++i];
         } else if (std::strcmp(args[i], "--selftest") == 0) {
             selftest = true;
             offscreen = true;
@@ -259,6 +262,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     }
 
     ra2::GameShell game;
+
+    if (!aud_test.empty()) {
+        // --audtest <文件名>：读一个 AUD、按逆向出的真格式解码、落 WAV。
+        std::vector<std::string> m2;
+        for (int i = 0; i < argc; ++i) {
+            if (args[i][0] != '-') {
+                m2.push_back(args[i]);
+            }
+        }
+        ra2::GameShell gs;
+        if (!gs.Init(nullptr, 256, 256)) {
+            return 1;
+        }
+        return gs.Test_Aud_Decode(m2, aud_test.c_str()) ? 0 : 1;
+    }
 
     if (menu_only) {
         // --menu：离屏渲一帧主菜单（无窗口复现菜单观感用）。

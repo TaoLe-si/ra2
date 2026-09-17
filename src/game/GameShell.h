@@ -177,6 +177,10 @@ public:
     /// 否则"解码交给 DX12"就只是把 bug 搬了个地方。
     bool Self_Test_Voxel_GPU();
 
+    /// --audtest <名>：按逆向真格式解码一个 AUD 并落 build/aud_decoded.wav。
+    bool Test_Aud_Decode(const std::vector<std::string>& mix_paths,
+                        const char* name);
+
     /// 建造页签：0=建筑 1=防御 2=步兵 3=车辆（对应热键 Q/W/E/R）。
     int Sidebar_Tab() const noexcept { return sidebar_tab_; }
     /// 当前挂起的光标命令（K 修理 / L 变卖）。

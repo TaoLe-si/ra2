@@ -14,123 +14,154 @@
 
 namespace ra2 {
 
+// ---------------------------------------------------------------------------
+// Westwood AUD —— 从 gamemd.exe 逆向的**真格式**（0x40AA70 解码器一族）：
+//
+//   文件头 12 字节：
+//     +0  u16 采样率（实测 22050）
+//     +2  u32 音频数据字节数（= 文件大小 - 12，NSWEEP 实测吻合）
+//     +6  s16 初始样本（ADPCM 状态起点，NSWEEP = -8832）
+//     +8  u8  初始步进索引（0..88）
+//     +9  u8  ?（0）
+//     +10 u8  ?（2）
+//     +11 u8  ?（0x63 = 99）
+//   块（紧排到数据尾）：
+//     {u16 data_size; u16 flags; u32 0x0000DEAF; data[data_size]}
+//     NSWEEP 实测：每块 512B 数据 + 8B 头，DEAF 间隔恰 520。
+//   数据 = 4-bit ADPCM nibble（低半在前），算法/表格抄自 exe：
+//     步进表  @0x816558（u32[89]，与标准 IMA 完全一致）
+//     索引表  @0x816518（{-1,-1,-1,-1,2,4,6,8,×2}，同标准 IMA）
+//     解码    @0x40ACD0：diff = step>>3 + (n&1?step>>2:0) + (n&2?step>>1:0)
+//                        + (n&4?step:0)，n&8 取负；样本 clamp ±32767，
+//                        索引 clamp 0..88（0x58）。
+//   ADPCM 状态**跨块连续**（NSWEEP 验证：按此解码出 1kHz→0Hz 的核弹警报
+//   扫频音，正是该音效的语义）。0x40AABF 另有一条"每声道块头
+//   {s16, u8 idx, u8=0}"的路径（另一压缩模式的块内状态），
+//   用 rsv==0 判别；本工程素材实测全部走连续模式。
+// ---------------------------------------------------------------------------
+
 bool Parse_Aud_Header(const uint8_t* data, size_t size, AudHeader* out) {
-    if (data == nullptr || out == nullptr || size < 14) {
-        std::fprintf(stderr, "[aud] Parse fail: data=%p size=%zu < 14\n", data, size);
+    if (data == nullptr || out == nullptr || size < 12) {
         return false;
     }
-    if (data[0] != 0x00) {
-        std::fprintf(stderr, "[aud] Parse fail: magic=0x%02X != 0x00\n", data[0]);
+    const uint16_t rate = static_cast<uint16_t>(data[0] | (data[1] << 8));
+    const uint32_t dsz = static_cast<uint32_t>(data[2]) |
+                         (static_cast<uint32_t>(data[3]) << 8) |
+                         (static_cast<uint32_t>(data[4]) << 16) |
+                         (static_cast<uint32_t>(data[5]) << 24);
+    if (rate == 0) {
         return false;
     }
-    const uint16_t data_size = static_cast<uint16_t>(data[1] | (data[2] << 8));
-    const uint16_t sample_rate = static_cast<uint16_t>(data[3] | (data[4] << 8));
-    const uint8_t comp =  data[5];
-    const uint8_t ch = static_cast<uint8_t>(data[6] + 1);
-    const uint16_t reserved = static_cast<uint16_t>(data[7] | (data[8] << 8));
-
-    if (sample_rate == 0 || (ch != 1 && ch != 2)) {
-        std::fprintf(stderr, "[aud] Parse fail: rate=%u ch=%u\n", sample_rate, ch);
+    if (static_cast<size_t>(dsz) + 12 > size + 8) {   // 容 8B/块的头开销
         return false;
     }
-    if (static_cast<size_t>(data_size) + 14 > size) {
-        std::fprintf(stderr, "[aud] Parse fail: data_size=%u + 14 > size=%zu\n",
-                     data_size, size);
-        return false;
-    }
-    if (comp != 0) {
-        std::fprintf(stderr, "[aud] Parse fail: comp=%u (ADPCM not impl)\n", comp);
-        return false;
-    }
-    if (reserved != 0) {
-        std::fprintf(stderr, "[aud] Parse fail: reserved=%u\n", reserved);
-        return false;
-    }
-
-    out->sample_rate = sample_rate;
-    out->channels = ch;
-    out->pcm_size = data_size;
-    out->compression = 0;
+    out->sample_rate = rate;
+    out->channels = 1;      // AUD 音效实测单声道；立体声变体待样本
+    out->pcm_size = 0;      // 解码后才知道
+    out->compression = 2;
     return true;
 }
 
+namespace {
+constexpr int kAudSteps[89] = {
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41,
+    45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209,
+    230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876,
+    963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749,
+    3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630,
+    9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623,
+    27086, 29794, 32767};
+constexpr int kAudIndex[16] = {-1, -1, -1, -1, 2, 4, 6, 8,
+                               -1, -1, -1, -1, 2, 4, 6, 8};
+
+inline uint16_t RdU16(const uint8_t* p) {
+    return static_cast<uint16_t>(p[0] | (p[1] << 8));
+}
+inline uint32_t RdU32(const uint8_t* p) {
+    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+           (static_cast<uint32_t>(p[2]) << 16) |
+           (static_cast<uint32_t>(p[3]) << 24);
+}
+}  // namespace
+
 std::vector<uint8_t> Aud_To_Wav(const uint8_t* data, size_t size) {
-    std::vector<uint8_t> raw_aud;
-    const char* err = nullptr;
-    const bool f80 = Format80_Decompress_Chunks(data, size, &raw_aud, &err);
-    std::fprintf(stderr, "[aud] Format80_Decompress_Chunks=%d raw_aud.size=%zu err=%s\n",
-                 f80 ? 1 : 0, raw_aud.size(), err ? err : "(null)");
-    if (f80 && !raw_aud.empty() && raw_aud.size() >= 14 && raw_aud[0] == 0x00) {
-        // OK
-    } else if (data != nullptr && size >= 14 && data[0] == 0x00) {
-        raw_aud.assign(data, data + size);
-    } else {
-        // 兜底：直接当成裸 22050Hz mono unsigned 8-bit PCM。
-        raw_aud.assign(data, data + size);
-        std::vector<uint8_t> hdr(14, 0);
-        hdr[0] = 0x00;
-        const uint16_t pcm_size = static_cast<uint16_t>(raw_aud.size());
-        hdr[1] = static_cast<uint8_t>(pcm_size & 0xFF);
-        hdr[2] = static_cast<uint8_t>((pcm_size >> 8) & 0xFF);
-        const uint16_t rate = 22050;
-        hdr[3] = static_cast<uint8_t>(rate & 0xFF);
-        hdr[4] = static_cast<uint8_t>((rate >> 8) & 0xFF);
-        hdr[5] = 0x00;
-        hdr[6] = 0x00;
-        hdr[7] = 0x00;
-        hdr[8] = 0x00;
-        std::vector<uint8_t> with_hdr;
-        with_hdr.reserve(14 + raw_aud.size());
-        with_hdr.insert(with_hdr.end(), hdr.begin(), hdr.end());
-        with_hdr.insert(with_hdr.end(), raw_aud.begin(), raw_aud.end());
-        raw_aud = std::move(with_hdr);
-        std::fprintf(stderr, "[aud] fallback: synthesized hdr+PCM total=%zu (pcm=%u)\n",
-                     raw_aud.size(), pcm_size);
-    }
-    AudHeader h;
-    if (!Parse_Aud_Header(raw_aud.data(), raw_aud.size(), &h)) {
+    if (data == nullptr || size < 12) {
         return {};
     }
-    // 8-bit unsigned PCM mono/stereo → WAV 极简头：
-    //   "RIFF" + 文件大小（LE u32）+ "WAVE"
-    //   "fmt " + 16 (LE u32) + 1 (PCM) + channels + rate + byte_rate + block_align + 8 (bits/sample)
-    //   "data" + 子块大小（LE u32）+ PCM 数据
-    constexpr int kHdr = 44;
-    std::vector<uint8_t> out;
-    out.resize(kHdr + h.pcm_size);
-    uint8_t* p = out.data();
+    const uint16_t rate = RdU16(data);
+    int32_t sample = static_cast<int16_t>(RdU16(data + 6));
+    int idx = data[8];
+    if (idx > 88) idx = 88;
 
-    auto put = [&](size_t off, const char* s) {
-        std::memcpy(p + off, s, 4);
-    };
-    auto put16 = [&](size_t off, uint16_t v) {
-        p[off]     = static_cast<uint8_t>(v & 0xFF);
-        p[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
-    };
-    auto put32 = [&](size_t off, uint32_t v) {
-        p[off]     = static_cast<uint8_t>(v & 0xFF);
-        p[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
-        p[off + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
-        p[off + 3] = static_cast<uint8_t>((v >> 24) & 0xFF);
-    };
+    std::vector<int16_t> pcm;
+    pcm.push_back(static_cast<int16_t>(sample));   // 头里的初始样本也是第 0 个样本
+    size_t p = 12;
+    while (p + 8 <= size) {
+        const uint16_t dsz = RdU16(data + p);
+        const uint32_t deaf = RdU32(data + p + 4);
+        if (deaf != 0x0000DEAFu) {
+            // 不是块头：可能到尾了。扫下一个 DEAF（容错，防半块）。
+            const uint8_t* q = data + p;
+            const uint8_t* end = data + size;
+            while (q + 4 <= end && RdU32(q) != 0x0000DEAFu) {
+                ++q;
+            }
+            if (q + 4 > end) {
+                break;
+            }
+            p = static_cast<size_t>(q - data) - 4;
+            continue;
+        }
+        size_t take = dsz;
+        if (take > size - p - 8) {
+            take = size - p - 8;
+        }
+        for (size_t i = 0; i < take; ++i) {
+            const uint8_t b = data[p + 8 + i];
+            const int nibs[2] = {b & 0xF, b >> 4};
+            for (int n : nibs) {
+                const int step = kAudSteps[idx];
+                int diff = step >> 3;
+                if (n & 1) diff += step >> 2;
+                if (n & 2) diff += step >> 1;
+                if (n & 4) diff += step;
+                sample += (n & 8) ? -diff : diff;
+                if (sample > 32767) sample = 32767;
+                if (sample < -32768) sample = -32768;
+                idx += kAudIndex[n];
+                if (idx < 0) idx = 0;
+                if (idx > 88) idx = 88;
+                pcm.push_back(static_cast<int16_t>(sample));
+            }
+        }
+        p += 8 + take;
+    }
+    if (pcm.empty()) {
+        return {};
+    }
 
-    const uint32_t byte_rate = static_cast<uint32_t>(h.sample_rate) * h.channels;
-    const uint16_t block_align = static_cast<uint16_t>(h.channels);
-
-    put(0, "RIFF");
-    put32(4, 36u + static_cast<uint32_t>(h.pcm_size));
-    put(8, "WAVE");
-    put(12, "fmt ");
-    put32(16, 16u);          // fmt chunk size
-    put16(20, 1u);           // PCM
-    put16(22, static_cast<uint16_t>(h.channels));
-    put32(24, static_cast<uint32_t>(h.sample_rate));
-    put32(28, byte_rate);
-    put16(32, block_align);
-    put16(34, 8u);           // bits per sample
-    put(36, "data");
-    put32(40, static_cast<uint32_t>(h.pcm_size));
-    std::memcpy(p + 44, raw_aud.data() + 14, h.pcm_size);
+    const size_t pcm_bytes = pcm.size() * 2;
+    std::vector<uint8_t> out(44 + pcm_bytes);
+    auto w32 = [&](size_t o, uint32_t v) {
+        out[o] = v & 0xFF; out[o + 1] = (v >> 8) & 0xFF;
+        out[o + 2] = (v >> 16) & 0xFF; out[o + 3] = (v >> 24) & 0xFF;
+    };
+    auto w16 = [&](size_t o, uint16_t v) {
+        out[o] = v & 0xFF; out[o + 1] = (v >> 8) & 0xFF;
+    };
+    std::memcpy(out.data(), "RIFF", 4);
+    w32(4, 36 + static_cast<uint32_t>(pcm_bytes));
+    std::memcpy(out.data() + 8, "WAVEfmt ", 8);
+    w32(16, 16);
+    w16(20, 1);   // PCM
+    w16(22, 1);   // mono
+    w32(24, rate);
+    w32(28, rate * 2);
+    w16(32, 2);
+    w16(34, 16);
+    std::memcpy(out.data() + 36, "data", 4);
+    w32(40, static_cast<uint32_t>(pcm_bytes));
+    std::memcpy(out.data() + 44, pcm.data(), pcm_bytes);
     return out;
 }
 

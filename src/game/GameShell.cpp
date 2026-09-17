@@ -4781,6 +4781,57 @@ bool GameShell::Self_Test() {
     return ok;
 }
 
+
+bool GameShell::Test_Aud_Decode(const std::vector<std::string>& mix_paths,
+                                const char* name) {
+    for (const std::string& path : mix_paths) {
+        auto m = std::make_unique<MixFileClass>();
+        if (m->Open(path.c_str())) {
+            roots_.push_back(m.get());
+            mixes_.push_back(std::move(m));
+        }
+    }
+    if (roots_.empty()) {
+        std::printf("[x] 没挂上任何 MIX\n");
+        return false;
+    }
+    std::string lc = name;
+    for (char& c : lc) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::vector<uint8_t> aud;
+    for (MixFileClass* m : roots_) {
+        aud = m->Read_Deep((lc + ".aud").c_str());
+        if (!aud.empty()) break;
+    }
+    if (aud.empty()) {
+        std::printf("[x] %s 找不到\n", name);
+        return false;
+    }
+    AudHeader h;
+    const bool hp = Parse_Aud_Header(aud.data(), aud.size(), &h);
+    std::printf("%s: %zu 字节, rate=%u %s\n", name, aud.size(),
+                hp ? h.sample_rate : 0, hp ? "" : "(头解析失败)");
+    std::vector<uint8_t> wav = Aud_To_Wav(aud.data(), aud.size());
+    if (wav.empty()) {
+        std::printf("[x] 解码失败\n");
+        return false;
+    }
+    const uint32_t pcm = (wav.size() - 44) / 2;
+    const uint32_t rate = static_cast<uint32_t>(wav[24]) |
+                          (static_cast<uint32_t>(wav[25]) << 8) |
+                          (static_cast<uint32_t>(wav[26]) << 16) |
+                          (static_cast<uint32_t>(wav[27]) << 24);
+    std::printf("[OK] 解码 %u 样本 @ %u Hz（%.2f 秒），头 16B: %02x%02x%02x%02x\n",
+                pcm, rate, static_cast<double>(pcm) / rate, aud[6], aud[7],
+                aud[8], aud[9]);
+    FILE* f = std::fopen("build/aud_decoded.wav", "wb");
+    if (f) {
+        std::fwrite(wav.data(), 1, wav.size(), f);
+        std::fclose(f);
+        std::printf("     落盘 build/aud_decoded.wav\n");
+    }
+    return true;
+}
+
 bool GameShell::Self_Test_Voxel_GPU() {
     bool ok = true;
     auto check = [&ok](bool cond, const char* what) {
