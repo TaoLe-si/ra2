@@ -1628,6 +1628,73 @@ bool GameShell::Load_UI() {
         std::printf("  主菜单按钮底板 %s（%dx%d × %d 帧）\n",
                     ui_menubtn_.ok() ? "就绪" : "缺失", ui_menubtn_.w,
                     ui_menubtn_.h, ui_menubtn_.frames);
+        // SDBTNANM.SHP（standard button animated，156×42×17）：GraphicMenu 的
+        // 标准按钮（[AnimTest] Image=sdbtnanm.shp, Rate=5, Loop=false）。
+        // **必须配 sdbtnanm.pal**——SIDEBAR.PAL 会把金属渐变解成花色。
+        {
+            std::vector<uint8_t> shp_d, pal_d;
+            const uint32_t shp_id = MixFileClass::CRC_Of("SDBTNANM.SHP");
+            const uint32_t pal_id = MixFileClass::CRC_Of("SDBTNANM.PAL");
+            for (MixFileClass* m : roots_) {
+                if (shp_d.empty()) shp_d = m->Read_Deep_By_ID(shp_id);
+                if (pal_d.empty()) pal_d = m->Read_Deep_By_ID(pal_id);
+            }
+            if (shp_d.size() > 32 && pal_d.size() >= 768) {
+                uint8_t pal768b[768];
+                SpriteCache::Expand_Pal768(pal_d.data(), pal768b);
+                ShpFile shp;
+                if (shp.Load(shp_d.data(), shp_d.size()) &&
+                    shp.Frame_Count() > 0) {
+                    ui_sdbtn_.w = shp.Width();
+                    ui_sdbtn_.h = shp.Height();
+                    ui_sdbtn_.frames = shp.Frame_Count();
+                    ui_sdbtn_.sprite.clear();
+                    for (int f = 0; f < ui_sdbtn_.frames; ++f) {
+                        const std::vector<uint8_t>& px = shp.Frame_Pixels(f);
+                        const ShpFrameInfo& fi = shp.Frame_Info(f);
+                        if (fi.w <= 0 || fi.h <= 0 ||
+                            px.size() < static_cast<size_t>(fi.w) * fi.h) {
+                            ui_sdbtn_.sprite.push_back(-1);
+                            continue;
+                        }
+                        std::vector<uint8_t> rgba(
+                            static_cast<size_t>(ui_sdbtn_.w) * ui_sdbtn_.h * 4,
+                            0);
+                        for (int y = 0; y < fi.h; ++y) {
+                            for (int x = 0; x < fi.w; ++x) {
+                                const uint8_t idx =
+                                    px[static_cast<size_t>(y) * fi.w + x];
+                                if (idx == 0) {
+                                    continue;
+                                }
+                                const int dx = static_cast<int>(fi.x) + x;
+                                const int dy = static_cast<int>(fi.y) + y;
+                                if (dx < 0 || dy < 0 || dx >= ui_sdbtn_.w ||
+                                    dy >= ui_sdbtn_.h) {
+                                    continue;
+                                }
+                                const size_t q =
+                                    (static_cast<size_t>(dy) * ui_sdbtn_.w +
+                                     dx) * 4;
+                                const size_t c = static_cast<size_t>(idx) * 3;
+                                rgba[q + 0] = pal768b[c + 0];
+                                rgba[q + 1] = pal768b[c + 1];
+                                rgba[q + 2] = pal768b[c + 2];
+                                rgba[q + 3] = 255;
+                            }
+                        }
+                        ui_sdbtn_.sprite.push_back(renderer_.Upload_Sprite_RGBA(
+                            rgba.data(), ui_sdbtn_.w, ui_sdbtn_.h));
+                    }
+                    ++ok;
+                    std::printf("  SDBTNANM %dx%d × %d 帧（含专属调色板）\n",
+                                ui_sdbtn_.w, ui_sdbtn_.h, ui_sdbtn_.frames);
+                }
+            } else {
+                std::printf("  SDBTNANM 缺失（shp=%zu pal=%zu）\n", shp_d.size(),
+                            pal_d.size());
+            }
+        }
     }
     // FULLFNT3：侧栏/消息拉丁字（gamemd @0x5D2F08 选 FULLFNT3 vs SIDEFNT3）。
     {
@@ -2092,6 +2159,31 @@ bool GameShell::Enter_Title_Menu(const std::vector<std::string>& mix_paths,
 }
 
 /// 当前悬停的主菜单按钮下标（-1 = 无）。布局数学与 Draw_Title_Menu 一致。
+/// 悬停起始时播一次 UI 点击音（原版 HighlightSound=Choice1.AUD 的语义；
+/// Choice1.AUD 本体在未破解的 AUDIO 容器里，这里用 ra2.mix 里可读的
+/// 0x74C8E6F2 —— 0.07 秒短促点击，与 UI 点击音特征一致）。
+void GameShell::Play_Hover_Click() {
+    if (roots_.empty()) {
+        return;
+    }
+    static std::vector<uint8_t> s_click;
+    if (s_click.empty()) {
+        for (MixFileClass* m : roots_) {
+            s_click = m->Read_Deep_By_ID(0x74C8E6F2u);
+            if (!s_click.empty()) {
+                break;
+            }
+        }
+        if (s_click.empty()) {
+            return;   // 下一帧还会重试（条目缺失时每次空查，可接受）
+        }
+    }
+    std::vector<uint8_t> wav = Aud_To_Wav(s_click.data(), s_click.size());
+    if (!wav.empty()) {
+        Play_Wav_Memory(wav, "UIHover");
+    }
+}
+
 int GameShell::Hovered_Title_Button() const {
     constexpr int kDlgW2 = 533;
     constexpr int kDlgH2 = 369;
@@ -2198,7 +2290,35 @@ void GameShell::Draw_Title_Menu() {
         const int bw = static_cast<int>(b.dw * scale);
         const int bh = static_cast<int>(b.dh * scale);
         if (b.button) {
-            if (ui_menubtn_.ok()) {
+            if (ui_sdbtn_.ok()) {
+                // 【原版真按钮】SDBTNANM 156×42×17 帧升起动画（[AnimTest]
+                // Rate=5, Loop=false）：常态帧 0（半沉），悬停后沿帧序列
+                // 升起并停在最后一帧。按钮逻辑区 108×23 du，SDBTNANM 板更大
+                // —— 以按钮区中心为锚整块绘制（GDlgSupp 对话框按钮语义）。
+                static int s_hover = -1;        // 上帧悬停的按钮
+                static unsigned s_hover_start = 0;
+                if (hovered != s_hover) {
+                    if (hovered >= 0) {
+                        s_hover_start = frame_;
+                        Play_Hover_Click();
+                    }
+                    s_hover = hovered;
+                }
+                int frame = 0;
+                if (i == hovered) {
+                    // Rate=5：每 5 帧推进一格动画（60fps 逻辑帧）。
+                    const unsigned elapsed = frame_ - s_hover_start;
+                    frame = static_cast<int>(elapsed / 5);
+                    if (frame >= ui_sdbtn_.frames) {
+                        frame = ui_sdbtn_.frames - 1;
+                    }
+                }
+                const int id = ui_sdbtn_.Frame(frame);
+                if (id >= 0) {
+                    renderer_.Draw_Sprite(id, bx + bw / 2 - ui_sdbtn_.w / 2,
+                                          by + bh / 2 - ui_sdbtn_.h / 2, 1.0f);
+                }
+            } else if (ui_menubtn_.ok()) {
                 // 底板 126×25，按钮逻辑区 108×23 —— 底板略宽，居中贴。
                 // 高亮帧 = 帧 1，悬停时换。帧序（正常/高亮/禁用）由素材
                 // 三帧的亮度序定，见 Load_UI 注释。
@@ -4795,12 +4915,23 @@ bool GameShell::Test_Aud_Decode(const std::vector<std::string>& mix_paths,
         std::printf("[x] 没挂上任何 MIX\n");
         return false;
     }
-    std::string lc = name;
-    for (char& c : lc) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     std::vector<uint8_t> aud;
-    for (MixFileClass* m : roots_) {
-        aud = m->Read_Deep((lc + ".aud").c_str());
-        if (!aud.empty()) break;
+    if (name[0] == '0' && (name[1] == 'x' || name[1] == 'X')) {
+        // 0xXXXXXXXX：按 CRC ID 直读（名字未知的条目用）。
+        const uint32_t id = static_cast<uint32_t>(std::strtoul(name + 2, nullptr, 16));
+        for (MixFileClass* m : roots_) {
+            aud = m->Read_Deep_By_ID(id);
+            if (!aud.empty()) break;
+        }
+    } else {
+        std::string lc = name;
+        for (char& c : lc) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        for (MixFileClass* m : roots_) {
+            aud = m->Read_Deep((lc + ".aud").c_str());
+            if (!aud.empty()) break;
+        }
     }
     if (aud.empty()) {
         std::printf("[x] %s 找不到\n", name);
