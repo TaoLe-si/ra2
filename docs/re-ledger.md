@@ -496,3 +496,169 @@ C++ 侧走的是 `Read_Deep`（`Build_Deep_Index` 建的全局平表，会进嵌
 `AIMD.INI=0x116F3F76 @ra2md.mix`），但 Reunion 2023 的 8 个归档
 （ra2/ra2md/expandmd01/94/95/96/97/thememd）**一个都没有**。
 加载器已就绪，`--typetable` 如实打 `ai.ini 无`，不假装读过。
+
+## 对象字段偏移：从构造函数里挖（2026-09-17，P3 的第一块地基）
+
+RTTI 给类名、继承关系、虚表槽位，**但不给字段偏移**。没有字段偏移，
+还原出的 C++ 结构体就只是空壳：读到 `[esi+0x1C]` 时不知道那是什么。
+所以 P3 的第一件事是把偏移表建出来。
+
+### 办法
+
+构造函数是唯一会从头到尾把对象每个字段初始化一遍的地方，特征也强：
+它会把虚表指针写进对象首字段。于是扫每个函数体、跟踪 this 指针
+（thiscall 入口 `ecx`），把 `mov [this+off], ...` 记成字段访问。
+
+this 的流转要认全，少一条就整段丢：
+
+```
+mov r, ecx              r 也是 this（MSVC 常先 mov esi, ecx）
+lea r, [this+d]         r 是 this+d，之后 [r+k] 的偏移是 d+k
+mov [ebp-d], ecx        把 this 溢出到栈槽
+mov r, [ebp-d]          从栈槽取回 this —— 大对象的构造函数很常见
+任何其他写寄存器的指令   取消跟踪（含 call 破坏 eax/ecx/edx）
+```
+
+### 三个真踩到的坑
+
+**1. 归属判据必须是"有效偏移恰为 0"，不是指令里的 `disp == 0`。**
+`MouseClass` 的构造函数在 `[esi+0x5518]` 处内嵌构造一个 INoticeSink
+子对象，编译出来是：
+
+```
+lea edi, [esi+0x5518]
+mov dword ptr [edi], 0x7e1fbc     ; ??_7INoticeSink@@6B@
+```
+
+指令里的 disp 正是 0。只看 disp，就会把 MouseClass 的构造函数整个
+记到 INoticeSink 头上 —— 症状是 INoticeSink（92 字节）冒出 +0x5544。
+改成"寄存器跟踪偏移 + disp"的有效偏移后，一次消掉 13 个越界。
+
+**2. 线性兜底的"函数"与真实函数重叠，起点落在指令中间。**
+`analyze.py` 除了按调用点播种，还有一道线性兜底。实测 `0x4739E7` 与
+`0x4739F0` 是同一段代码，前者早 9 字节。从指令中间开始反汇编会先吐出
+几条垃圾指令再重新同步，跟踪状态已经被污染。
+修法：逐字节占用表判重叠，非 gap 优先、长的优先。
+
+**3. `.gitignore` 里的 `re/` 会把 `src/re/*.h` 一起挡掉。**
+不带前导斜杠的模式匹配**任意层级**的 `re` 目录。`ObjectSizes.h` /
+`ClassHierarchy.h` 因为更早加入所以逃过了，新生成的 `FieldOffsets.h`
+被静默忽略 —— `git add -A` 之后 `git status` 干净得看不出问题。
+改成锚定的 `/re/`。
+
+### 三条独立证据（互相对拍，不靠单点结论）
+
+| 证据 | 来源 | 结果 |
+|---|---|---|
+| sizeof（`push N; call operator new` 配对） | 与字段扫描**无关**的另一套分析 | 206 个类有基准，201 个字段末端落在界内 |
+| RTTI 的嵌入基类位移 `mdisp` | PE 的 RTTI 段（数据，不是指令） | 387 处里 159 处在 .text 里找到对应写虚表指令 |
+| 字段末端沿继承链严格递增 | 类层次 | 0x21→0xAC→0xD4→0xEE→0x520→0x6B9→0x6E8 全递增 |
+
+**最漂亮的一条交点**：MSVC RTTI 说 `TechnoClass` 的 `FlasherClass` 基类
+子对象在偏移 240、`StageClass` 在 248。字段扫描在 `TechnoClass` 的
+0xF0 与 0xF8 上各找到一次虚表写入 —— 一个来自 PE 的 RTTI 段，
+一个来自 .text 的指令流，两边完全独立却对上了。
+
+**顺带纠正了 sizeof 表的一条**：`CCFileClass` 的字段末端是 0x6C = 108，
+而 `db/sizes.json` 给的是 36。它的候选列表里本来就有 `108: 2` 票，
+只是当初选了 36 —— 字段扫描独立地证明了 36 是错的。这类越界现在
+会自动判定并写进 `docs/fields.md`，不静默吞掉。
+
+### 明确没做到的
+
+- 5 个类越界（`CounterClass`、`CCINIClass`、`PAVReestablish::?$VectorClass`
+  判定为"疑似扫描错"，仍在册；`CCFileClass` / `BufferIOFileClass`
+  判定为 sizeof 基准错）。
+- **字段名未知**。这里只给"这个偏移上确实有这么一个宽度的字段"，
+  语义要等把访问该偏移的代码读通（例如 `TechnoTypeClass::Read_INI`
+  的读取顺序，可以和第 P2 轮的 INI 键表对照）才能填。
+- 只扫了**写虚表的函数**。只被游戏逻辑赋值、构造函数不碰的字段收不到；
+  下一步是靠"读某偏移的代码 + 该偏移在别的类里的语义"补齐。
+
+落地：`tools/fieldscan.py` + `db/fields.json`（646 个类 / 6965 条）
++ `docs/fields.md` + `src/re/FieldOffsets.h`（核心继承链 17 个类，
+在 `ra2core` 冒烟测试里做硬判据回归）。
+
+---
+
+## 【更正】对象字段偏移的印证口径
+
+上一节有两处说过头了，这里逐条更正 —— 账要留痕，不悄悄改。
+
+### 1. 「387 处里 159 处印证」——分母不对
+
+159 不是"只印证了 41%"，而是**可判定子集的全部**。387 处 `mdisp` 按基类
+能不能对名字，只有一个分法：
+
+- **159 处**的基类拥有自己的 COL（`??_7X@@6B@` 存在），可以拿虚表 VA 去对
+  「`mov [对象+mdisp], <那张虚表>`」。**这 159 处全部命中，100%。**
+- **228 处**的基类在二进制里**根本没有虚表**，分两类：
+  1. **纯抽象接口** —— `IUnknown`（101 处）、`IRTTITypeInfo`（78）、
+     `ILocomotion`（12）、`IPiggyback`（6）、`ATL::CComObjectRootBase`（5）、
+     `IFlyControl`、`ILinkStream`、`IHouse`、`IPublicHouse`、
+     `IConnectionPointContainer`。MSVC 对"没有任何非内联虚函数、又从不被
+     完整构造"的类**既不生成虚表也不生成 COL**。
+  2. **没有虚函数的普通子对象** —— `StageClass`（9）、`FlasherClass`（6）、
+     `BounceClass`（1）。
+
+把 228 算进分母，就把"可判定的全中"稀释成了"387 处只中 41%"。
+
+### 2. 「0xF0 与 0xF8 上各找到一次虚表写入」—— 0xF0 上没有
+
+这条是上一节最漂亮的一句，可惜**是伪印证**。实测反汇编：
+
+```
+0x006F2B52  mov dword ptr [esi + 0xf0], ebx   ; TechnoClass::ctor@0x6F2B40
+0x006F2B58  mov byte  ptr [esi + 0xf4], bl
+0x006F2B5E  mov dword ptr [esi + 0xf8], ebx
+0x006F2B64  mov byte  ptr [esi + 0xfc], bl
+0x00421EB8  mov dword ptr [esi + 0xac], ebx   ; AnimClass::ctor@0x421EA0
+```
+
+写进去的是 `ebx`（0），**不是虚表**。`FlasherClass` / `StageClass` 没有虚函数，
+它们所在的那几字节里根本不存在虚表指针。上一节之所以"看到"0xF8 命中，是因为
+那条通道统计的是「**全库**有没有人在有效偏移 0xF8 上写过虚表」—— 别的类写过，
+跟这一行毫无关系。**这是伪印证，比不印证更坏**：它会让一个坏掉的通道看起来
+在工作。
+
+现在的第三条通道把范围收到**该继承链**上。判据必须沿 RTTI 的 `bases` 做传递
+闭包：`UnitClass` 在 240 上的子对象是 `TechnoClass` 的构造函数写的，
+`UnitClass` 自己的构造函数根本不碰那一段 —— 只看本类会整段漏掉。
+
+### 3. 更正后的账（387 处一条不漏）
+
+| 印证方式 | 处数 | 判据 |
+|---|---:|---|
+| 虚表直写 | 159 | `mov [对象+N], <该基类主虚表>` 在 .text 里找到 |
+| 调用点 | 0 | `lea ecx,[对象+N]; call <该基类构造函数>` |
+| 同链写入 | 228 | 该继承链上某个类的构造函数在有效偏移 N 上写过东西 |
+| **未印证** | **0** | — |
+
+「调用点」这条通道本身是好的（全库另有 75 个类在它上面有命中：
+`H::?$VectorClass`、`PBVBuildingTypeClass::?$VectorClass`、`rc_ptr_base`、
+`CounterClass`、`ShapeButtonClass` …），只是这 387 处里没有一例走这条形态 ——
+基类构造函数全被内联了。
+
+### 4. 顺手修掉 sizeof 取错的候选
+
+`CCFileClass`：投票 36（4 票）vs 字段末端 108 —— `36 < 108`，物理上不可能；
+108 本来就在候选里（2 票），只是当初票少。`tools/sizeofscan.py` 现在用字段末端
+**硬过滤候选**，改过的条目打 `calibrated` 标记并**无条件**进
+`src/re/ObjectSizes.h`（字段末端是硬下界，比投票硬）。
+
+剩下 4 个类（`CounterClass`、`CCINIClass`、`BufferIOFileClass`、
+`PAVReestablish::?$VectorClass`）**所有**候选都小于字段末端 —— 那说明两条数据里
+有一条本身错了，**不改**，只记 `note` 留给人看。乱猜比不改更坏。
+
+sizeof 越界因此 5 → 4，通过数 206 → 207。
+
+### 5. 工具链上的一个坑：读了用不到的文件
+
+`tools/sizeofscan.py` 里有一行 `json.load(open(a.virtuals))` 读
+`db/virtuals.json` —— 这个文件**既不在仓库里、也生成不出来**，而读到的值从头到尾
+**没被用过**（真正的「虚表 VA → 类名」映射是从 `db/rtti.json` 现算的）。
+它让整条流程在别的机器上直接抛 `FileNotFoundError`，而报错位置离真因很远。
+已改成：缺文件只提示一句，不中断。
+
+**教训**：一个没人用的输入，会让工具在一台能跑的机器上看着正常，换台机器就死。
+留着这种「幽灵输入」，等于给自己埋一个只在别人机器上触发的地雷。

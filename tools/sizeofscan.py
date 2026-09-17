@@ -258,7 +258,11 @@ def main() -> None:
     if not new_va:
         sys.exit("[x] 没能定位 operator new")
 
-    virt = json.load(open(a.virtuals, encoding="utf-8"))
+    # --virtuals 是历史遗留参数：本工具真正要的「虚表 VA -> 类名」映射是从
+    # rtti.json 现算的（见下），virtuals.json 读了从来没用上，而且这个文件
+    # 既不在仓库里也生成不出来。别让它卡住整条流程，只提示一句。
+    if not os.path.exists(a.virtuals):
+        print("[i] %s 不存在（历史遗留输入，本工具用不到），跳过" % a.virtuals)
     # virtuals.json 的键是类名，值是槽位数组；这里需要「虚表 VA -> 类名」，
     # 所以再从 rtti.json 取一遍（主虚表地址）。
     rtti = json.load(open(os.path.join(ROOT, "db", "rtti.json"), encoding="utf-8"))
@@ -290,8 +294,59 @@ def main() -> None:
             }
         out[cls] = item
 
+    # ------------------------------------------------------------------
+    # 用「字段末端」给 sizeof 兜底校准。
+    #
+    # 为什么需要：投票选出的候选可能是**配对错了**的分配 —— 构造函数里还
+    # 嵌着别的分配（子对象、临时缓冲），`push N; call new` 的"最近配对"
+    # 会把那个 N 记到外层类头上。实测 `CCFileClass` 就是这样：投票选出 36
+    # （4 票），而 `db/fields.json` 说这个类的构造函数在 `+0x68` 上写过 4
+    # 字节，**对象至少 108 字节**。108 也在候选里（2 票），只是票少。
+    #
+    # 判据是硬的：字段偏移是"对象内偏移"，它必须落在 sizeof 之内。
+    # 两条数据来自完全不同的机制（分配常量配对 vs 指令流里 this 偏移跟踪），
+    # 所以谁也不能回头改谁 —— 这里只做「候选里挑一个跟字段不矛盾的」。
+    #
+    # 反过来也要守规矩：如果**所有**候选都小于字段末端，那说明其中一条数据
+    # 本身就错了，这时不改，只记 `note` 留给人看。乱猜比不改更坏。
+    fields_end: dict[str, int] = {}
+    fpath = os.path.join(ROOT, "db", "fields.json")
+    if os.path.exists(fpath):
+        for c, d in json.load(open(fpath, encoding="utf-8"))["classes"].items():
+            fields_end[c] = int(d.get("max_end") or 0)
+
+    adj = []
+    for cls, item in out.items():
+        end = fields_end.get(cls, 0)
+        item["fields_end"] = end
+        cand = {int(k): v for k, v in item["candidates"].items()}
+        if end <= 0 or item["sizeof"] >= end:
+            continue
+        keep = {k: v for k, v in cand.items() if k >= end}
+        if not keep:
+            item["note"] = ("字段末端 %d 超过所有候选 %s —— 两者必有一错，"
+                            "留给人看" % (end, sorted(cand)))
+            continue
+        old = item["sizeof"]
+        sz, n = max(keep.items(), key=lambda kv: (kv[1], -kv[0]))
+        adj.append((cls, old, sz, end, cand, keep))
+        item["sizeof"] = sz
+        item["votes"] = n
+        item["calibrated"] = True
+        item["note"] = ("原选 %d 与字段末端 %d 矛盾（%d < %d），"
+                        "改成候选里合法且票数最高的 %d"
+                        % (old, end, old, end, sz))
+
     with open(os.path.join(ROOT, "db", "sizes.json"), "w", encoding="utf-8") as f:
         json.dump({"operator_new": new_va, "classes": out}, f, ensure_ascii=False, indent=1)
+
+    if adj:
+        print("按字段末端校准 sizeof 的类 %d 个：" % len(adj))
+        for cls, old, sz, end, cand, keep in adj:
+            print("  %-34s %d -> %-5d（末端 %d；候选 %s；可用 %s）"
+                  % (cls, old, sz, end, cand, keep))
+    else:
+        print("按字段末端校准 sizeof：本次没有需要改的")
 
     # 输出人类可读的文档
     ml = [
@@ -310,30 +365,50 @@ def main() -> None:
         "   - `push N; call new` 之后紧邻写虚表（构造函数被内联）",
         "   - `push N; call new` 之后 16 条指令内 `call <构造函数>`",
         "   - 工厂函数：整个函数只有一处分配、只调用一个类的构造函数",
+        "4. **用字段末端给候选做硬过滤**（见下）。",
         "",
         "`evidence=new` 表示来自分配大小（直接证据）；`evidence=stride` 表示来自",
         "静态数组遍历步长（间接证据，置信度低一些）。",
         "",
+        "### 为什么需要第 4 步",
+        "",
+        "「最近配对」会配错：构造函数里往往还嵌着**别的**分配（子对象、临时",
+        "缓冲），那些 `push N; call new` 会被记到外层类头上。实测 `CCFileClass`",
+        "就是 —— 投票选出 36（4 票），而字段偏移扫描说这个类的构造函数在",
+        "`+0x68` 上写过 4 字节，**对象至少 108 字节**；108 也在候选里，只是票少。",
+        "",
+        "判据是硬的：字段偏移是『对象内偏移』，必须落在 sizeof 之内。两条数据",
+        "来自完全不同的机制（分配常量配对 vs 指令流里 this 偏移跟踪），谁也不能",
+        "回头改谁。所以规则是：**在候选里挑一个与字段不矛盾的**（优先票数，同票",
+        "取小）；如果连一个都不剩，就不改，只记 `note` 留给人看 —— 那说明两条",
+        "数据里有一条本身错了，乱猜比不改更坏。",
+        "",
+        "被这条规则改过的条目带 `calibrated` 标记，无论票数多少都进 C++ 表。",
+        "",
         "## 结果（共 %d 个类）" % len(out),
         "",
-        "| 类 | sizeof | 证据 | 票数 |",
-        "|---|---:|---|---:|",
+        "| 类 | sizeof | 证据 | 票数 | 字段末端 | 备注 |",
+        "|---|---:|---|---:|---:|---|",
     ]
     for cls in sorted(out, key=lambda c: (-out[c]["sizeof"], c)):
         e = out[cls]
-        ml.append("| `%s` | %d | %s | %d |" % (
-            cls, e["sizeof"], e["evidence"], e["votes"]))
+        ml.append("| `%s` | %d | %s | %d | %s | %s |" % (
+            cls, e["sizeof"], e["evidence"], e["votes"],
+            e.get("fields_end") or "", e.get("note", "")))
     open(os.path.join(ROOT, "docs", "sizes.md"), "w",
          encoding="utf-8", newline="\n").write("\n".join(ml) + "\n")
 
     # 生成 C++ 表。只收票数 >= MIN_VOTES 的，避免把单次巧合当成事实。
+    # 例外：被字段末端校准过的条目**不管票数**都收 —— 它的证据比投票硬，
+    # 「对象的字段延伸到 108」是硬下界，而 36 票是从错的配对上来的。
     MIN_VOTES = 4
     keep = [(c, out[c]) for c in sorted(out, key=lambda c: (-out[c]["sizeof"], c))
-            if out[c]["votes"] >= MIN_VOTES]
+            if out[c]["votes"] >= MIN_VOTES or out[c].get("calibrated")]
     hl = [
         "// 自动生成文件，请勿手改。生成工具：tools/sizeofscan.py",
         "// 数据来源：gamemd.exe 的 `push <size>; call operator new` 与构造函数写虚表的配对。",
-        "// 只保留票数 >= %d 的条目（同 size 被多个独立调用点证实）。" % MIN_VOTES,
+        "// 只保留票数 >= %d 的条目（同 size 被多个独立调用点证实）；" % MIN_VOTES,
+        "// 另外无条件保留被『字段末端』校准过的条目（证据比投票硬）。",
         "// 完整数据见 db/sizes.json，说明见 docs/sizes.md。",
         "#pragma once",
         "#include <cstdint>",

@@ -19,6 +19,7 @@
 | 原始源文件 | **58 个**（来自 assert 的 `__FILE__` 字符串），构建机路径 `D:\ra2mdpost\` |
 | 关键子系统 | 主循环、锁步帧队列、寻路、地图、网络包泵均已定位到具体 VA |
 | C++ 骨架 | 可编译、可运行，寻路并行实测 **3.5~4.0x** 且结果与串行逐位一致 |
+| 对象字段偏移 | **646 个类 / 6965 条**，从构造函数里挖出来的；四条独立证据交叉验证，387 处 RTTI 位移一条不漏 |
 | 已还原模块 | 对象体系、地图/格子、两级寻路、锁步帧队列、主循环、文件系统(MIX)、INI、Locomotor、战斗、阵营/经济、AI 小队与触发、界面、网络接口 |
 
 ---
@@ -37,11 +38,15 @@ tools/           逆向分析工具（Python）
   inidump.py       INI 参考解析 + 逐行对账
   inikeys.py       清点 INI 里**真实出现**的键（P2 打表的证据来源）
   techno.py        类型表打表的独立实现（与 C++ 逐行 diff）
+  fieldscan.py     从构造函数里抽对象字段偏移 -> db/fields.json + src/re/FieldOffsets.h
+  sizeofscan.py    从 `push N; call new` 配对抽类 sizeof -> db/sizes.json
+                   （用 fieldscan 的字段末端硬过滤候选，两条工具互为输入）
   build-msvc.bat   用本机 MSVC 编译 src/
 
 db/              分析数据库（JSON，脚本可重跑）
   rtti.json  classes.md  functions.json  strings.json
   vtables.json  names.json  sources.json  summary.md
+  sizes.json（类 sizeof 实测）  fields.json（类字段偏移）
 
 docs/            逆向笔记
   binary-baseline.md   二进制基线与关键子系统定位
@@ -146,6 +151,52 @@ python tools\inikeys.py "$G"
 `X-macro 声明 N 个键，其中 0 个在数据里一次都没出现`
 （后者是防"键名打错"的闸 —— 打错的键永远不会命中，也不会报任何错）。
 `--top N` 表尾会印"还没类型化的键 Top N"，补字段照着加就行。
+
+### 3.1 对象字段偏移（P3 的地基）
+
+```bash
+# 从 gamemd.exe 的构造函数里抽字段偏移，写 db/fields.json 等三个产物
+python tools\fieldscan.py
+
+# 只看一个类，或列核心继承链
+build\ra2core.exe --layout UnitClass
+build\ra2core.exe --layout
+```
+
+产出：`db/fields.json`（646 个类 / 6965 条）、`docs/fields.md`（人读版）、
+`src/re/FieldOffsets.h`（核心继承链，自动生成，`ra2core` 冒烟测试里做硬判据）。
+
+**验收判据是四条独立证据**，不是"看着合理"：
+
+| 证据 | 判据 | 实测 |
+|---|---|---|
+| sizeof（`db/sizes.json`，另一套分析） | 每个类的字段末端必须落在它自己的 sizeof 之内 | 207 通过 / 435 无基准 / **4 越界**，每条带判定写进 `docs/fields.md` |
+| RTTI 嵌入基类位移 `mdisp`（来自 PE 的 RTTI 段） | 该在 .text 里找得到 `mov [对象+mdisp], <基类主虚表>`，或 `lea ecx,[对象+mdisp]; call <基类构造函数>` | 可判定的 **159 / 159 = 100%** |
+| 同上，当基类**没有虚表**时 | 退一步：该继承链上某个类的构造函数在**有效偏移 mdisp** 上写过东西 | 其余 **228 / 228** —— 387 处一条不漏 |
+| 继承关系 | 沿继承链字段末端必须严格递增 | 固化进冒烟测试，见 `Layout_Check()` |
+
+**为什么"可判定子集"要单独算**：387 处 `mdisp` 里只有 159 处的基类拥有自己的
+RTTI（COL）。其余 228 处的基类是两类**二进制里没有虚表**的东西 —— 纯抽象接口
+（`IUnknown` / `IRTTITypeInfo` / `ILocomotion` / `IPiggyback` / …，MSVC 对
+"没有非内联虚函数、又从不被完整构造"的类既不生成虚表也不生成 COL），以及
+根本没有虚函数的普通子对象（`FlasherClass` / `StageClass`）。实测
+`TechnoClass::ctor@0x6F2B40` 在 240 上写的是 `mov dword ptr [esi+0xf0], ebx`
+（`ebx` 就是 0），根本不是虚表；`AnimClass::ctor@0x421EA0` 在 172 上同理。
+把它们算进分母，会把"可判定的全中"稀释成"387 处只中 41%" —— 那是自欺。
+
+sizeof 与继承链两条已固化进 `ra2core` 冒烟测试（`Layout_Check()`），不成立即
+返回非 0。
+
+**发现的问题不静默吞掉**：越界的类会带上判定写进 `docs/fields.md`，不悄悄放过。
+实测就是这样发现 `db/sizes.json` 里 `CCFileClass` 的 sizeof 取错了 —— 投票选出
+36（4 票），而字段末端是 108；108 本来就在它自己的候选列表里，只是票少。
+`tools/sizeofscan.py` 现在用字段末端**硬过滤候选**（字段偏移是对象内偏移，
+必须落在 sizeof 之内），改过的条目打 `calibrated` 标记并**无条件**进 C++ 表
+（证据比投票硬）；反过来，如果一个合法候选都不剩，就**不改**、只记 `note`
+留给人看 —— 那说明两条数据里有一条本身错了，乱猜比不改更坏。
+
+镜像路径由 `tools/peimage.py` 自动定位（环境变量 `RA2_GAMEMD` 优先）。
+**跨机器复现认入口点与链接时间戳，不认路径。**
 
 渲染层的诊断开关（都是环境变量，默认关）：
 

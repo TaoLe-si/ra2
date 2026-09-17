@@ -20,7 +20,7 @@
 
 ---
 
-## 2. 改动清单（8 个文件）
+## 2. 改动清单（P0/P1/P2 那轮，8 个文件）
 
 | 文件 | 改动 | 原因 |
 |---|---|---|
@@ -32,6 +32,21 @@
 | `src/viewer/ViewerMain.cpp` | `mix2`(单副归档) → `extra`(挂载列表)；新增 `--gamedir`；`--addmix` 可重复 | 一个 `--addmix` 挂不下真实安装的 10 个包 |
 | `README.md` | 补 `/utf-8` 说明 | 防止后人删掉编译选项 |
 | `docs/re-ledger.md` | 新增「归档挂载顺序」与「构建环境」两节 | 留 RE 证据链 |
+
+### 2.1 本轮（P3 字段偏移）改动
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `tools/peimage.py` | `DEFAULT_IMAGE` 改为 `resolve_default_image()` 自动定位 | 旧基线的 `D:\westwood\RA2YR` 在本机不存在，整条分析管线跑不起来 |
+| `tools/analyze.py` | 摘要里补文件大小 + 「跨机器认入口点/时间戳，不认路径」 | 上面那条的配套说明 |
+| `tools/fieldscan.py` | **新增**：从构造函数抽字段偏移 | P3 的地基 |
+| `src/main.cpp` | 新增 `Layout_Check()`（进冒烟测试）与 `--layout` 命令 | 把字段偏移变成可回归的硬判据 |
+| `src/re/FieldOffsets.h` | **新增**（自动生成，核心继承链 17 个类） | 同上 |
+| `.gitignore` | `re/` → `/re/` | 不带前导斜杠的 `re/` 会匹配任意层级，把 `src/re/*.h` 一起挡掉 |
+| `db/summary.md` | 重新生成（仅镜像路径一行变化） | 见第 3 节第 13 项 |
+| `tools/sizeofscan.py` | 新增「字段末端硬过滤候选」；`virtuals.json` 缺失不再中断 | 修 `CCFileClass` 的 sizeof；`virtuals.json` 既不在仓库里也生成不出来，读到的值从头到尾没被用过（见第 3 节第 17 项） |
+| `db/sizes.json` | 重新生成：新增 `fields_end` / `note` / `calibrated` 三个键 | 同上 |
+| `docs/sizes.md` | 重新生成：方法补第 4 步 + 结果表加两列 | 同上 |
 
 ---
 
@@ -51,6 +66,11 @@
 | 10 | `ra2core.exe --typetable <8 个包>` | `TechnoType 553`（列表 559 名字，6 个无段）；rules 477 键种 / 15315 次、art 206 键种 / 7322 次；**逐键对账 0 处不一致**；武器 189 / 弹头 116 / 抛射体 38 / 声音 1018 / 曲目 36 / ai.ini 无 |
 | 11 | `python tools/techno.py <目录> --check build/type_raw.txt` | **22637 行逐行一致**（独立实现，从 MIX 字节重新读起） |
 | 12 | `python tools/inikeys.py <目录>` | 键直方图落 `build/_inikeys.txt`：rules 477 种 / art 206 种 / 武器 52 / 弹头 85 / 抛射体 35 |
+| 13 | `python tools/analyze.py` | 重新生成 `db/functions.json` 等；**除路径一行外与旧基线逐字节相同**（1392506 指令 / 28827 函数 / 1026 虚表 / 16382 字符串）—— 这是"两处 gamemd.exe 是同一构建"的硬证据 |
+| 14 | `python tools/fieldscan.py` | 646 个类 / 6965 条字段；sizeof 越界 **4**（通过 207）；RTTI 嵌入基类位移 **387 处一条不漏**：可判定 159 处**全中**，另 228 处基类无虚表，退到同链写入印证 228 处 |
+| 15 | `ra2core.exe`（无参数） | 冒烟 **22 OK**（比上一轮多 1 条：`Layout_Check()` 字段偏移硬判据）；帧 CRC 仍 `0x15307EAB` |
+| 16 | `ra2core.exe --layout` / `--layout UnitClass` | 核心继承链 17 个类的字段表；`UnitClass` 30 个字段，末端 0x6E8（sizeof 2280 之内） |
+| 17 | `python tools/sizeofscan.py` | 按字段末端校准 1 个类：`CCFileClass` 36 → **108**；另 4 个类所有候选都小于字段末端，只记 `note` 不改。写入 C++ 表 67 条 |
 
 第 4 项复现了文档基线**逐项完全相同**（`1482/1594/559/86/17/7/0`）。
 第 1 项的帧 CRC 也逐位一致 —— 这两条是"代码无回归"的硬证据。
@@ -108,4 +128,17 @@ python tools/raw2png.py build/frame.raw build/ytnk_40.png
    （旧基线里有：`AI.INI=0x9E11E49A @ra2.mix`、`AIMD.INI=0x116F3F76 @ra2md.mix`），
    加载器已就绪、缺素材；剩余 164 种 rules 键 / 95 种 art 键的类型化
    （顺序见 `--typetable --top N` 表尾）；声音/曲目接进 AudioDevice。
-3. P3 逻辑层（字段偏移是主要工作量）、P4 锁步、P5 多核并行。
+3. **P3 已完成第一步**：对象字段偏移表（`tools/fieldscan.py` +
+   `db/fields.json` + `src/re/FieldOffsets.h`），646 个类 / 6965 条。
+   四条独立证据：sizeof 越界 4（206→207 通过）、RTTI 位移 387 处**一条不漏**
+   （159 处可判定全中 + 228 处同链写入）、继承链末端严格递增。
+   **下一步是填字段名** —— 入口是把访问该偏移的代码读通
+   （`TechnoTypeClass::Read_INI` 的读取顺序可以直接和 P2 那轮的
+   INI 键表对照）。P3 剩余还有静态对象池类的 sizeof。
+4. P4 锁步、P5 多核并行。
+5. ~~`db/sizes.json` 里 `CCFileClass` 的 sizeof 取错（36，应为 108）~~
+   —— **本轮已修**：`tools/sizeofscan.py` 用字段末端硬过滤候选，
+   `calibrated` 条目无条件进 `src/re/ObjectSizes.h`。剩 4 个类
+   （`CounterClass`、`CCINIClass`、`BufferIOFileClass`、
+   `PAVReestablish::?$VectorClass`）所有候选都小于字段末端，两者必有一错，
+   **不改**，只记 `note` 留给人看。

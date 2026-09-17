@@ -23,6 +23,7 @@
 #include "data/Ini.h"
 #include "data/TypeDB.h"
 #include "data/UnitModel.h"
+#include "re/FieldOffsets.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/HvaFile.h"
@@ -1556,6 +1557,122 @@ static int Remap_Dump(const std::vector<std::string>& mix_paths,
     return bad == 0 ? 0 : 1;
 }
 
+/// 字段偏移的判据全部是"能算出来"的，不靠肉眼：
+///
+///  1. 每个类的字段末端必须落在它自己的 sizeof 之内（sizeof 来自
+///     `push N; call operator new` 的配对，是**另一条**独立分析）；
+///  2. 沿继承链，字段末端必须**严格递增** —— 派生类只会比基类字段更多；
+///  3. TechnoClass 的 0xF0 / 0xF8 上必须有字段写入，因为 MSVC RTTI 的
+///     基类位移表说 FlasherClass 在 240、StageClass 在 248。这是字段扫描
+///     与 RTTI 两条完全独立的证据的交点，对不上就是有一边错了。
+///
+/// 3 条里任何一条不成立都返回非 0，冒烟测试挂掉。
+static int Layout_Check() {
+    int checked = 0;
+    int entries = 0;
+    for (int i = 0; i < re::kLayoutCount; ++i) {
+        const re::ClassLayout& L = re::kLayouts[i];
+        uint32_t worst = 0;
+        for (int j = 0; j < L.count; ++j) {
+            worst = std::max(worst, L.fields[j].off + L.fields[j].size);
+        }
+        entries += L.count;
+        if (L.size == 0) {
+            continue;
+        }
+        ++checked;
+        if (worst > L.size) {
+            std::printf("FAIL: %s 字段末端 0x%X 超出 sizeof %u\n",
+                        L.name, worst, L.size);
+            return 1;
+        }
+    }
+
+    static const char* const kChain[] = {
+        "AbstractClass", "ObjectClass", "MissionClass", "RadioClass",
+        "TechnoClass", "FootClass", "UnitClass",
+    };
+    uint32_t prev = 0;
+    uint32_t last = 0;
+    for (const char* name : kChain) {
+        const re::ClassLayout* L = re::LayoutOf(name);
+        if (L == nullptr) {
+            std::printf("FAIL: 布局表里没有 %s\n", name);
+            return 1;
+        }
+        uint32_t worst = 0;
+        for (int j = 0; j < L->count; ++j) {
+            worst = std::max(worst, L->fields[j].off + L->fields[j].size);
+        }
+        if (worst <= prev) {
+            std::printf("FAIL: 继承链末端没有递增 —— %s 末端 0x%X <= 前一个 0x%X\n",
+                        name, worst, prev);
+            return 1;
+        }
+        prev = worst;
+        last = worst;
+    }
+
+    const re::ClassLayout* tc = re::LayoutOf("TechnoClass");
+    if (tc == nullptr) {
+        std::printf("FAIL: 布局表里没有 TechnoClass\n");
+        return 1;
+    }
+    bool has_f0 = false;
+    bool has_f8 = false;
+    for (int j = 0; j < tc->count; ++j) {
+        has_f0 = has_f0 || tc->fields[j].off == 0xF0;
+        has_f8 = has_f8 || tc->fields[j].off == 0xF8;
+    }
+    if (!has_f0 || !has_f8) {
+        std::printf("FAIL: TechnoClass 的 0xF0/0xF8 上没有字段，与 RTTI 的"
+                    " FlasherClass/StageClass 基类位移矛盾\n");
+        return 1;
+    }
+
+    std::printf("OK  字段偏移 %d 个类 / %d 个字段；%d 个有 sizeof 基准的全部落在界内；"
+                "继承链末端严格递增（UnitClass 0x%X）\n",
+                re::kLayoutCount, entries, checked, last);
+    return 0;
+}
+
+/// `ra2core --layout [类名]`：把字段偏移表打印出来给人看。
+static int Layout_Dump(const char* want) {
+    if (want == nullptr) {
+        std::printf("%-34s %8s %8s %6s\n", "类", "sizeof", "字段末端", "字段数");
+        for (int i = 0; i < re::kLayoutCount; ++i) {
+            const re::ClassLayout& L = re::kLayouts[i];
+            uint32_t worst = 0;
+            for (int j = 0; j < L.count; ++j) {
+                worst = std::max(worst, L.fields[j].off + L.fields[j].size);
+            }
+            if (L.size != 0) {
+                std::printf("%-34s %8u 0x%-6X %6d\n", L.name, L.size, worst,
+                            L.count);
+            } else {
+                std::printf("%-34s %8s 0x%-6X %6d\n", L.name, "—", worst,
+                            L.count);
+            }
+        }
+        std::printf("\n（这里只含核心继承链；全量类与人读版说明见"
+                    " db/fields.json 与 docs/fields.md）\n");
+        return 0;
+    }
+    const re::ClassLayout* L = re::LayoutOf(want);
+    if (L == nullptr) {
+        std::printf("布局表里没有 %s（只含核心继承链，全量见 db/fields.json）\n", want);
+        return 1;
+    }
+    std::printf("%s  sizeof=%s  字段 %d 个\n", L->name,
+                L->size ? std::to_string(L->size).c_str() : "未知", L->count);
+    for (int j = 0; j < L->count; ++j) {
+        std::printf("  +0x%-5X 宽%d 写%-3u 读%-3u\n", L->fields[j].off,
+                    L->fields[j].size, L->fields[j].written,
+                    L->fields[j].read);
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--vxlit") == 0) {
         if (argc < 3) {
@@ -1663,6 +1780,9 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Detect_Game(argv[2]);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--layout") == 0) {
+        return Layout_Dump(argc > 2 ? argv[2] : nullptr);
     }
     if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
         return Ini_Self_Test();
@@ -1917,6 +2037,13 @@ int main(int argc, char** argv) {
     }
     std::printf("INFO sizeof 实测：UnitClass=%u InfantryClass=%u AircraftClass=%u（共 %d 条）\n",
                 sz_unit, sz_inf, sz_air, re::kSizeCount);
+
+    // ---- 字段偏移 ----
+    // src/re/FieldOffsets.h 由 tools/fieldscan.py 扫 gamemd.exe 的构造函数得出。
+    // 没有字段偏移，还原出的结构体就只是空壳，P3 逻辑层无从下手。
+    if (Layout_Check() != 0) {
+        return 1;
+    }
 
     std::printf("INFO 类层次取自 RTTI 实证：%d 个类 / %d 个虚表槽位\n",
                 re::kClassCount, re::kFlatSlotCount);

@@ -50,4 +50,8 @@ rmcache/
 *.obj
 *.exe
 *.pdb
-re/
+# 逆向的临时工作目录（在仓库根）。必须写成锚定形式：不带前导斜杠的 `re/`
+# 会匹配**任意层级**的 re 目录，把要入库的 src/re/*.h 一并挡掉
+# （ObjectSizes.h / ClassHierarchy.h 更早加入所以逃过了，新生成的
+#  FieldOffsets.h 就被静默忽略了 —— 这条踩过）。
+/re/
