@@ -1833,17 +1833,31 @@ bool GameShell::Load_UI() {
         }
     }
 
-    // Title.PCX：主菜单 Background（GraphicMenu 键；ctor 推 0x8241C8）。
+    // 主菜单背景。gamemd.exe = 尤里的复仇：背景是尤里主题图
+    // （ra2.mix 本地归档 0x2FB23764，640×400，右侧自带按钮暗区）。
+    // Title.PCX（苏军士兵）是**原版 RA2** 的菜单背景 —— 不能用，
+    // 否则就是原版/资料片素材混用。优先按 CRC 取 YR 图，
+    // 取不到（缺归档）才退回 Title.PCX 保底。
     {
         std::vector<uint8_t> raw;
         for (MixFileClass* m : roots_) {
-            raw = m->Read_Deep("TITLE.PCX");
-            if (raw.empty()) {
-                raw = m->Read_Deep("Title.PCX");
-            }
+            raw = m->Read_Deep_By_ID(0x2FB23764u);   // YR 尤里主菜单图
             if (!raw.empty()) {
                 break;
             }
+        }
+        const char* used = "YR title (0x2FB23764)";
+        if (raw.empty()) {
+            for (MixFileClass* m : roots_) {
+                raw = m->Read_Deep("TITLE.PCX");
+                if (raw.empty()) {
+                    raw = m->Read_Deep("Title.PCX");
+                }
+                if (!raw.empty()) {
+                    break;
+                }
+            }
+            used = "Title.PCX（原版兜底，缺 YR 图）";
         }
         if (!raw.empty()) {
             PcxFile pcx;
@@ -1857,7 +1871,8 @@ bool GameShell::Load_UI() {
                     1, renderer_.Upload_Sprite_RGBA(rgba.data(), pcx.Width(),
                                                     pcx.Height()));
                 ++ok;
-                std::printf("  Title.PCX %dx%d\n", ui_title_.w, ui_title_.h);
+                std::printf("  主菜单背景 %s %dx%d\n", used, ui_title_.w,
+                            ui_title_.h);
             }
         }
     }
