@@ -232,3 +232,34 @@
 - 0x7AF540 = 分辨率选择状态机（比较的是**对话框单位**而非像素：
   0x10..0x16C / 0x82..0x12C / 0xAF..0xF5 / 0xFC..0x1D2 / 0xD4..0x1F0 五档，
   对应 0x7B0074 跳转表的 5 个分支）
+
+## 主菜单对话框机制（2026-09-17 第三轮，已解）
+
+**dialog 226 完整控件表（DLGTEMPLATEEX 逐字节解析）：**
+```
+ctl 0  id=0x03EE BUTTON 'GUI:ExitGame'         (425,330 108x23) WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON
+ctl 1  id=0x0683 BUTTON 'GUI:SinglePlayer'     (425,125 108x23)
+ctl 2  id=0x0684 BUTTON 'GUI:WWOnline'         (425,152 108x23)
+ctl 3  id=0x055C BUTTON 'GUI:Options'          (425,233 108x23)
+ctl 4  id=0x0578 BUTTON 'GUI:Network'         (425,179 108x23)
+ctl 5  id=0x0694 STATIC 'GUI:MainMenu'         (425,1   108x10) 标题
+ctl 6  id=0x0695 STATIC 'GUI:Blank'            (2,355  303x12) 底部状态条
+ctl 7  id=0x0686 BUTTON 'GUI:MoviesAndCredits'(425,206 108x23)
+ctl 8  id=0x071A STATIC 无标题                 (0,0    304x266) ← 图像控件（左上大图区）
+ctl 9  id=0x071C STATIC 无标题                 (447,29 61x33)  ← 图像控件（右上小图）
+ctl10  id=0x071D STATIC 'GUI:Blank'            (425,357 108x10) 底部右侧条
+```
+**按钮全是标准 Windows BUTTON**（无 owner-draw 标志）——由游戏的自绘对话框
+框架画（非 Windows 原生按钮样式）。
+
+**对话框切换机制（窗口过程 0x78DA70）：**
+- 自定义消息 `0x4E3` = 弹栈切页（处理 @0x78DB13 → 0x7757E0：对话框栈
+  @0xB72D20[0xB72F50 个] 弹到第 N 层，DestroyWindow 上层，SetWindowPos 顶层）
+- `0x4E4` = 顶层重置（@0x78DAE0）
+- 0x52B9B0 = ctl8(0x71A) 图像控件初始化：GetDlgItem(0x71A) → SetWindowPos
+  按屏幕宽（≤800 时减半边距）居中 → SendMessage(0x71A, 0x4E3, 1) 启动
+  图形；**≤0x280=640 时消息 0x4E4 带 'Ra2ts_s'，否则 'Ra2ts_l'**
+  （_s=small/_l=large：按分辨率的图像变体名）
+- 0x531D89 = SendMessage(0x4E3) 的另一个调用点（对话框流程切换）
+- 0x46DF40 = 控件可见性/禁用批量链（0x522/0x6A3/0x6A4/0x6D1/0x5A8/0x71C/0x468
+  逐个 GetDlgItem → EnableWindow/ShowWindow）
