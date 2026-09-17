@@ -25,6 +25,104 @@ constexpr UINT kSrvCapacity = 4096;
 /// 512² 不够会 Bake 失败，抬到 1024²。
 constexpr int kBakeMax = 1024;
 
+/// 图集边长。R8 的 4096² = 16 MiB，RGBA8 的 = 64 MiB，桌面 GPU 上不算事。
+constexpr int kAtlasSize = 4096;
+/// 超过这个边长就不进图集。地形整图动辄 2K×1.5K，进来会独占好几层 shelf，
+/// 把小精灵挤出去 —— 而小精灵才是批渲染要救的对象（数量多）。
+constexpr int kAtlasMaxSprite = 1024;
+/// 一条实例 = rect(4) + uv(4) + color(4) 个 float。
+constexpr UINT kInstStride = 12 * sizeof(float);
+
+/// 批渲染开关。RA2_NO_SPRITE_BATCH=1 时**走完全相同的旧路径**
+/// （每条精灵一张纹理、每精灵一次 draw）—— 这是逐像素对拍的基准线：
+/// 同一个场景跑两遍，开/关批渲染的回读图必须逐字节一致。
+bool Batch_Enabled() {
+    static const bool off = std::getenv("RA2_NO_SPRITE_BATCH") != nullptr;
+    return !off;
+}
+
+/// RA2_BATCH_STATS=1 时每帧末打一行统计（数在画面里看不出来，得打出来）。
+bool Batch_Stats_On() {
+    static const bool on = std::getenv("RA2_BATCH_STATS") != nullptr;
+    return on;
+}
+
+/// RA2_BATCH_ONE=1：每攒一条实例就立刻发一次 draw（批次恒为 1 条）。
+/// 诊断用 —— 把"多实例的偏移/步长算错"和"图集内容/UV 不对"分开：
+/// 前者在每条一批时必然消失，后者不会。
+bool Batch_One() {
+    static const bool on = std::getenv("RA2_BATCH_ONE") != nullptr;
+    return on;
+}
+
+// ---------------------------------------------------------------------------
+// 批渲染着色器
+//
+// 和上面那套的唯一区别：**实例数据从结构化缓冲来**，不再靠根常量。
+// 上面那套一次 DrawInstanced 只能画一个精灵（实例数恒 1、参数全在 b0），
+// 一帧几百个精灵就得几百次 draw call。这里一条实例 = 一个精灵，
+// 于是"几百个精灵"塌缩成一次 DrawInstanced(6, N)。
+//
+// 纹理改成图集（t0 索引图集 / t2 真彩图集），N 个精灵共用同一个 SRV ——
+// 这正是能把它们合成一次 draw 的前提。每个实例自带 UV 矩形。
+// ---------------------------------------------------------------------------
+constexpr const char* kBatchShaderSource = R"(
+struct BatchInst {
+    float4 rect;    // xy = 左上角 NDC, zw = 尺寸 NDC
+    float4 uv;      // 图集 UV 矩形 {u0,v0,u1,v1}；纯色批次填 (0,0,1,1)
+    float4 color;   // 纯色批次的 RGBA；精灵批次恒 (1,1,1,1)
+};
+StructuredBuffer<BatchInst> inst : register(t3);
+
+// 本批次在实例缓冲里的起点。
+// 【为什么不用 DrawInstanced 第 4 个参数 StartInstanceLocation】
+// 那本该是它的用途（它会把 SV_InstanceID 整体偏移），但实测无效 ——
+// 症状是每一批都从第 0 条实例开始画：整屏只剩一个精灵在重复画，
+// 叠出来的纯色矩形就是"白色方块"。改由根常量显式给起点，与驱动无关。
+cbuffer BatchC : register(b1) {
+    uint batchBase;
+};
+
+struct BVSOut {
+    float4 pos : SV_Position;
+    float2 uv  : TEXCOORD0;
+    // 纯色的颜色必须**逐图元常数**：插值会把一个实心矩形变成四角渐变。
+    // nointerpolation 取 provoking vertex（三角形第一个顶点）的值，
+    // 而同一个实例的 6 个顶点带的是同一份数据，取谁都一样。
+    nointerpolation float4 color : TEXCOORD1;
+};
+
+BVSOut VSBatch(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
+    BatchInst it = inst[batchBase + iid];
+    float2 c = float2((vid == 1 || vid == 4 || vid == 5) ? 1.0 : 0.0,
+                      (vid == 2 || vid == 3 || vid == 5) ? 1.0 : 0.0);
+    BVSOut o;
+    o.pos = float4(it.rect.x + c.x * it.rect.z,
+                   it.rect.y - c.y * it.rect.w, 0.0, 1.0);
+    o.uv = it.uv.xy + c * (it.uv.zw - it.uv.xy);
+    o.color = it.color;
+    return o;
+}
+
+Texture2D    batchIndexAtlas : register(t0);
+Texture2D    batchPalette    : register(t1);
+Texture2D    batchRgbaAtlas  : register(t2);
+SamplerState samp            : register(s0);
+
+float4 PSBatchIndexed(BVSOut i) : SV_Target {
+    uint idx = (uint)(batchIndexAtlas.Sample(samp, i.uv).r * 255.0 + 0.5);
+    return batchPalette.Sample(samp, float2((float(idx) + 0.5) / 256.0, 0.5));
+}
+
+float4 PSBatchRGBA(BVSOut i) : SV_Target {
+    return batchRgbaAtlas.Sample(samp, i.uv);
+}
+
+float4 PSBatchSolid(BVSOut i) : SV_Target {
+    return i.color;
+}
+)";
+
 // ---------------------------------------------------------------------------
 // 着色器
 // ---------------------------------------------------------------------------
@@ -325,6 +423,34 @@ bool Dx12Renderer::Finish_Init() {
     }
     if (!Create_Voxel_Pipeline()) {
         return false;
+    }
+    // 图集与实例缓冲接在体素资源**之后**：它们的描述符槽走 srv_used_ 水位线，
+    // 而体素那套对"自己是第几个槽"有历史预期（见上面的顺序说明）。
+    // 放最后拿剩下的槽，谁的既有契约都不动。
+    if (!Create_Atlas(false, &atlas_idx_)) {
+        return false;
+    }
+    if (!Create_Atlas(true, &atlas_rgba_)) {
+        return false;
+    }
+    if (!Create_Instance_Buffer(1u << 16)) {
+        return false;
+    }
+    if (!Create_Batch_Pipeline()) {
+        return false;
+    }
+    if (std::getenv("RA2_BATCH_DEBUG") != nullptr) {
+        const D3D12_GPU_DESCRIPTOR_HANDLE base =
+            srv_heap_->GetGPUDescriptorHandleForHeapStart();
+        std::printf(
+            "[dbg] srv_size=%u srv_used=%u base=0x%llX 索引图集=0x%llX "
+            "真彩图集=0x%llX 实例=0x%llX\n",
+            srv_size_, srv_used_, static_cast<unsigned long long>(base.ptr),
+            static_cast<unsigned long long>(atlas_idx_.srv.ptr),
+            static_cast<unsigned long long>(atlas_rgba_.srv.ptr),
+            static_cast<unsigned long long>(inst_srv_.ptr));
+        std::printf("[dbg] 实例缓冲容量=%u 条，每步长=%u 字节\n", inst_capacity_,
+                    static_cast<unsigned>(kInstStride));
     }
     return true;
 }
@@ -1347,6 +1473,384 @@ int Dx12Renderer::Bake_Voxels(int geom, const VoxelBakeParams& p, int* out_w,
 }
 
 // ---------------------------------------------------------------------------
+// 批渲染：图集 + 实例缓冲
+// ---------------------------------------------------------------------------
+
+bool Dx12Renderer::Create_Atlas(bool rgba, Atlas* out) {
+    const DXGI_FORMAT fmt =
+        rgba ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_R8_UNORM;
+    D3D12_HEAP_PROPERTIES hp = {};
+    hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC rd = {};
+    rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    rd.Width = static_cast<UINT64>(kAtlasSize);
+    rd.Height = static_cast<UINT>(kAtlasSize);
+    rd.DepthOrArraySize = 1;
+    rd.MipLevels = 1;
+    rd.Format = fmt;
+    rd.SampleDesc.Count = 1;
+    rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    if (FAILED(device_->CreateCommittedResource(
+            &hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr, IID_PPV_ARGS(&out->tex)))) {
+        Fail("创建精灵图集失败");
+        return false;
+    }
+    const UINT slot = Alloc_Srv_Texture(out->tex.Get(), fmt);
+    if (slot == 0xFFFFFFFFu) {
+        Fail("图集描述符槽分配失败");
+        return false;
+    }
+    out->srv = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
+    out->size = kAtlasSize;
+    out->x = out->y = out->shelf = 0;
+    out->state = D3D12_RESOURCE_STATE_COPY_DEST;
+    std::printf("[DX12] 精灵图集 %s %dx%d\n", rgba ? "RGBA" : "索引", kAtlasSize,
+                kAtlasSize);
+    return true;
+}
+
+bool Dx12Renderer::Atlas_Alloc(Atlas* a, int w, int h, int* ox, int* oy) {
+    if (a == nullptr || a->size <= 0 || w <= 0 || h <= 0 || w > a->size ||
+        h > a->size) {
+        return false;
+    }
+    // shelf 打包：横向排，排不下就换一层。简单、无碎片整理、够用
+    // —— 精灵尺寸分布很集中（几十 × 几十到几百 × 几百）。
+    if (a->x + w > a->size) {
+        a->y += a->shelf;
+        a->x = 0;
+        a->shelf = 0;
+    }
+    if (a->y + h > a->size) {
+        return false;
+    }
+    *ox = a->x;
+    *oy = a->y;
+    a->x += w;
+    if (h > a->shelf) {
+        a->shelf = h;
+    }
+    return true;
+}
+
+bool Dx12Renderer::Atlas_Store(Atlas* a, const uint8_t* pixels, int w, int h, int ox,
+                               int oy, int bpp, DXGI_FORMAT fmt) {
+    if (a == nullptr || a->tex == nullptr || pixels == nullptr) {
+        return false;
+    }
+    // 行距必须按 256 对齐 —— 和 Upload_Texture 同一个坑，不 aligned 的
+    // CopyTextureRegion 是 INVALID_CALL，DX12 会直接把设备摘掉。
+    const UINT64 row_bytes = static_cast<UINT64>(w) * bpp;
+    const UINT64 row = (row_bytes + 255) & ~static_cast<UINT64>(255);
+    const UINT64 total = row * static_cast<UINT64>(h);
+
+    ComPtr<ID3D12Resource> up;
+    D3D12_HEAP_PROPERTIES uhp = {};
+    uhp.Type = D3D12_HEAP_TYPE_UPLOAD;
+    D3D12_RESOURCE_DESC urd = {};
+    urd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    urd.Width = total;
+    urd.Height = 1;
+    urd.DepthOrArraySize = 1;
+    urd.MipLevels = 1;
+    urd.SampleDesc.Count = 1;
+    urd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (FAILED(device_->CreateCommittedResource(&uhp, D3D12_HEAP_FLAG_NONE, &urd,
+                                                D3D12_RESOURCE_STATE_GENERIC_READ,
+                                                nullptr, IID_PPV_ARGS(&up)))) {
+        Fail("图集上传缓冲创建失败");
+        return false;
+    }
+    void* mapped = nullptr;
+    if (FAILED(up->Map(0, nullptr, &mapped))) {
+        return false;
+    }
+    for (int y = 0; y < h; ++y) {
+        std::memcpy(static_cast<uint8_t*>(mapped) + y * row,
+                    pixels + static_cast<size_t>(y) * row_bytes,
+                    static_cast<size_t>(row_bytes));
+    }
+    up->Unmap(0, nullptr);
+
+    alloc_->Reset();
+    cmd_->Reset(alloc_.Get(), nullptr);
+    // 图集是"平时可读、写时才当拷贝目标"：两次写入之间必须转回 COPY_DEST。
+    if (a->state != D3D12_RESOURCE_STATE_COPY_DEST) {
+        D3D12_RESOURCE_BARRIER b = Transition(a->tex.Get(), a->state,
+                                             D3D12_RESOURCE_STATE_COPY_DEST);
+        cmd_->ResourceBarrier(1, &b);
+        a->state = D3D12_RESOURCE_STATE_COPY_DEST;
+    }
+    D3D12_TEXTURE_COPY_LOCATION dst = {};
+    dst.pResource = a->tex.Get();
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION src = {};
+    src.pResource = up.Get();
+    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src.PlacedFootprint.Offset = 0;
+    src.PlacedFootprint.Footprint.Format = fmt;
+    src.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+    src.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+    src.PlacedFootprint.Footprint.Depth = 1;
+    src.PlacedFootprint.Footprint.RowPitch = static_cast<UINT>(row);
+    // 目标偏移走 CopyTextureRegion 的参数，不是 footprint —— 纹理是二维的，
+    // 整张图集只有一个 subresource，格子位置只能在调用参数里给。
+    cmd_->CopyTextureRegion(&dst, ox, oy, 0, &src, nullptr);
+    D3D12_RESOURCE_BARRIER b2 = Transition(a->tex.Get(),
+                                          D3D12_RESOURCE_STATE_COPY_DEST,
+                                          D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    cmd_->ResourceBarrier(1, &b2);
+    a->state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    cmd_->Close();
+    ID3D12CommandList* lists[] = {cmd_.Get()};
+    queue_->ExecuteCommandLists(1, lists);
+    Wait_Queue(queue_.Get(), fence_.Get(), fence_event_, fence_value_);
+    return true;
+}
+
+bool Dx12Renderer::Create_Instance_Buffer(UINT instances) {
+    if (instances == 0) {
+        return false;
+    }
+    const UINT64 bytes = static_cast<UINT64>(instances) * kInstStride;
+    ComPtr<ID3D12Resource> buf;
+    D3D12_HEAP_PROPERTIES hp = {};
+    hp.Type = D3D12_HEAP_TYPE_UPLOAD;
+    D3D12_RESOURCE_DESC rd = {};
+    rd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    rd.Width = bytes;
+    rd.Height = 1;
+    rd.DepthOrArraySize = 1;
+    rd.MipLevels = 1;
+    rd.SampleDesc.Count = 1;
+    rd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (FAILED(device_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd,
+                                                D3D12_RESOURCE_STATE_GENERIC_READ,
+                                                nullptr, IID_PPV_ARGS(&buf)))) {
+        Fail("实例缓冲创建失败");
+        return false;
+    }
+    void* ptr = nullptr;
+    if (FAILED(buf->Map(0, nullptr, &ptr))) {
+        Fail("实例缓冲映射失败");
+        return false;
+    }
+    const UINT slot = Alloc_Srv_Structured(buf.Get(), kInstStride, instances);
+    if (slot == 0xFFFFFFFFu) {
+        Fail("实例缓冲描述符槽分配失败");
+        return false;
+    }
+    // 旧缓冲不能立刻放：本帧已经录进去的 DrawInstanced 还指着它。
+    if (inst_buf_) {
+        inst_retired_.push_back(inst_buf_);
+    }
+    inst_buf_ = buf;
+    inst_ptr_ = ptr;
+    inst_capacity_ = instances;
+    inst_used_ = 0;
+    inst_srv_ = Gpu_Handle(srv_heap_.Get(), slot, srv_size_);
+    return true;
+}
+
+void Dx12Renderer::Set_Pipeline(ID3D12PipelineState* pso, ID3D12RootSignature* rs) {
+    if (cur_root_ != rs) {
+        cmd_->SetGraphicsRootSignature(rs);
+        cur_root_ = rs;
+    }
+    if (cur_pso_ != pso) {
+        cmd_->SetPipelineState(pso);
+        cur_pso_ = pso;
+    }
+}
+
+void Dx12Renderer::Flush_Batch() {
+    if (batch_kind_ == 0 || batch_inst_.empty()) {
+        batch_kind_ = 0;
+        batch_inst_.clear();
+        return;
+    }
+    const UINT n = static_cast<UINT>(batch_inst_.size() / 12);
+    // 实例缓冲不够就地换一块。**不能 Reset 命令分配器**（本帧已录的 draw 全丢），
+    // 所以只能新建一块并把描述符换到新槽：本帧前面那些 draw 记的是旧槽，换槽不影响它们。
+    if (inst_ptr_ == nullptr || inst_used_ + n > inst_capacity_) {
+        UINT want = inst_capacity_ ? inst_capacity_ * 2 : (1u << 16);
+        while (want < inst_used_ + n) {
+            want *= 2;
+        }
+        if (!Create_Instance_Buffer(want)) {
+            batch_inst_.clear();
+            batch_kind_ = 0;
+            return;
+        }
+        ++stats_.inst_regrow;
+        std::printf("[DX12] 实例缓冲扩容到 %u 条\n", want);
+    }
+    std::memcpy(static_cast<uint8_t*>(inst_ptr_) +
+                    static_cast<size_t>(inst_used_) * kInstStride,
+                batch_inst_.data(), batch_inst_.size() * sizeof(float));
+    const UINT first = inst_used_;
+    inst_used_ += n;
+    static int dbg_shown = 0;
+    if (std::getenv("RA2_BATCH_DEBUG") != nullptr && dbg_shown < 6) {
+        ++dbg_shown;
+        std::printf("[dbg] 批次 kind=%d n=%u first=%u | 首条 rect=%.4f %.4f %.4f"
+                    " %.4f uv=%.5f %.5f %.5f %.5f col=%.2f %.2f %.2f %.2f\n",
+                    batch_kind_, n, first, batch_inst_[0], batch_inst_[1],
+                    batch_inst_[2], batch_inst_[3], batch_inst_[4],
+                    batch_inst_[5], batch_inst_[6], batch_inst_[7],
+                    batch_inst_[8], batch_inst_[9], batch_inst_[10],
+                    batch_inst_[11]);
+    }
+
+    ID3D12PipelineState* pso = pso_batch_indexed_.Get();
+    if (batch_kind_ == 2) {
+        pso = pso_batch_rgba_.Get();
+        ++stats_.rgba_batches;
+    } else if (batch_kind_ == 3) {
+        pso = pso_batch_solid_.Get();
+        ++stats_.solid_batches;
+    } else {
+        ++stats_.indexed_batches;
+    }
+    Set_Pipeline(pso, root_sig_batch_.Get());
+    cmd_->SetGraphicsRootDescriptorTable(0, atlas_idx_.srv);
+    // t1 仍是那张 256×1 的全局调色板：批渲染下换阵营色依旧只换这张小纹理，
+    // 图集里的索引像素一个字节都不用动。
+    cmd_->SetGraphicsRootDescriptorTable(1, Gpu_Handle(srv_heap_.Get(), 0, srv_size_));
+    cmd_->SetGraphicsRootDescriptorTable(2, atlas_rgba_.srv);
+    cmd_->SetGraphicsRootDescriptorTable(3, inst_srv_);
+    // 起点用根常量给（见着色器里 batchBase 的说明）：一次 memcpy 攒满整帧、
+    // 每批只报一个起点，不需要为每批单独切一块缓冲。
+    cmd_->SetGraphicsRoot32BitConstant(4, first, 0);
+    cmd_->DrawInstanced(6, n, 0, 0);
+
+    stats_.batched_sprites += static_cast<long long>(n);
+    batch_inst_.clear();
+    batch_kind_ = 0;
+}
+
+bool Dx12Renderer::Create_Batch_Pipeline() {
+    ComPtr<ID3DBlob> vs, ps_idx, ps_rgba, ps_solid, err;
+    const UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+    auto compile = [&](const char* entry, const char* target, ComPtr<ID3DBlob>* out,
+                       const char* what) -> bool {
+        err.Reset();
+        if (FAILED(D3DCompile(kBatchShaderSource, std::strlen(kBatchShaderSource),
+                              nullptr, nullptr, nullptr, entry, target, flags, 0,
+                              out->GetAddressOf(), &err))) {
+            if (err) {
+                Fail(static_cast<const char*>(err->GetBufferPointer()));
+            } else {
+                Fail(what);
+            }
+            return false;
+        }
+        return true;
+    };
+    if (!compile("VSBatch", "vs_5_0", &vs, "批渲染顶点着色器编译失败")) {
+        return false;
+    }
+    if (!compile("PSBatchIndexed", "ps_5_0", &ps_idx, "批渲染索引像素着色器编译失败")) {
+        return false;
+    }
+    if (!compile("PSBatchRGBA", "ps_5_0", &ps_rgba, "批渲染真彩像素着色器编译失败")) {
+        return false;
+    }
+    if (!compile("PSBatchSolid", "ps_5_0", &ps_solid, "批渲染纯色像素着色器编译失败")) {
+        return false;
+    }
+
+    // 根签名：t0 索引图集 / t1 调色板 / t2 真彩图集 给像素，t3 实例缓冲给顶点，
+    // b1 一个 32 位根常量 = 本批次的实例起点。
+    D3D12_DESCRIPTOR_RANGE rg[4] = {};
+    for (int i = 0; i < 4; ++i) {
+        rg[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        rg[i].NumDescriptors = 1;
+        rg[i].BaseShaderRegister = static_cast<UINT>(i);
+    }
+    D3D12_ROOT_PARAMETER pa[5] = {};
+    for (int i = 0; i < 4; ++i) {
+        pa[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        // t3 只有顶点着色器读。写成 PIXEL 的话 VSBatch 拿到的是空描述符 ——
+        // 症状是所有精灵塌到同一个位置（和上面那个 b0 可见性的坑同一类）。
+        pa[i].ShaderVisibility = (i == 3) ? D3D12_SHADER_VISIBILITY_VERTEX
+                                          : D3D12_SHADER_VISIBILITY_PIXEL;
+        pa[i].DescriptorTable.NumDescriptorRanges = 1;
+        pa[i].DescriptorTable.pDescriptorRanges = &rg[i];
+    }
+    pa[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    pa[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    pa[4].Constants.Num32BitValues = 1;
+    pa[4].Constants.ShaderRegister = 1;   // b1
+    D3D12_STATIC_SAMPLER_DESC ss = {};
+    ss.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    ss.AddressU = ss.AddressV = ss.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    ss.ShaderRegister = 0;
+    ss.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    D3D12_ROOT_SIGNATURE_DESC rsd = {};
+    rsd.NumParameters = 5;
+    rsd.pParameters = pa;
+    rsd.NumStaticSamplers = 1;
+    rsd.pStaticSamplers = &ss;
+    rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    ComPtr<ID3DBlob> sig, sigerr;
+    if (FAILED(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig,
+                                           &sigerr))) {
+        Fail("序列化批渲染根签名失败");
+        return false;
+    }
+    if (FAILED(device_->CreateRootSignature(0, sig->GetBufferPointer(),
+                                            sig->GetBufferSize(),
+                                            IID_PPV_ARGS(&root_sig_batch_)))) {
+        Fail("创建批渲染根签名失败");
+        return false;
+    }
+
+    // 混合/光栅/RT 格式与老 PSO 逐项相同 —— 批渲染**不能改变混合语义**，
+    // 否则半透明叠加的结果会和老路径不一致，对拍立刻能看出来。
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pd = {};
+    pd.pRootSignature = root_sig_batch_.Get();
+    pd.VS = {vs->GetBufferPointer(), vs->GetBufferSize()};
+    pd.BlendState.RenderTarget[0].BlendEnable = TRUE;
+    pd.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+    pd.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+    pd.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+    pd.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+    pd.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+    pd.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+    pd.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    pd.SampleMask = 0xFFFFFFFF;
+    pd.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    pd.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    pd.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    pd.NumRenderTargets = 1;
+    pd.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pd.SampleDesc.Count = 1;
+    pd.PS = {ps_idx->GetBufferPointer(), ps_idx->GetBufferSize()};
+    if (FAILED(device_->CreateGraphicsPipelineState(&pd,
+                                                    IID_PPV_ARGS(&pso_batch_indexed_)))) {
+        Fail("创建批渲染索引 PSO 失败");
+        return false;
+    }
+    pd.PS = {ps_rgba->GetBufferPointer(), ps_rgba->GetBufferSize()};
+    if (FAILED(device_->CreateGraphicsPipelineState(&pd,
+                                                    IID_PPV_ARGS(&pso_batch_rgba_)))) {
+        Fail("创建批渲染真彩 PSO 失败");
+        return false;
+    }
+    pd.PS = {ps_solid->GetBufferPointer(), ps_solid->GetBufferSize()};
+    if (FAILED(device_->CreateGraphicsPipelineState(&pd,
+                                                    IID_PPV_ARGS(&pso_batch_solid_)))) {
+        Fail("创建批渲染纯色 PSO 失败");
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 int Dx12Renderer::Upload_Sprite(const uint8_t* pixels, int width, int height) {
     return Upload_Texture(pixels, width, height, 1, DXGI_FORMAT_R8_UNORM, false);
 }
@@ -1357,7 +1861,7 @@ int Dx12Renderer::Upload_Sprite_RGBA(const uint8_t* pixels, int width, int heigh
 
 int Dx12Renderer::Upload_Texture(const uint8_t* pixels, int width, int height,
                                  int bpp, DXGI_FORMAT fmt, bool rgba) {
-    if (!device_ || srv_used_ >= srv_capacity_) {
+    if (!device_) {
         return -1;
     }
     // 帧录制中途绝不能 Reset 命令分配器，否则本帧 Clear/Draw 全丢，回读全黑。
@@ -1371,6 +1875,37 @@ int Dx12Renderer::Upload_Texture(const uint8_t* pixels, int width, int height,
         du.width = width;
         du.height = height;
         deferred_uploads_.push_back(std::move(du));
+        return -1;
+    }
+    // ---- 先试图进图集（进得去就能被批渲染，且不占描述符槽）----
+    // 图集满、或精灵超过 kAtlasMaxSprite，就落到下面那条老路：一条精灵一张纹理。
+    // 两条路的**像素结果必须一致**，靠 RA2_NO_SPRITE_BATCH 对拍来证明。
+    if (Batch_Enabled() && width > 0 && height > 0 &&
+        width <= kAtlasMaxSprite && height <= kAtlasMaxSprite) {
+        Atlas* a = rgba ? &atlas_rgba_ : &atlas_idx_;
+        int ax = 0;
+        int ay = 0;
+        if (a->tex && Atlas_Alloc(a, width, height, &ax, &ay) &&
+            Atlas_Store(a, pixels, width, height, ax, ay, bpp, fmt)) {
+            GpuSprite s;
+            s.width = width;
+            s.height = height;
+            s.rgba = rgba;
+            s.batched = true;
+            s.uv[0] = static_cast<float>(ax) / a->size;
+            s.uv[1] = static_cast<float>(ay) / a->size;
+            s.uv[2] = static_cast<float>(ax + width) / a->size;
+            s.uv[3] = static_cast<float>(ay + height) / a->size;
+            sprites_.push_back(s);
+            return static_cast<int>(sprites_.size()) - 1;
+        }
+        ++stats_.atlas_full;
+        if (stats_.atlas_full == 1) {
+            std::printf("[DX12] 图集放不下（%dx%d），本张退回单独纹理\n", width,
+                        height);
+        }
+    }
+    if (srv_used_ >= srv_capacity_) {
         return -1;
     }
     // 纹理拷贝的行距必须按 D3D12_TEXTURE_DATA_PITCH_ALIGNMENT(256) 对齐 ——
@@ -1542,6 +2077,13 @@ void Dx12Renderer::Begin_Frame(const float clear_color[4]) {
         }
     }
     in_frame_ = true;
+    // 批状态每帧归零。实例缓冲**整条复用**：上一帧在 End_Frame 里等过 GPU，
+    // 此刻它已无人引用，从头写是安全的。
+    batch_kind_ = 0;
+    batch_inst_.clear();
+    inst_used_ = 0;
+    cur_pso_ = nullptr;
+    cur_root_ = nullptr;
     frame_index_ = headless_ ? 0 : swapchain_->GetCurrentBackBufferIndex();
     alloc_->Reset();
     cmd_->Reset(alloc_.Get(), nullptr);
@@ -1571,6 +2113,8 @@ void Dx12Renderer::Begin_Frame(const float clear_color[4]) {
     cmd_->RSSetScissorRects(1, &sc);
     cmd_->SetGraphicsRootSignature(root_sig_.Get());
     cmd_->SetPipelineState(pso_.Get());
+    cur_root_ = root_sig_.Get();
+    cur_pso_ = pso_.Get();
     cmd_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     ID3D12DescriptorHeap* heaps[] = {srv_heap_.Get()};
@@ -1584,7 +2128,37 @@ void Dx12Renderer::Draw_Sprite(int sprite, int dx, int dy, float scale) {
         return;
     }
     const GpuSprite& s = sprites_[sprite];
+    if (!s.batched) {
+        // 大件（地形整图）：先把攒着的批次发出去，保证顺序，再单独画。
+        Flush_Batch();
+        Draw_Sprite_Immediate(s, dx, dy, scale);
+        return;
+    }
+    const int kind = s.rgba ? 2 : 1;
+    if (batch_kind_ != kind) {
+        Flush_Batch();
+    }
+    batch_kind_ = kind;
     // 像素坐标 -> NDC。左上角为 (dx, dy)，y 向下为负。
+    const float w = static_cast<float>(s.width) * scale;
+    const float h = static_cast<float>(s.height) * scale;
+    const float inst[12] = {
+        (static_cast<float>(dx) / vp_width_) * 2.0f - 1.0f,
+        1.0f - (static_cast<float>(dy) / vp_height_) * 2.0f,
+        (w / vp_width_) * 2.0f,
+        (h / vp_height_) * 2.0f,
+        s.uv[0], s.uv[1], s.uv[2], s.uv[3],
+        1.0f, 1.0f, 1.0f, 1.0f};
+    batch_inst_.insert(batch_inst_.end(), inst, inst + 12);
+    if (Batch_One()) {
+        Flush_Batch();
+    }
+}
+
+void Dx12Renderer::Draw_Sprite_Immediate(const GpuSprite& s, int dx, int dy,
+                                         float scale) {
+    // 老路子：一条精灵一张纹理、一次 draw。批渲染关掉时所有精灵都走这里，
+    // 所以它必须与批渲染**逐像素等价** —— 这是拿它当基准线的前提。
     const float w = static_cast<float>(s.width) * scale;
     const float h = static_cast<float>(s.height) * scale;
     const float ndc_x = (static_cast<float>(dx) / vp_width_) * 2.0f - 1.0f;
@@ -1594,10 +2168,11 @@ void Dx12Renderer::Draw_Sprite(int sprite, int dx, int dy, float scale) {
     const float xform[8] = {ndc_x, ndc_y, ndc_w, ndc_h, 1.0f, 1.0f, 1.0f, 1.0f};
 
     // 真彩精灵用另一条 PSO（像素着色器不查调色板），其余完全一致。
-    cmd_->SetPipelineState(s.rgba ? pso_rgba_.Get() : pso_.Get());
+    Set_Pipeline(s.rgba ? pso_rgba_.Get() : pso_.Get(), root_sig_.Get());
     cmd_->SetGraphicsRootDescriptorTable(0, s.index_srv);
     cmd_->SetGraphicsRoot32BitConstants(2, 8, xform, 0);
     cmd_->DrawInstanced(6, 1, 0, 0);
+    ++stats_.standalone_draws;
 }
 
 void Dx12Renderer::Draw_Rect(int x, int y, int w, int h, const float color[4]) {
@@ -1608,11 +2183,27 @@ void Dx12Renderer::Draw_Rect(int x, int y, int w, int h, const float color[4]) {
     const float ndc_y = 1.0f - (static_cast<float>(y) / vp_height_) * 2.0f;
     const float ndc_w = (static_cast<float>(w) / vp_width_) * 2.0f;
     const float ndc_h = (static_cast<float>(h) / vp_height_) * 2.0f;
-    const float k[8] = {ndc_x, ndc_y, ndc_w, ndc_h, color[0], color[1], color[2],
-                        color[3]};
-    cmd_->SetPipelineState(pso_solid_.Get());
-    cmd_->SetGraphicsRoot32BitConstants(2, 8, k, 0);
-    cmd_->DrawInstanced(6, 1, 0, 0);
+    if (!Batch_Enabled()) {
+        const float k[8] = {ndc_x, ndc_y, ndc_w, ndc_h, color[0], color[1],
+                            color[2], color[3]};
+        Set_Pipeline(pso_solid_.Get(), root_sig_.Get());
+        cmd_->SetGraphicsRoot32BitConstants(2, 8, k, 0);
+        cmd_->DrawInstanced(6, 1, 0, 0);
+        return;
+    }
+    // 界面图元也攒批：侧栏一帧几十个矩形（底板/边框/血条/小地图格），
+    // 逐个 draw 是纯浪费 —— 它们只有颜色和矩形不同，正好是实例数据。
+    // uv 填满幅占位（纯色路径不采样），颜色走 color 字段。
+    if (batch_kind_ != 3) {
+        Flush_Batch();
+    }
+    batch_kind_ = 3;
+    const float inst[12] = {ndc_x, ndc_y, ndc_w, ndc_h, 0.0f, 0.0f, 1.0f, 1.0f,
+                            color[0], color[1], color[2], color[3]};
+    batch_inst_.insert(batch_inst_.end(), inst, inst + 12);
+    if (Batch_One()) {
+        Flush_Batch();
+    }
 }
 
 void Dx12Renderer::Draw_Rect_Outline(int x, int y, int w, int h,
@@ -1630,6 +2221,17 @@ void Dx12Renderer::Draw_Rect_Outline(int x, int y, int w, int h,
 void Dx12Renderer::End_Frame() {
     if (!in_frame_) {
         return;
+    }
+    // 把最后一段批次发出去。必须在 Close 之前 —— 之后就不能再录命令了。
+    Flush_Batch();
+    if (Batch_Stats_On()) {
+        const BatchStats& s = stats_;
+        std::printf(
+            "[DX12] 批渲染：索引 %d 批 / 真彩 %d 批 / 纯色 %d 批，"
+            "批内精灵 %lld 条，单独 draw %d 次，图集溢出 %d，实例扩容 %d\n",
+            s.indexed_batches, s.rgba_batches, s.solid_batches,
+            s.batched_sprites, s.standalone_draws, s.atlas_full,
+            s.inst_regrow);
     }
     in_frame_ = false;
     ID3D12Resource* bb = Current_Target();
@@ -1734,6 +2336,11 @@ bool Dx12Renderer::Get_Capture(std::vector<uint8_t>& out_rgba, int& out_w, int& 
 
 void Dx12Renderer::Shutdown() {
     sprites_.clear();
+    inst_retired_.clear();
+    inst_ptr_ = nullptr;
+    inst_buf_.Reset();
+    atlas_idx_ = Atlas();
+    atlas_rgba_ = Atlas();
     if (fence_event_) {
         CloseHandle(fence_event_);
         fence_event_ = nullptr;

@@ -84,10 +84,15 @@ python tools/query.py --vtables 20          # 最大的 20 张虚表
 ### 2. 编译还原代码
 
 ```bash
-tools\build-msvc.bat
+python tools/build.py --run     # 一条命令编出 ra2core / ra2view / ra2game
+# 或：tools\build-msvc.bat
 # 或：cmake -B build -S . && cmake --build build --config Release
 build\ra2core.exe
 ```
+
+> `/utf-8` 已写进三个构建入口，**别删**：源码是 UTF-8 无 BOM，中文 Windows
+> （ACP=936）下 `cl.exe` 会按 GBK 解码，直接编不过（C2001/C3688/C4819）。
+> `build.py` 自己拼 INCLUDE/LIB（不碰注册表），适合受限环境。
 
 预期输出：
 
@@ -98,6 +103,36 @@ OK  锁步帧队列行为正确，帧 CRC = 0x15307EAB
 
 第一条是**确定性回归测试**：并行结果与串行逐条比对，不一致即失败。
 任何并行化改动都必须先让它通过。
+
+### 3. 跑起来
+
+```bash
+# 素材查看器：给单位名，模型/炮塔/炮管/HVA 全自动
+build\ra2view.exe --gamedir "<游戏目录>" --unit YTNK --turretyaw 40 --offscreen
+
+# 游戏本体：进战场（--gamedir 会按游戏自己的挂载顺序挂整套素材包，
+# 并自动从 Maps\ 里挑一张默认图）
+build\ra2game.exe --gamedir "<游戏目录>" --offscreen --out build/game.raw
+build\ra2game.exe --gamedir "<游戏目录>"          # 开窗口玩
+```
+
+`--gamedir` 走 `GameInstall::Resolve`（`src/core/GameVersion.cpp`）：
+枚举 `expandmd%02d.mix`、按号升序挂载，缺哪个包会直接报出来。
+`build\ra2core.exe --detect "<游戏目录>"` 可以先看一眼挂载列表。
+
+渲染层的诊断开关（都是环境变量，默认关）：
+
+| 变量 | 作用 |
+|---|---|
+| `RA2_BATCH_STATS=1` | 每帧末打一行批渲染统计（批次数 / 精灵数 / 单独 draw 次数） |
+| `RA2_NO_SPRITE_BATCH=1` | 关掉批渲染，走"一精灵一纹理一 draw"的老路 |
+| `RA2_BATCH_ONE=1` | 每条实例单独一批（诊断偏移类问题用） |
+| `RA2_BATCH_DEBUG=1` | 打印描述符句柄与每批的首条实例数据 |
+| `RA2_D3D_DEBUG=1` | 开 D3D12 调试层 |
+
+**批渲染的正确性判定**：同一个场景跑两遍，`RA2_NO_SPRITE_BATCH=1` 的
+回读图必须与默认（批渲染开着）**逐字节一致**。这是它唯一的硬证据 ——
+画面"看着对"不算。
 
 ---
 

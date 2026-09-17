@@ -33,11 +33,19 @@ using Microsoft::WRL::ComPtr;
 ///     SHP/TMP/PCX 这些"画好的图"走这条 —— 换阵营色只要重传调色板。
 ///   * 真彩（rgba=true）：RGBA8，直接采样。体素走这条 —— 它的明暗是逐体素算好
 ///     烘进去的（见 gfx/VoxelLight.h），没有"换调色板改色"这回事了。
+///
+/// 存储上又分两种，**只影响怎么画，不影响长什么样**：
+///   * batched=true  —— 像素在图集里，uv 有效。归 Draw_Sprite 攒批，
+///     一堆同类精灵合成一次 DrawInstanced。绝大多数精灵走这条。
+///   * batched=false —— 自己一张纹理（index_texture/index_srv 有效）。
+///     放不进图集的大件（地形整图）走这条，仍然是"一条精灵一次 draw"。
 struct GpuSprite {
     int width = 0;
     int height = 0;
     bool rgba = false;
-    ComPtr<ID3D12Resource> index_texture;   ///< R8 或 RGBA8
+    bool batched = false;      ///< 像素在图集里（uv 有效）
+    float uv[4] = {};          ///< 图集内的归一化 UV 矩形 {u0,v0,u1,v1}
+    ComPtr<ID3D12Resource> index_texture;   ///< R8 或 RGBA8（仅 !batched）
     D3D12_GPU_DESCRIPTOR_HANDLE index_srv = {};
 };
 
@@ -89,6 +97,22 @@ public:
 
     /// 设置当前调色板（影响后续所有绘制）。
     void Set_Palette(const Palette& pal);
+
+    /// 批渲染的统计。
+    ///
+    /// 为什么要暴露：批渲染的验收标准就是"一帧的 draw call 数是常数级"，
+    /// 而这个数在画面里看不出来。把它打出来才验得了。
+    struct BatchStats {
+        int indexed_batches = 0;        ///< 索引色批次（每批 = 1 次 draw）
+        int rgba_batches = 0;           ///< 真彩批次
+        int solid_batches = 0;          ///< 纯色批次
+        int standalone_draws = 0;       ///< 没进图集、单独 draw 的精灵
+        long long batched_sprites = 0;  ///< 进过批次的精灵实例数
+        int atlas_full = 0;             ///< 图集放不下、退回单独纹理的次数
+        int inst_regrow = 0;            ///< 实例缓冲扩容次数
+    };
+    const BatchStats& Stats() const noexcept { return stats_; }
+    void Reset_Stats() noexcept { stats_ = BatchStats(); }
 
     /// 上传一份体素几何。返回句柄，-1 表示失败。
     ///
@@ -177,6 +201,61 @@ private:
     /// Upload_Sprite / Upload_Sprite_RGBA 的公共实现。
     int Upload_Texture(const uint8_t* pixels, int width, int height, int bpp,
                        DXGI_FORMAT fmt, bool rgba);
+
+    // ---- 批渲染：精灵图集 + 实例缓冲 ----
+    //
+    // 图集解决的是"纹理绑定"这个唯一的批处理障碍：DX12 里换纹理就要换一次
+    // 根描述符表 + 一次 draw。把 N 张小图拼进一张大图，N 个精灵就共用一个 SRV，
+    // 差异只剩"矩形 + UV"—— 那两样是**实例数据**，可以喂 StructuredBuffer。
+    //
+    // 顺带解决了另一个天花板：老路径每个精灵占一个描述符槽（上限 4096），
+    // 字形缓存这种"越用越多"的东西迟早把它耗光；走图集就不再占槽。
+    /// 一张图集：shelf（一层一层横着摆）打包。
+    struct Atlas {
+        ComPtr<ID3D12Resource> tex;
+        D3D12_GPU_DESCRIPTOR_HANDLE srv = {};
+        int size = 0;
+        int x = 0;      ///< 当前层的写指针
+        int y = 0;      ///< 当前层的顶边
+        int shelf = 0;  ///< 当前层的高度（换层时 y += shelf）
+        D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST;
+    };
+    bool Create_Atlas(bool rgba, Atlas* out);
+    /// 要一块 w×h 的格子。放不下返回 false（调用方退回单独纹理）。
+    static bool Atlas_Alloc(Atlas* a, int w, int h, int* ox, int* oy);
+    bool Atlas_Store(Atlas* a, const uint8_t* pixels, int w, int h, int ox,
+                     int oy, int bpp, DXGI_FORMAT fmt);
+    /// 建/重建实例缓冲。instances 是容量（每条实例 48 字节）。
+    bool Create_Instance_Buffer(UINT instances);
+    bool Create_Batch_Pipeline();
+    /// 把攒下的实例发出去（一次 DrawInstanced）。
+    /// **换批次类型前必须先调**：半透明叠加的绘制顺序必须等于录制顺序。
+    void Flush_Batch();
+    /// 带缓存地切 PSO / 根签名（同一状态下重复 Set 是白开销）。
+    void Set_Pipeline(ID3D12PipelineState* pso, ID3D12RootSignature* rs);
+    /// 没进图集的精灵：老路子，一条精灵一次 draw。
+    void Draw_Sprite_Immediate(const GpuSprite& s, int dx, int dy, float scale);
+
+    Atlas atlas_idx_;
+    Atlas atlas_rgba_;
+    ComPtr<ID3D12RootSignature> root_sig_batch_;
+    ComPtr<ID3D12PipelineState> pso_batch_indexed_;
+    ComPtr<ID3D12PipelineState> pso_batch_rgba_;
+    ComPtr<ID3D12PipelineState> pso_batch_solid_;
+    /// 本帧攒下的实例，每条 12 个 float（rect4 + uv4 + color4）。
+    std::vector<float> batch_inst_;
+    /// 当前攒的是哪一类：0 空 / 1 索引 / 2 真彩 / 3 纯色。
+    int batch_kind_ = 0;
+    ComPtr<ID3D12Resource> inst_buf_;
+    void* inst_ptr_ = nullptr;
+    UINT inst_capacity_ = 0;   ///< 容量（实例条数）
+    UINT inst_used_ = 0;       ///< 本帧已用（条数），Begin_Frame 归零
+    D3D12_GPU_DESCRIPTOR_HANDLE inst_srv_ = {};
+    /// 扩容换下来的旧缓冲：本帧已录的命令还引用着它们，撑到帧结束。
+    std::vector<ComPtr<ID3D12Resource>> inst_retired_;
+    ID3D12PipelineState* cur_pso_ = nullptr;
+    ID3D12RootSignature* cur_root_ = nullptr;
+    BatchStats stats_;
 
     /// 上传一段缓冲（默认堆 + 上传堆 + 拷贝 + 等 GPU）。给体素几何用。
     ComPtr<ID3D12Resource> Upload_Buffer(const void* data, size_t bytes,

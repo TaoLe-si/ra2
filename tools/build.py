@@ -119,7 +119,11 @@ GAME_SOURCES = [
 # 只有查看器需要这些库；ra2core 保持零系统依赖。
 VIEW_LIBS = ["d3d12.lib", "dxgi.lib", "d3dcompiler.lib", "user32.lib", "gdi32.lib", "winmm.lib", "msacm32.lib"]
 
-CFLAGS = ["/nologo", "/std:c++17", "/EHsc", "/W3", "/O2", "/GL-", "/bigobj",
+# /utf-8 不能省：src/ 下全是 **UTF-8 无 BOM** 源码，而 cl.exe 默认按系统 ANSI
+# 代码页读文件。在中文 Windows（ACP=936）上会按 GBK 解码 UTF-8 字节，把引号或
+# 反斜杠吞进"字符"里，于是满屏 C2001「字符串字面量中的换行符」+ C3688 假文本后缀，
+# 同时 32 处 C4819。作者机器开了 UTF-8 系统区域设置（ACP=65001）所以从没撞上。
+CFLAGS = ["/nologo", "/std:c++17", "/utf-8", "/EHsc", "/W3", "/O2", "/GL-", "/bigobj",
           "/D_CRT_SECURE_NO_WARNINGS", "/DUNICODE", "/D_UNICODE"]
 
 

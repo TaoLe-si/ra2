@@ -5,10 +5,12 @@
 //   有主循环、有界面、有鼠标键盘、有逻辑帧。
 //
 // 用法：
-//   ra2game.exe <ra2.mix> [--addmix <ra2md.mix>] [--map <地图.mmx>]
+//   ra2game.exe --gamedir <游戏目录> [--map <地图>] [--offscreen [out.raw]]
+//   ra2game.exe <ra2.mix> [--addmix <ra2md.mix>] [--map <地图>]
 //               [--offscreen [out.raw]]
-//   不传 --map 时挑一张内置地图（先取挂上来的第一个 MAPS*.MIX 里的第一张，
-//   取不到就报出来，不会假装成功）。
+//   不传 --map 时挑一张地图：--gamedir 走安装里的松散 Maps/ 目录
+//   （见 GameInstall::Find_First_Map），否则找同目录的 Arena.mmx。
+//   取不到就报出来，不会假装成功。
 
 #include <windows.h>
 
@@ -19,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "core/GameVersion.h"
 #include "game/GameShell.h"
 
 namespace {
@@ -187,6 +190,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
 
     std::vector<std::string> mixes;
     std::string map_path;
+    std::string gamedir;
     bool offscreen = false;
     bool selftest = false;
     bool menu_only = false;
@@ -199,7 +203,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     int warm_frames = 0;
     std::string out_path = "build/game.raw";
     for (int i = 0; i < argc; ++i) {
-        if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < argc) {
+        if (std::strcmp(args[i], "--gamedir") == 0 && i + 1 < argc) {
+            gamedir = args[++i];
+        } else if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < argc) {
             mixes.push_back(args[++i]);
         } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < argc) {
             map_path = args[++i];
@@ -234,6 +240,30 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             mixes.push_back(args[i]);
         }
     }
+    // ---- --gamedir：按游戏自己的挂载顺序挂整套素材包 ----
+    // 硬编码 "D:\westwood\RA2YR\ra2.mix" 那条默认路径在这台机器上不存在，
+    // 表现是"打开就报打不开 ra2.mix"。真实安装用 GameInstall::Resolve 认，
+    // 顺带拿到宽松地图目录，用来挑默认图。
+    ra2::GamePaths gp;
+    bool have_gp = false;
+    if (!gamedir.empty()) {
+        const std::vector<ra2::GameVersion> vs =
+            ra2::GameInstall::Detect_Installed(gamedir.c_str());
+        if (vs.empty()) {
+            std::printf("[x] %s 里没认出 RA2 / YR 安装\n", gamedir.c_str());
+            return 1;
+        }
+        std::string missing;
+        // Detect_Installed 先 RA2 后 YR：取最后一个 = 有 YR 就优先 YR。
+        if (!ra2::GameInstall::Resolve(gamedir.c_str(), vs.back(), &gp,
+                                       &missing)) {
+            std::printf("[x] 关键文件缺失: %s\n", missing.c_str());
+            return 1;
+        }
+        ra2::GameInstall::Dump(gp);
+        mixes = gp.mixes;
+        have_gp = true;
+    }
     if (mixes.empty()) {
         mixes.push_back("D:\\westwood\\RA2YR\\ra2.mix");
     }
@@ -241,13 +271,26 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         const std::string dir = Dir_Of(mixes.front());
         if (!dir.empty()) {
             Add_Mix_If_Missing(&mixes, dir + "ra2md.mix");
-            Add_Mix_If_Missing(&mixes, dir + "expandmd01.mix");
             Add_Mix_If_Missing(&mixes, dir + "language.mix");
             Add_Mix_If_Missing(&mixes, dir + "langmd.mix");
+            // expandmd 只补这一个：老路径本来就是"给两个包就能跑"的用法。
+            // 要完整挂载请走 --gamedir（那边枚举 expandmd01..99）。
+            Add_Mix_If_Missing(&mixes, dir + "expandmd01.mix");
             // 背景音乐：THEME.MIX（16 曲）/thememd.mix（10 曲），
             // TS 老格式明文 MIX（逐字节验算过——这是 RE）。
             Add_Mix_If_Missing(&mixes, dir + "THEME.MIX");
             Add_Mix_If_Missing(&mixes, dir + "thememd.mix");
+        }
+        // --gamedir 时默认图取安装里的第一张松散地图 —— 本装 root 下
+        // 一个地图归档都没有，地图全在 Maps/ 的子目录里。
+        if (map_path.empty() && have_gp) {
+            map_path = ra2::GameInstall::Find_First_Map(gp);
+            if (!map_path.empty()) {
+                std::printf("默认地图: %s\n", map_path.c_str());
+            } else {
+                std::printf("[!] %s 下没找到任何 .map/.mmx/.yro\n",
+                            gamedir.c_str());
+            }
         }
         // 没给 --map 时默认 Arena（本地安装里有），才能直接开窗口进战场。
         if (map_path.empty() && !dir.empty()) {

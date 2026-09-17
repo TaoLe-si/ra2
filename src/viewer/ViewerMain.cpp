@@ -15,10 +15,23 @@
 //         --turret 0xFDC7E10F --barrel 0x5BA86B7E --turretyaw 35
 //
 // 单位模式（P2 数据层）：给单位名，剩下的自己从 INI 推出来
-//   ra2view.exe <mix> --unit MTNK [--addmix <另一个mix>] [--offscreen]
-//   rules 在 ra2.mix 里、rulesmd 在 ra2md.mix 里，所以看 YR 单位要挂两个：
-//     ra2view.exe D:/westwood/RA2YR/ra2.mix --addmix D:/westwood/RA2YR/ra2md.mix \
-//         --unit YTNK --turretyaw 40 --barrelpitch 25 --offscreen
+//   ra2view.exe <mix> --unit MTNK [--addmix <mix>]... [--offscreen]
+//   --addmix 可以重复；顺序即挂载顺序（后挂的覆盖先挂的）。
+//
+// 最省事的写法是 --gamedir：按游戏自己的挂载顺序把整套素材包挂上
+// （ra2.mix -> ra2md.mix -> expandmd01..99 -> thememd），不用手写一长串。
+//   ra2view.exe --gamedir "D:/RA2/Reunion 2023" --unit YTNK --turretyaw 40 \
+//       --barrelpitch 25 --offscreen
+//
+// 为什么要一整套：rules 在 ra2.mix、rulesmd 在 ra2md.mix，而**改版安装会把它们
+// 挪进 expandmd\*.mix**（实测 Reunion 2023：RULESMD.INI/ARTMD.INI 在 expandmd01、
+// RULES.INI/Art.ini 在 expandmd97）。只挂两个包会直接报「MIX 里没有 RULES/ART」。
+// 手写版：
+//   ra2view.exe D:/RA2/Reunion 2023/ra2.mix \
+//       --addmix "D:/RA2/Reunion 2023/ra2md.mix" \
+//       --addmix "D:/RA2/Reunion 2023/expandmd01.mix" \
+//       --addmix "D:/RA2/Reunion 2023/expandmd97.mix" \
+//       --unit YTNK --turretyaw 40 --barrelpitch 25 --offscreen
 
 // 操作： 空格/点击 = 下一帧；←/→ = HVA 帧；A/D = 转炮塔；
 //        W/S = 抬炮口；ESC = 退出；滚轮/+- = 缩放。
@@ -46,6 +59,10 @@
 #include "map/MapRenderer.h"
 #include "map/TheaterFile.h"
 
+#include "core/GameVersion.h"
+
+#include <memory>
+
 using namespace ra2;
 
 namespace {
@@ -55,10 +72,14 @@ constexpr int kWinH = 768;
 
 struct App {
     MixFileClass mix;
-    /// --addmix：第二个归档。rules 在 ra2.mix、rulesmd 在 ra2md.mix，
-    /// 想按单位名查 YR 的单位就得挂两个。
-    MixFileClass mix2;
-    bool has_mix2 = false;
+    /// 叠加归档（--gamedir 推导 + --addmix，顺序即挂载顺序，"后挂的覆盖先挂的"）。
+    ///
+    /// 为什么是复数：一份真实的 YR 安装不止两个包。实测一份 Reunion 2023：
+    ///   ra2.mix -> ra2md.mix -> expandmd01..97 -> thememd/language/langmd，共 10 个。
+    /// 而 RULESMD.INI/ARTMD.INI 在 expandmd01、RULES.INI/Art.ini 在 expandmd97 ——
+    /// 只能给一个 --addmix 时 --unit 直接报「MIX 里没有 RULES/ART」（实测）。
+    /// 用 unique_ptr 是为了让 MixFileClass 的地址稳定：到处都在存裸指针。
+    std::vector<std::unique_ptr<MixFileClass>> extra;
     ShpFile shp;
     std::string shp_name;
     std::string pal_name;
@@ -130,10 +151,35 @@ Palette g_app_frame_palette;   ///< 当前帧配的调色板
 /// 按 ID 取内容，主归档找不到再去副归档找。
 std::vector<uint8_t> Read_Any(uint32_t id) {
     std::vector<uint8_t> d = g_app.mix.Read_Deep_By_ID(id);
-    if (d.empty() && g_app.has_mix2) {
-        d = g_app.mix2.Read_Deep_By_ID(id);
+    for (const auto& m : g_app.extra) {
+        if (!d.empty()) {
+            break;
+        }
+        d = m->Read_Deep_By_ID(id);
     }
     return d;
+}
+
+/// 按名字取内容：主归档 + 所有叠加归档，以第一个命中为准。
+std::vector<uint8_t> Read_Any_Name(const char* name) {
+    std::vector<uint8_t> d = g_app.mix.Read_Deep(name);
+    for (const auto& m : g_app.extra) {
+        if (!d.empty()) {
+            break;
+        }
+        d = m->Read_Deep(name);
+    }
+    return d;
+}
+
+/// 叠加归档的裸指针视图（不含主归档），按挂载顺序。
+std::vector<MixFileClass*> Extra_Roots() {
+    std::vector<MixFileClass*> v;
+    v.reserve(g_app.extra.size());
+    for (const auto& m : g_app.extra) {
+        v.push_back(m.get());
+    }
+    return v;
 }
 
 /// 把一个已打开的 MIX（含子 MIX）里所有 768 字节条目读成候选调色板。
@@ -827,6 +873,44 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         }
     }
 
+    // ---- --gamedir <游戏目录>：按游戏自己的挂载顺序挂上整套素材包 ----
+    // 必须放在开主归档之前 —— 它决定"主归档是哪一个"。
+    // 顺序由 GameInstall::Resolve 决定（core/GameVersion.cpp），那里枚举
+    // expandmd%02d.mix，而不是只认 expandmd01。
+    const char* gamedir = nullptr;
+    for (int i = 0; i < kMaxArgs; ++i) {
+        if (std::strcmp(args[i], "--gamedir") == 0 && i + 1 < kMaxArgs &&
+            args[i + 1][0]) {
+            gamedir = args[i + 1];
+        }
+    }
+    std::string mix_from_dir;
+    std::vector<std::string> extra_from_dir;
+    if (gamedir != nullptr) {
+        const std::vector<GameVersion> vs = GameInstall::Detect_Installed(gamedir);
+        if (vs.empty()) {
+            std::printf("[x] %s 里没认出 RA2 / YR 安装\n", gamedir);
+            return 1;
+        }
+        GamePaths gp;
+        std::string missing;
+        // Detect_Installed 先 RA2 后 YR；取最后一个 = 有 YR 就优先 YR。
+        if (!GameInstall::Resolve(gamedir, vs.back(), &gp, &missing)) {
+            std::printf("[x] 关键文件缺失: %s\n", missing.c_str());
+            return 1;
+        }
+        if (gp.mixes.empty()) {
+            std::printf("[x] %s 里一个素材包都没有\n", gamedir);
+            return 1;
+        }
+        GameInstall::Dump(gp);
+        mix_from_dir = gp.mixes[0];
+        for (size_t k = 1; k < gp.mixes.size(); ++k) {
+            extra_from_dir.push_back(gp.mixes[k]);
+        }
+        mix_path = mix_from_dir.c_str();
+    }
+
     std::printf("[1] 打开 MIX: %s\n", mix_path);
     if (!g_app.mix.Open(mix_path)) {
         std::printf("[x] MIX 打不开: %s\n", mix_path);
@@ -859,7 +943,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     float barrel_pitch = 0.0f;
     // P2 数据层：--unit <单位名>，车体/炮塔/炮管全从 INI 推，不用手写 ID。
     const char* unit_name = nullptr;
-    const char* addmix_path = nullptr;
+    std::vector<const char*> addmix_paths;   ///< --addmix 可重复，按给出顺序挂
     const char* map_path = nullptr;    ///< --map <地图.mmx/.yro/.map>
     const char* tmp_pal_name = "TEMPERAT.PAL";
     const char* remap_arg = nullptr;
@@ -905,7 +989,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
             unit_name = args[i + 1];
         } else if (std::strcmp(args[i], "--addmix") == 0 && i + 1 < kMaxArgs &&
                    args[i + 1][0]) {
-            addmix_path = args[i + 1];
+            addmix_paths.push_back(args[i + 1]);
         } else if (std::strcmp(args[i], "--map") == 0 && i + 1 < kMaxArgs &&
                    args[i + 1][0]) {
             map_path = args[i + 1];
@@ -943,13 +1027,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         grid = 15;
     }
 
-    // ---- --addmix：第二个归档（YR 的 rulesmd/artmd 就在 ra2md.mix 里）----
-    if (addmix_path && *addmix_path) {
-        if (g_app.mix2.Open(addmix_path)) {
-            g_app.has_mix2 = true;
-            std::printf("MIX2 %s  条目=%d\n", addmix_path, g_app.mix2.Count());
-        } else {
-            std::printf("[!] 副 MIX 打不开: %s\n", addmix_path);
+    // ---- 叠加归档：先 --gamedir 推导出来的，再命令行 --addmix（可重复）----
+    // 两者都遵循"后挂的覆盖先挂的"。
+    {
+        std::vector<std::string> paths = extra_from_dir;
+        for (const char* p : addmix_paths) {
+            paths.emplace_back(p);
+        }
+        for (const std::string& p : paths) {
+            auto m = std::make_unique<MixFileClass>();
+            if (m->Open(p.c_str())) {
+                std::printf("MIX+ %s  条目=%d\n", p.c_str(), m->Count());
+                g_app.extra.push_back(std::move(m));
+            } else {
+                std::printf("[!] 叠加 MIX 打不开: %s\n", p.c_str());
+            }
         }
     }
 
@@ -959,8 +1051,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     if (unit_name && *unit_name) {
         std::vector<const MixFileClass*> mounts;
         mounts.push_back(&g_app.mix);
-        if (g_app.has_mix2) {
-            mounts.push_back(&g_app.mix2);
+        for (const auto& m : g_app.extra) {
+            mounts.push_back(m.get());
         }
         UnitModelDB db;
         if (!db.Load(mounts.data(), static_cast<int>(mounts.size()))) {
@@ -1010,15 +1102,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
     // 放在模式分支之前，VXL / SHP 两条路都要用。
     // rules.ini 在 ra2.mix 里、rulesmd.ini 在 ra2md.mix 里，两个归档都试。
     {
-        std::vector<uint8_t> ini = g_app.mix.Read_Deep("rules.ini");
-        if (ini.empty() && g_app.has_mix2) {
-            ini = g_app.mix2.Read_Deep("rules.ini");
-        }
+        std::vector<uint8_t> ini = Read_Any_Name("rules.ini");
         if (ini.empty()) {
-            ini = g_app.mix.Read_Deep("rulesmd.ini");
-        }
-        if (ini.empty() && g_app.has_mix2) {
-            ini = g_app.mix2.Read_Deep("rulesmd.ini");
+            ini = Read_Any_Name("rulesmd.ini");
         }
         IniFile rules;
         if (!ini.empty() && rules.Load(ini.data(), ini.size())) {
@@ -1064,8 +1150,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
 
         std::vector<MixFileClass*> roots;
         roots.push_back(&g_app.mix);
-        if (g_app.has_mix2) {
-            roots.push_back(&g_app.mix2);
+        {
+            const std::vector<MixFileClass*> more = Extra_Roots();
+            roots.insert(roots.end(), more.begin(), more.end());
         }
         MapRenderer mr;
         if (!mr.Bind(roots, mf, &err)) {
@@ -1160,8 +1247,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int) {
         } else {
             g_app.hva_linked =
                 Find_Hva_For_Vxl(g_app.mix, g_app.vxl, &g_app.hva, &g_app.hva_id);
-            if (!g_app.hva_linked && g_app.has_mix2) {
-                Find_Hva_For_Vxl(g_app.mix2, g_app.vxl, &g_app.hva, &g_app.hva_id);
+            for (const auto& m : g_app.extra) {
+                if (g_app.hva_linked) {
+                    break;
+                }
+                Find_Hva_For_Vxl(*m, g_app.vxl, &g_app.hva, &g_app.hva_id);
             }
         }
         g_app.hva_frame = hva_frame;

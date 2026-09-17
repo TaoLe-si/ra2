@@ -284,3 +284,125 @@ DirectDraw 表面上的自绘！对话框（含主菜单 226）是**真 Win32 �
 **架构结论**：原版主菜单 = 真 Win32 对话框（CreateDialogIndirectParamA）
 叠在游戏表面上；按钮是标准 BUTTON 控件、文字走 GDI TextOut、颜色系统色。
 "还原"它的 1:1 路径 = 保留 GDI 窗口方案或完全复刻其绘制参数（字体/颜色/步进）。
+
+## 归档挂载顺序与扩展包编号（2026-09-17，已解）
+
+**证据**：`gamemd.exe` 的 `.data` 里有一张连续的归档名表，偏移 `0x4266??` 一带：
+
+```
+ELOCAL*.MIX   ECACHE*.MIX   " LOCAL.MIX"  "LOCAL.MIX"  "LOCALMD.MIX"
+"CACHE.MIX"   "CACHEMD.MIX" " CACHE.MIX"
+"RA2.MIX"     "RA2MD.MIX"
+" %s"         "EXPANDMD%02d.MIX"        <-- 编号循环，不是固定 01
+"MIXFILES\MOVMD03.MIX" "MOVMD03.MIX" "MIXFILES\MOVMD*.MIX" ... "MOVIES*.MIX"
+" THEME.MIX"  "     Initializing ThemesMD.MIX"   " MULTIMD.MIX"
+```
+
+因此挂载顺序（后挂的覆盖先挂的）：
+
+```
+LOCAL.MIX/LOCALMD.MIX -> CACHE.MIX/CACHEMD.MIX -> RA2.MIX -> RA2MD.MIX
+  -> EXPANDMD%02d.MIX（i 从 01 到 99，按号升序）-> THEME.MIX/THEMEMD.MIX
+  -> MULTIMD.MIX
+```
+
+**为什么这条必须记住**（踩过）：
+
+- 代码里原先把扩展包写死成 `expandmd01.mix`。**这是错的**，游戏自己按
+  `EXPANDMD%02d.MIX` 循环挂载。
+- 后果在改版安装上立刻可见：Reunion 2023 把 `RULESMD.INI`(0x8218F9F4) /
+  `ARTMD.INI`(0x5B47D8D5) 放在 **expandmd01.mix**，把 `RULES.INI`(0xF025A96C) /
+  `Art.ini`(0xF91B2C8B) 放在 **expandmd97.mix**。
+  只挂 `ra2.mix + ra2md.mix + expandmd01` 时，`--unitdb` 直接报
+  「这些 MIX 里一份 RULES/ART 都没有」。
+- 正确的挂载列表（实测该安装共 10 个包）后，`--unitdb` 复现基线：
+  `段 rules=1482 art=1594 | 单位 559 | 体素 86 | 炮塔 17 | 炮管 7 | 车体缺失 0`。
+
+落地：`GameInstall::Resolve`（`src/core/GameVersion.cpp`）改为枚举 `expandmd%02d.mix`
+（i=1..99，存在的才推入）并追加 `thememd.mix`；`ra2view.exe` 新增 `--gamedir <游戏目录>`
+单点入口，`--addmix` 改为可重复（同时挂多个叠加归档）。
+
+## 构建环境（2026-09-17）
+
+- **源码是 UTF-8 无 BOM，必须带 `/utf-8` 编译。** `cl.exe` 默认按系统 ANSI 代码页
+  读源文件；中文 Windows（ACP=936）下会把 UTF-8 字节按 GBK 解码，把引号/反斜杠
+  吞进"字符"里，于是报满屏 `C2001 字符串字面量中的换行符` + `C3688 伪造文本后缀`，
+  外加 32 处 `C4819`。加上 `/utf-8` 后错误与警告**全部归零**（实测：48 error -> 0）。
+  已补进 `tools/build.py` 的 `CFLAGS`、`CMakeLists.txt`（MSVC 分支）、
+  `tools/build-msvc.bat`。作者机器应开了 UTF-8 系统区域设置（ACP=65001），所以没暴露。
+
+
+## DX12 批渲染：`StartInstanceLocation` 不可用（2026-09-17）
+
+这是本项目**第一个"照规范写、结果不对、且不对的原因在 API 语义上"**的坑，
+单独记一笔，因为它的症状极具误导性。
+
+### 想做的事
+
+把 N 个精灵合成一次 draw：
+
+```cpp
+cmd->DrawInstanced(6, n, 0, first);   // first = 本批在实例缓冲里的起点
+```
+
+顶点着色器里 `BatchInst it = inst[SV_InstanceID];` —— 第 4 个参数按 D3D12 的
+签名就是 `StartInstanceLocation`，会把 `SV_InstanceID` 整体偏移。
+这样"整帧一次 memcpy、每批只报一个起点"就够了，不必为每批单独切缓冲。
+
+### 实测结果
+
+**起点没有生效**：每一批都从实例 0 开始读。症状是一屏只剩一个精灵在同一个位置
+被反复画，而纯色批次（界面矩形）把实例 0 的矩形用 `PSSolid` 画成一片白 ——
+看起来像"贴图错了"或"图集没写上"，实际跟图集毫无关系。
+
+定位手段（值得复用）：
+
+1. `RA2_BATCH_DEBUG=1` 打印每批的 `kind / n / first` 与首条实例的 rect/uv/color
+   → 证明 **CPU 侧数据完全正确**（`first` 依次为 0、102、104、317、410）；
+2. 再打印图集/实例缓冲/调色板的描述符 GPU 句柄
+   → 证明**没有别名**（base+0x40/+0x80/+0xC0/+0x100，各就各位）；
+3. 加开关 `RA2_BATCH_ONE=1`（每条实例单独一批）
+   → CPU 数据仍正确、画面仍然只有一个精灵，**排除"多实例偏移"这一整类猜想**；
+4. 对照既有可用路径：体素烘焙用的是 `DrawInstanced(6, count, 0, 0)`
+   （`StartInstanceLocation` 恒 0），它是好的 —— 差异只落在"非 0 起点"上。
+
+### 落地
+
+不再依赖该参数：批次起点改由根常量传给顶点着色器，自己加下标。
+
+```hlsl
+cbuffer BatchC : register(b1) { uint batchBase; };
+BatchInst it = inst[batchBase + SV_InstanceID];
+```
+
+```cpp
+cmd->SetGraphicsRoot32BitConstant(4, first, 0);
+cmd->DrawInstanced(6, n, 0, 0);
+```
+
+改完**逐字节对拍通过**（3145728 字节 0 处不同）。
+
+### 验收方式（这条比结论更重要）
+
+批渲染"画面对不对"肉眼不可信 —— 第一版看着就很"像那么回事"。
+唯一可信的判据是：**同一个场景，开/关批渲染各跑一遍，回读的 RGBA 必须逐字节相同**。
+为此专门留了 `RA2_NO_SPRITE_BATCH=1`，它走的是**完全没被改动过**的老路径。
+
+## 地图归档的命名（2026-09-17 补正）
+
+`MAPS%02d.MIX` / `MAPSMD%02d.MIX`（EXE 内 `.data` 归档名表）：
+
+```
+0x41C2C4  "MAPS%02d.MIX"       0x426790  "MAPS*.MIX"
+0x41C2EC  "MAPSMD%02d.MIX"     0x42679C  "MAPSMD*.MIX"
+```
+
+和 `EXPANDMD%02d.MIX` 一样是**编号循环**，外加一次通配扫描（`FindFirstFile` 那种用法）。
+原先代码里写死的 `MAPSMD03.MIX` / `maps02.mix` 把"03"当成常量，
+换一份带 `mapsmd01.mix` 的安装就整个找不到地图，已改成枚举 + 通配。
+
+实测那份 Reunion 2023：`MAPS*.MIX` 一个都没有，540 张 `.map` 全在 `Maps/`
+（5 个子目录）下。**注意这条只记布局、不算引擎行为**：
+exe 里既没有 `*.MAP` 通配串、也没有 `Maps` 目录名串，
+"引擎自己扫这几个目录"尚未证实（谁在扫留到 P3 读 `MapSelect` 反汇编再定）。
+落地为 `GamePaths::map_dirs` + `GameInstall::Find_First_Map`。
