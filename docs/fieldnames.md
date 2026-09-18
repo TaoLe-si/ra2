@@ -55,13 +55,13 @@ Strength = ini.ReadInteger(section, "Strength", Strength);
 
 | 证据 | 判据 | 结果 |
 |---|---|---|
-| 宽度与构造函数扫描一致 | 同一个偏移，`Read_INI` 这边的存取宽度必须等于`db/fields.json`（构造函数扫描，另一套无关分析）里的字段宽度 | 318 / 411 条同时被构造函数扫描独立看到，不符 **0** |
+| 宽度与构造函数扫描一致 | 同一个偏移，`Read_INI` 这边的存取宽度必须等于`db/fields.json`（构造函数扫描，另一套无关分析）里的字段宽度 | 313 / 396 条同时被构造函数扫描独立看到，不符 **0** |
 | 偏移落在 sizeof 之内 | sizeof 来自 `push N; call new`（第三条通道） | 越界 **0** |
 | 手工反汇编锚点 | `ObjectTypeClass` 的 `Armor@0x9C` / `Strength@0xA0`，`TechnoTypeClass` 的 `Cost@0x610` / `TechLevel@0x634` / `Sight@0x5E8` / `Points@0x728` | 全部成立，进 `FieldNames_Check()` |
 
-**307 / 411 条是「双向」**（缺省值与结果落在同一个偏移上）—— 最强的证据等级。
+**298 / 396 条是「双向」**（缺省值与结果落在同一个偏移上）—— 最强的证据等级。
 
-另外 93 条是 Read_INI 独有 —— 构造函数不碰这些偏移，这条通道**补上了**那个盲区。
+另外 83 条是 Read_INI 独有 —— 构造函数不碰这些偏移，这条通道**补上了**那个盲区。
 
 （不列「键名必须出现在真实 INI 里」当成一条验证 —— 那是**输入端**的筛子，不是证据：键名本来就是因为命中键集才被收进来的，拿它当验证是同义反复。）
 
@@ -72,7 +72,6 @@ Strength = ini.ReadInteger(section, "Strength", Strength);
 | `TechnoTypeClass` | 178 | 148 | 10 |
 | `BuildingTypeClass` | 170 | 121 | 72 |
 | `InfantryTypeClass` | 22 | 14 | 0 |
-| `IsometricTileTypeClass` | 15 | 9 | 10 |
 | `ObjectTypeClass` | 15 | 9 | 0 |
 | `UnitTypeClass` | 11 | 6 | 1 |
 
@@ -461,26 +460,6 @@ Strength = ini.ReadInteger(section, "Strength", Strength);
 | 0xECA | `USEOWNNAME` | bool | 1 | 是 | 双向 |
 | 0xECB | `JUMPJETTURN` | bool | 1 | 是 | 双向 |
 
-### `IsometricTileTypeClass`
-
-| 偏移 | 键名 | 类型 | 宽度 | 字段表里有 | 证据 |
-|---:|---|---|---:|---|---|
-| 0x9C | `ARMOR` | ? | 4 | **否** | 双向 |
-| 0xA0 | `STRENGTH` | int | 4 | **否** | 双向 |
-| 0x1E8 | `NOSPAWNALT` | bool | 1 | **否** | 双向 |
-| 0x211 | `ALTERNATEARCTICART` | bool | 1 | **否** | 单向-读 |
-| 0x22C | `THEATER` | bool | 1 | **否** | 单向-读 |
-| 0x22D | `CRUSHABLE` | bool | 1 | **否** | 单向-读 |
-| 0x22E | `BOMBABLE` | bool | 1 | **否** | 双向 |
-| 0x22F | `RADARINVISIBLE` | bool | 1 | 是 | 双向 |
-| 0x230 | `SELECTABLE` | bool | 1 | 是 | 双向 |
-| 0x231 | `LEGALTARGET` | bool | 1 | 是 | 单向-读 |
-| 0x232 | `INSIGNIFICANT` | bool | 1 | 是 | 双向 |
-| 0x233 | `IMMUNE` | bool | 1 | 是 | 单向-读 |
-| 0x236 | `VOXEL` | bool | 1 | **否** | 双向 |
-| 0x237 | `NEWTHEATER` | bool | 1 | **否** | 双向 |
-| 0x238 | `HASRADIALINDICATOR` | bool | 1 | **否** | 单向-读 |
-
 ### `ObjectTypeClass`
 
 | 偏移 | 键名 | 类型 | 宽度 | 字段表里有 | 证据 |
@@ -522,13 +501,18 @@ Strength = ini.ReadInteger(section, "Strength", Strength);
 **没配上的键名不进常量表** —— 这条通道只声称它真看到的东西。
 下面把差额数出来，是为了不让『覆盖率』看起来像『全量』。
 
-| Read_INI | 类 | 出现的键 | 配上偏移 | 没配上 |
-|---|---|---:|---:|---:|
-| `0x00712170` | `TechnoTypeClass` | 252 | 250 | 2 |
-| `0x0045FE50` | `BuildingTypeClass` | 193 | 181 | 12 |
-| `0x00747620` | `UnitTypeClass` | 44 | 42 | 2 |
-| `0x005240A0` | `InfantryTypeClass` | 25 | 25 | 0 |
-| `0x005F92D0` | `IsometricTileTypeClass` | 19 | 15 | 4 |
+| Read_INI | 归属类（提供实现的那个） | 出现的键 | 配上偏移 | 没配上 | 同一实现的其它类 |
+|---|---|---:|---:|---:|---|
+| `0x00712170` | `TechnoTypeClass` | 252 | 250 | 2 | — |
+| `0x0045FE50` | `BuildingTypeClass` | 193 | 181 | 12 | — |
+| `0x00747620` | `UnitTypeClass` | 44 | 42 | 2 | — |
+| `0x005240A0` | `InfantryTypeClass` | 25 | 25 | 0 | — |
+| `0x005F92D0` | `ObjectTypeClass` | 19 | 15 | 4 | `IsometricTileTypeClass` |
+
+**「同一实现的其它类」这一列**：这些类的虚表槽位上放着**同一个**函数指针，
+也就是它们没有覆盖 `Read_INI`，用的是祖先的实现。字段归实现者，
+不给它们各复制一份记录 —— 否则「某类有 N 个命名字段」会把继承来的
+当成自己的。这一列留着是为了回答『谁在读这些键』。
 
 **`TechnoTypeClass` 没配上的 2 个键**：
 
@@ -542,7 +526,7 @@ Strength = ini.ReadInteger(section, "Strength", Strength);
 
 > `NORMALTURRETINDEX`、`NORMALTURRETWEAPON`
 
-**`IsometricTileTypeClass` 没配上的 4 个键**：
+**`ObjectTypeClass` 没配上的 4 个键**：
 
 > `ALPHAIMAGE`、`AMBIENTSOUND`、`CRUSHSOUND`、`IMAGE`
 

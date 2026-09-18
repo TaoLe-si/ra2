@@ -5,18 +5,19 @@
   "25": 6
  },
  "verify": {
-  "total": 411,
-  "both": 307,
+  "total": 396,
+  "both": 298,
   "bad_key": 0,
   "bad_width": 0,
-  "cross_seen": 318,
+  "cross_seen": 313,
   "beyond": 0,
-  "new_field": 93
+  "new_field": 83
  },
  "coverage": [
   {
    "fn": "0x0045FE50",
    "cls": "BuildingTypeClass",
+   "read_by": [],
    "keys_seen": 193,
    "paired": 181,
    "unpaired": [
@@ -37,13 +38,17 @@
   {
    "fn": "0x005240A0",
    "cls": "InfantryTypeClass",
+   "read_by": [],
    "keys_seen": 25,
    "paired": 25,
    "unpaired": []
   },
   {
    "fn": "0x005F92D0",
-   "cls": "IsometricTileTypeClass",
+   "cls": "ObjectTypeClass",
+   "read_by": [
+    "IsometricTileTypeClass"
+   ],
    "keys_seen": 19,
    "paired": 15,
    "unpaired": [
@@ -56,6 +61,7 @@
   {
    "fn": "0x00712170",
    "cls": "TechnoTypeClass",
+   "read_by": [],
    "keys_seen": 252,
    "paired": 250,
    "unpaired": [
@@ -66,6 +72,7 @@
   {
    "fn": "0x00747620",
    "cls": "UnitTypeClass",
+   "read_by": [],
    "keys_seen": 44,
    "paired": 42,
    "unpaired": [
@@ -1848,143 +1855,6 @@
     "call": "0x005276D0"
    }
   },
-  "IsometricTileTypeClass": {
-   "557": {
-    "off": 557,
-    "key": "CRUSHABLE",
-    "type": "bool",
-    "width": 1,
-    "level": "单向-读",
-    "at": "0x005F940A",
-    "call": "0x005295F0"
-   },
-   "558": {
-    "off": 558,
-    "key": "BOMBABLE",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F9420",
-    "call": "0x005295F0"
-   },
-   "488": {
-    "off": 488,
-    "key": "NOSPAWNALT",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F943E",
-    "call": "0x005295F0"
-   },
-   "529": {
-    "off": 529,
-    "key": "ALTERNATEARCTICART",
-    "type": "bool",
-    "width": 1,
-    "level": "单向-读",
-    "at": "0x005F9458",
-    "call": "0x005295F0"
-   },
-   "559": {
-    "off": 559,
-    "key": "RADARINVISIBLE",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F946E",
-    "call": "0x005295F0"
-   },
-   "560": {
-    "off": 560,
-    "key": "SELECTABLE",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F948C",
-    "call": "0x005295F0"
-   },
-   "561": {
-    "off": 561,
-    "key": "LEGALTARGET",
-    "type": "bool",
-    "width": 1,
-    "level": "单向-读",
-    "at": "0x005F94A6",
-    "call": "0x005295F0"
-   },
-   "156": {
-    "off": 156,
-    "key": "ARMOR",
-    "type": "?",
-    "width": 4,
-    "level": "双向",
-    "at": "0x005F94BC",
-    "call": "0x004753F0"
-   },
-   "160": {
-    "off": 160,
-    "key": "STRENGTH",
-    "type": "int",
-    "width": 4,
-    "level": "双向",
-    "at": "0x005F94DA",
-    "call": "0x005276D0"
-   },
-   "563": {
-    "off": 563,
-    "key": "IMMUNE",
-    "type": "bool",
-    "width": 1,
-    "level": "单向-读",
-    "at": "0x005F94F4",
-    "call": "0x005295F0"
-   },
-   "562": {
-    "off": 562,
-    "key": "INSIGNIFICANT",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F950A",
-    "call": "0x005295F0"
-   },
-   "568": {
-    "off": 568,
-    "key": "HASRADIALINDICATOR",
-    "type": "bool",
-    "width": 1,
-    "level": "单向-读",
-    "at": "0x005F9528",
-    "call": "0x005295F0"
-   },
-   "556": {
-    "off": 556,
-    "key": "THEATER",
-    "type": "bool",
-    "width": 1,
-    "level": "单向-读",
-    "at": "0x005F95E9",
-    "call": "0x005295F0"
-   },
-   "567": {
-    "off": 567,
-    "key": "NEWTHEATER",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F9605",
-    "call": "0x005295F0"
-   },
-   "566": {
-    "off": 566,
-    "key": "VOXEL",
-    "type": "bool",
-    "width": 1,
-    "level": "双向",
-    "at": "0x005F9623",
-    "call": "0x005295F0"
-   }
-  },
   "ObjectTypeClass": {
    "557": {
     "off": 557,
@@ -1993,7 +1863,10 @@
     "width": 1,
     "level": "单向-读",
     "at": "0x005F940A",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "558": {
     "off": 558,
@@ -2002,7 +1875,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F9420",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "488": {
     "off": 488,
@@ -2011,7 +1887,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F943E",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "529": {
     "off": 529,
@@ -2020,7 +1899,10 @@
     "width": 1,
     "level": "单向-读",
     "at": "0x005F9458",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "559": {
     "off": 559,
@@ -2029,7 +1911,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F946E",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "560": {
     "off": 560,
@@ -2038,7 +1923,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F948C",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "561": {
     "off": 561,
@@ -2047,7 +1935,10 @@
     "width": 1,
     "level": "单向-读",
     "at": "0x005F94A6",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "156": {
     "off": 156,
@@ -2056,7 +1947,10 @@
     "width": 4,
     "level": "双向",
     "at": "0x005F94BC",
-    "call": "0x004753F0"
+    "call": "0x004753F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "160": {
     "off": 160,
@@ -2065,7 +1959,10 @@
     "width": 4,
     "level": "双向",
     "at": "0x005F94DA",
-    "call": "0x005276D0"
+    "call": "0x005276D0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "563": {
     "off": 563,
@@ -2074,7 +1971,10 @@
     "width": 1,
     "level": "单向-读",
     "at": "0x005F94F4",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "562": {
     "off": 562,
@@ -2083,7 +1983,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F950A",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "568": {
     "off": 568,
@@ -2092,7 +1995,10 @@
     "width": 1,
     "level": "单向-读",
     "at": "0x005F9528",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "556": {
     "off": 556,
@@ -2101,7 +2007,10 @@
     "width": 1,
     "level": "单向-读",
     "at": "0x005F95E9",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "567": {
     "off": 567,
@@ -2110,7 +2019,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F9605",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    },
    "566": {
     "off": 566,
@@ -2119,7 +2031,10 @@
     "width": 1,
     "level": "双向",
     "at": "0x005F9623",
-    "call": "0x005295F0"
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
    }
   },
   "TechnoTypeClass": {

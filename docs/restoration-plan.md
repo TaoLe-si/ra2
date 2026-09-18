@@ -46,7 +46,8 @@ Blitter 家族整体作废，不再还原。
 | 继承层次 + 虚表槽位 | ✅ | `src/re/ClassHierarchy.h`，12717 槽位，可运行时 vptr 反查类名 |
 | 关键类 sizeof | 🟡 | 233 个类有实测值；`UnitClass=2280` `InfantryClass=1776` `AircraftClass=1752` |
 | **对象字段偏移** | ✅ | 646 个类 / 6965 条字段，来自构造函数里的 `mov [this+off], …`；**387 处 RTTI 位移一条不漏**（可判定 159 处全中 + 228 处同链写入），sizeof 越界 4；见 `src/re/FieldOffsets.h`、`db/fields.json`、`docs/fields.md` |
-| **对象字段名** | 🟡 | 6 个类 / 396 条，来自二进制自己的 `Read_INI`（键名两侧同偏移，自证）；300 条另被构造函数扫描独立看到且宽度一致；见 `src/re/FieldNames.h`、`db/fieldnames.json`、`docs/fieldnames.md` |
+| **对象字段名** | 🟡 | 5 个类 / 381 条，来自二进制自己的 `Read_INI`（键名两侧同偏移，自证）；300 条另被构造函数扫描独立看到且宽度一致；见 `src/re/FieldNames.h`、`db/fieldnames.json`、`docs/fieldnames.md` |
+| **对象模型** | ✅ | 8 个类 / 1161 条成员铺成能编译的结构体；每条字段一条 `static_assert(offsetof)`，`pack(1)` + 显式填充；末端即 `sizeof` 下界（`TechnoTypeClass >= 0xDF4`）；见 `src/re/ObjectModel.h`、`db/layout.json`、`docs/object-model.md` |
 | **加密 MIX 解密** | ✅ | RSA(320bit) + Blowfish + Westwood CRC，C++ 与 Python 双实现结果一致 |
 | **明文 MIX** | ✅ | flags 不带 0x00020000；地形归档全是这一类，之前完全看不见 |
 | 嵌套 MIX | ✅ | ra2md.mix → 6 个子 MIX → 400 个叶子条目 |
@@ -627,12 +628,67 @@ C++ 常量表收 396 条（23 条有人争但本身是双向证据，保留；15
 `0x678`）、目的地不在对象上的字符串字段 —— 这三类**够不到就不给名字**，
 不做外推（放宽规则只会让错误更自信）。
 
+#### P3 第三步（已完成）：对象模型 —— 从查询表到能编译的结构体
+
+前三步的产物都是**查询表**（按 (类, 偏移) 查宽度/名字、按类查 `sizeof`），
+回答不了两个最基本的问题：代码里写不出 `obj.COST = 1000`，也说不出
+`sizeof(TechnoTypeClass)`（它不在 `operator new` 的 `push` 里）。
+
+`tools/layout.py` 把三张表铺成连续内存布局：
+
+```
+字段集合 = 构造函数写过（fields.json） ∪ Read_INI 读写过（fieldnames.json）
+继承链   = RTTI 的 bases[0]（4 层 8 个类）
+填充     = 字段之间插 u8 _pad_XXXX[n]，使每个已知字段恰好落在它的偏移上
+```
+
+**实测（Reunion 2023）**
+
+```
+8 个类 / 1161 条成员（395 条有 INI 键名），成员严丝合缝铺满每个类的区间
+AbstractClass  0x0  .. 0x21    9 字段
+AbstractType   0x21 .. 0x65    4
+ObjectType     0x65 .. 0x294  65   15 有名
+IsometricTile  0x294.. 0x30C  33
+TechnoType     0x294.. 0xDF4 460  178 有名
+BuildingType   0xDF4.. 0x1792 311 170 有名
+InfantryType   0xDF4.. 0xECC  65   22 有名
+UnitType       0xDF4.. 0xE5F  40   10 有名
+```
+
+**末端是 `sizeof` 的下界，不是 `sizeof`**：`sizeof(TechnoTypeClass) >= 0xDF4`。
+
+**验收**
+
+1. 每条字段一条 `static_assert(offsetof(...) == 偏移)` —— 900+ 条，改坏布局编译不过
+   （这是**回归**闸门，不是取证）。
+2. `#pragma pack(push,1)` 下 MSVC 的 `offsetof`/`sizeof` 精确等于铺出来的偏移。
+   `tools/_probe_offsetof.cpp` 造 4 层继承 + 混合宽度链实测过（0x21/0x65/0x294/0xDF4）。
+3. `Model_Check()`（进冒烟测试）：成员序列严丝合缝；`FieldNames.h` 的 381 条命名
+   字段回来在模型里找同名成员，偏移/宽度/键名三者全对；继承边界由 `offsetof` 实测钉住。
+4. 同一偏移两条通道的宽度不一致 **0** 处；类内重叠字段 **0** 处。
+
+**独立对账（两套证据撞在一起）**：`ObjectTypeClass` 的末端（扫构造函数）= 0x294，
+`TechnoTypeClass` 自有命名字段的最小偏移（扫 `Read_INI`）= 0x294。RTTI 只说"继承"，
+**不给**边界在哪。
+
+**顺带修掉一个上一轮的归属错误**：`Model_Check()` 第一次跑就报
+`IsometricTileTypeClass` 的 `ARMOR@0x9C` 在模型里找不到成员。根因是
+`fieldname.py` 按"深→浅"排函数归属，而 `0x5F92D0` 同时挂在 `ObjectTypeClass` 和
+`IsometricTileTypeClass` 的虚表槽 #25 上 —— 同一个函数体不可能被两个类各自实现，
+实现者是**最浅**的那个。修完 `FieldNames.h` 从 6 类 396 条变成 **5 类 381 条**。
+
+**明确没做的**：`_pad_XXXX` 不代表那些字节是空的（只代表两条通道都没写到）；
+只覆盖 4 层继承链上的 8 个 `*TypeClass`；没有虚函数；成员名就是 INI 键名原样。
+
 #### P3 还差的
 
-- **其余类的字段名**。现在只有各 TypeClass 的 `Read_INI` 那一批（6 个类 / 396 条）。
+- **其余类的字段名**。现在只有各 TypeClass 的 `Read_INI` 那一批（5 个类 / 381 条）。
   构造函数里赋常量、或游戏逻辑里才算出来的字段仍然没名字 —— 需要换通道，
   不再是"读 INI"这一条。
 - 只扫了写虚表的函数；只被游戏逻辑赋值、构造函数不碰的字段还没覆盖。
+- 静态对象池里的类（`BuildingClass`/`CellClass`/`HouseClass`）`sizeof` 拿不到
+  （不是 `operator new` 出来的），字段证据也还没挖，不进对象模型。
 
 ### P4 — 网络与锁步
 
@@ -736,14 +792,28 @@ C++ 常量表收 396 条（23 条有人争但本身是双向证据，保留；15
   顺带证明 `db/sizes.json` 里 `CCFileClass` 的 sizeof（36）取错了，应为 108 ——
   `tools/sizeofscan.py` 已改成用字段末端硬过滤候选，该类已修正为 108。
 - **P3 已完成第二步**：**对象字段名表**（`tools/fieldname.py` +
-  `db/fieldnames.json` + `src/re/FieldNames.h`）—— 6 个类 / 396 条。
+  `db/fieldnames.json` + `src/re/FieldNames.h`）—— 现在 5 个类 / 381 条。
   名字来自二进制**自己的** `Read_INI`：键名两侧同一个偏移各访问一次，自证。
-  可判定的交叉验证：396 条里 **300 条**被构造函数扫描独立看到且宽度一致（不符 0），
+  可判定的交叉验证：381 条里 **300 条**被构造函数扫描独立看到且宽度一致（不符 0），
   sizeof 越界 0，另有 6 条手工反汇编锚点写进 `FieldNames_Check()` 做硬判据。
   覆盖面逐个类对账（TechnoTypeClass 250/252 等），没配上的键名在
   `docs/fieldnames.md` 里列出来，不进常量表。
   够不到的三类（数组字段、经变换再存的字段、栈上缓冲再 `strcpy` 的字符串）
   **不做外推**。详细口径见 `docs/re-ledger.md`。
+  第三步修掉了这里的一个归属错误：函数归属原本按"深→浅"排，把
+  `0x5F92D0`（同时挂在 `ObjectTypeClass` 和 `IsometricTileTypeClass` 槽 #25 上）
+  记成后者的 —— 同一个函数体不可能被两个类各自实现，实现者是**最浅**的那个。
+  修完 6 类 396 条 → **5 类 381 条**。是第三步的 `Model_Check()` 交叉核对抓出来的。
+- **P3 已完成第三步**：**对象模型**（`tools/layout.py` + `src/re/ObjectModel.h` +
+  `db/layout.json` + `docs/object-model.md`）—— 把偏移表 + 名字表 + RTTI 继承
+  铺成**能编译的结构体**，8 个类 / 1161 条成员，严丝合缝铺满每个类的区间。
+  每条字段一条 `static_assert(offsetof(...) == 偏移)`；`#pragma pack(push,1)` +
+  显式 `_pad_XXXX[n]` 填充，MSVC 下 `offsetof`/`sizeof` 精确等于铺出来的偏移
+  （`tools/_probe_offsetof.cpp` 造 4 层继承链实测过）。
+  类末端 = 已知字段的最大末端，是 `sizeof` 的**下界**（`TechnoTypeClass >= 0xDF4`）。
+  独立对账：`ObjectTypeClass` 的末端（扫构造函数 = 0x294）与 `TechnoTypeClass`
+  自有命名字段的最小偏移（扫 `Read_INI` = 0x294）正好吻合 —— RTTI 只说继承，
+  不给边界在哪。
 - 再往后：P3 剩余（其余类的字段名、静态对象池类的 sizeof）、P4 锁步、P5 多核并行。
 - **代码尚未提交**：本轮的 `UnitModel.*`、`Ini::Merge`、`Collect_Leaf_IDs`、
   `ViewerMain --unit/--addmix`、新脚本都在工作区里没 commit（git push 也没通）。

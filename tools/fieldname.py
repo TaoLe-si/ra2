@@ -278,13 +278,24 @@ def scan_readini(img: PEImage, rtti: dict, funcs: dict, keys: set[str],
             if x.address > va + 0x20:
                 break
         attach = sorted({c for c, _i in slot_of.get(va, [])},
-                        key=lambda c: -depth.get(c, 0))
+                        key=lambda c: depth.get(c, 0))
+        # attach[0] 是**提供实现的类**，其余是"虚表里拿到了同一个函数指针、
+        # 但自己没覆盖 Read_INI 的派生类"。
+        #
+        # 这里曾经排反过（按 -depth 降序），于是 0x5F92D0 被记成
+        # IsometricTileTypeClass 的 —— 而它同时挂在 ObjectTypeClass 的同一个虚表槽上，
+        # 两者不可能各自实现同一个函数体。RTTI 说 IsometricTileTypeClass 继承
+        # ObjectTypeClass，所以实现只能是最浅的那一个（祖先的槽位上放着别的函数）。
+        # 「最浅 = 实现者」的判据：某类槽位上是这个函数、而它父类槽位上不是，
+        # 那它的这条槽位就是它自己改的。
         if this_name is None:
             diag.append((va, "认不出 this 寄存器（函数头没有 `mov r,ecx`）"))
             continue
         if not attach:
             diag.append((va, "不在任何虚表上，无法归属类"))
             continue
+        owner = attach[0]
+        read_by = attach[1:]
 
         # ---- 一趟扫描：收集 载入 / 存入 / 取地址 / push快照 / 键 / 调用 ----
         loads: list[tuple[int, int, int, int]] = []   # (pos, off, width, reg)
@@ -417,7 +428,7 @@ def scan_readini(img: PEImage, rtti: dict, funcs: dict, keys: set[str],
             if off_a is not None and off_b is not None and off_a != off_b:
                 # 两侧指向不同偏移 —— 这次配对没有可信的结论。
                 # **不猜**：记进冲突表给人看，绝不写进常量表。
-                conflicts.append({"cls": attach[0], "key": key,
+                conflicts.append({"cls": owner, "key": key,
                                   "load_off": off_a, "store_off": off_b,
                                   "at": "0x%08X" % ins[i].address})
                 continue
@@ -444,21 +455,24 @@ def scan_readini(img: PEImage, rtti: dict, funcs: dict, keys: set[str],
             rec = {"off": off, "key": key, "type": ty, "width": width,
                    "level": level, "at": "0x%08X" % ins[i].address,
                    "call": ("0x%08X" % ctgt) if ctgt else None}
+            if read_by:
+                # 这些类没覆盖 Read_INI，用的是同一个实现。留痕，但不给它们
+                # 复制一份记录 —— 字段归实现者，不归"继承了它的人"。
+                rec["read_by"] = read_by
             covered.add(key)
-            for c in attach:
-                bucket = data.setdefault(c, {})
-                old = bucket.get(off)
-                if old is not None and old["key"] != key:
-                    old.setdefault("conflict", []).append(key)
-                    continue
-                if old is None or _rank(level) < _rank(old["level"]):
-                    bucket[off] = rec
+            bucket = data.setdefault(owner, {})
+            old = bucket.get(off)
+            if old is not None and old["key"] != key:
+                old.setdefault("conflict", []).append(key)
+                continue
+            if old is None or _rank(level) < _rank(old["level"]):
+                bucket[off] = rec
 
         # 覆盖面留痕：哪些键在这条 Read_INI 里出现了、却没配上。
         # **不掩盖**：配不上的键名不进常量表，但要在文档里数出来。
         seen_keys = {k for _i, k in keyst}
         coverage.append({
-            "fn": "0x%08X" % va, "cls": attach[0],
+            "fn": "0x%08X" % va, "cls": owner, "read_by": read_by,
             "keys_seen": len(seen_keys), "paired": len(covered),
             "unpaired": sorted(seen_keys - covered),
         })
@@ -631,13 +645,20 @@ def write_docs(res: dict, ver: dict, path: str) -> None:
         A("**没配上的键名不进常量表** —— 这条通道只声称它真看到的东西。")
         A("下面把差额数出来，是为了不让『覆盖率』看起来像『全量』。")
         A("")
-        A("| Read_INI | 类 | 出现的键 | 配上偏移 | 没配上 |")
-        A("|---|---|---:|---:|---:|")
+        A("| Read_INI | 归属类（提供实现的那个） | 出现的键 | 配上偏移 | 没配上 | 同一实现的其它类 |")
+        A("|---|---|---:|---:|---:|---|")
         for c in sorted(res["coverage"], key=lambda d: -d["keys_seen"]):
-            A("| `%s` | `%s` | %d | %d | %d |"
+            A("| `%s` | `%s` | %d | %d | %d | %s |"
               % (c["fn"], c["cls"], c["keys_seen"], c["paired"],
-                 len(c["unpaired"])))
+                 len(c["unpaired"]),
+                 "、".join("`%s`" % x for x in c.get("read_by", [])) or "—"))
         A("")
+        if any(c.get("read_by") for c in res["coverage"]):
+            A("**「同一实现的其它类」这一列**：这些类的虚表槽位上放着**同一个**函数指针，")
+            A("也就是它们没有覆盖 `Read_INI`，用的是祖先的实现。字段归实现者，")
+            A("不给它们各复制一份记录 —— 否则「某类有 N 个命名字段」会把继承来的")
+            A("当成自己的。这一列留着是为了回答『谁在读这些键』。")
+            A("")
         for c in sorted(res["coverage"], key=lambda d: -d["keys_seen"]):
             if not c["unpaired"]:
                 continue

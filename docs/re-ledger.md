@@ -802,3 +802,125 @@ FAIL: TechnoTypeClass 的 0x610 应该是 COST，查到的却是 (没有)
   （`Speed`）、目的地不在对象上的字符串字段，这三类**够不到**，不做外推。
 - 类型只区分 `ReadBool` / `ReadInteger` 两个入口，其余一律 `?`。
   `AmbientSound` 这类"值是整数"的键也从收字符串的入口过 —— 硬标 `str` 就是编造。
+
+---
+
+## 对象模型：三张表铺成能编译的结构体（2026-09-18，P3 第三步）
+
+工具 `tools/layout.py`，产物 `src/re/ObjectModel.h`、`db/layout.json`、
+`docs/object-model.md`。
+
+### 为什么非做不可
+
+前三轮的产物都是**查询表**：按 (类, 偏移) 查宽度、按 (类, 偏移) 查名字、按类查
+`sizeof`。查询表回答不了两个最基本的问题：
+
+- 代码里写不出 `obj.COST = 1000`（没有 `COST` 这个成员）；
+- 说不出 `sizeof(TechnoTypeClass)`（它不在 `operator new` 的 `push` 里）。
+
+把 (偏移, 宽度, 名字) 按 RTTI 的继承链铺成**连续内存布局**，这两件事同时解决。
+三步：
+
+1. **字段集合** = 构造函数写过（`fields.json`）∪ Read_INI 读写过（`fieldnames.json`）。
+   同一偏移两条通道的宽度必须一致，不一致直接终止（本轮 0 处）。
+2. **继承链**取自 RTTI 的 `bases[0]`，共 4 层 8 个类。
+   子类只声明"偏移 ≥ 父类末端"的部分。
+3. **不满就填**：字段之间插 `u8 _pad_XXXX[n]`，使每个已知字段恰好落在它的偏移上。
+
+### 本轮算出来的数
+
+| 类 | 父类 | 本体起点 | 末端 | 已知字段 | 有名字 | 填充字节 |
+|---|---|---|---|---|---|---|
+| `AbstractClass` | （根） | 0x0 | 0x21 | 9 | 0 | 3 |
+| `AbstractTypeClass` | `AbstractClass` | 0x21 | 0x65 | 4 | 0 | 61 |
+| `ObjectTypeClass` | `AbstractTypeClass` | 0x65 | 0x294 | 65 | 15 | 392 |
+| `IsometricTileTypeClass` | `ObjectTypeClass` | 0x294 | 0x30C | 33 | 0 | 18 |
+| `TechnoTypeClass` | `ObjectTypeClass` | 0x294 | 0xDF4 | 460 | 178 | 1490 |
+| `BuildingTypeClass` | `TechnoTypeClass` | 0xDF4 | 0x1792 | 311 | 170 | 1640 |
+| `InfantryTypeClass` | `TechnoTypeClass` | 0xDF4 | 0xECC | 65 | 22 | 34 |
+| `UnitTypeClass` | `TechnoTypeClass` | 0xDF4 | 0xE5F | 40 | 10 | 4 |
+| **合计** | | | | **987** | **395** | **3642** |
+
+**末端是 `sizeof` 的下界，不是 `sizeof`**。能说出口的是
+`sizeof(TechnoTypeClass) >= 0xDF4`。
+
+### `#pragma pack(push,1)` 是故意的
+
+二进制里的布局是事实，不能让它被编译器的对齐规则改写。pack(1) 下 MSVC 的
+`offsetof` / `sizeof` 精确等于铺出来的偏移。这一点**实测过**，不是推测：
+`tools/_probe_offsetof.cpp` 造了一条 4 层继承 + 混合宽度 + pack(1) 的链，
+`sizeof`（0x21/0x65/0x294/0xDF4）与跨层 `offsetof` 全部对上。
+
+代价：`offsetof` 用在非 standard-layout 类型上是**条件支持**的（每一层基类都有
+数据成员，整个链不是 standard-layout）。MSVC 对单继承非虚基类给出正确结果，
+并且这里的结果被 900 多条 `static_assert` 逐条钉过 —— 是"在目标编译器上已验证"，
+不是"标准保证"。换编译器要重跑这一层。
+
+### 独立对账
+
+**（一）继承边界精确吻合 —— 两套独立证据撞在一起。**
+`ObjectTypeClass` 的末端（它自己构造函数写过的最远字段）= **0x294**；
+`TechnoTypeClass` 的**自有**命名字段里最小的偏移 = **0x294**。
+前者来自扫构造函数，后者来自扫 `Read_INI`。RTTI 只说"继承"，**不给**边界在哪。
+
+**（二）子类在祖先区留下的痕迹，祖先必须已经认识。** 子类构造函数内联父类初始化、
+子类 `Read_INI` 也会写继承来的字段，这些偏移必须能在祖先链的字段表里找到且名字一致。
+本轮无异常。顺带量出一条有信息量的注记：
+
+> `BuildingTypeClass` / `UnitTypeClass` / `InfantryTypeClass` 的构造函数都写了祖先区的
+> `0xD2E`、`0xD35`、`0xD36`、`0xD38`、`0xD3B`、`0xD96`、`0xD97` —— 而
+> `TechnoTypeClass` 自己的构造函数**没写过**这些字节，名字是它的 `Read_INI` 通道给的。
+
+**（三）类内不得有重叠字段。** 重叠说明至少有一条写记录被归错了。本轮 0 处。
+
+**（四）编译期 + 运行期两道闸门。** 头文件里每条字段一条
+`static_assert(offsetof(...) == 偏移)`；`Model_Check()` 再在运行期把
+`FieldNames.h` 的每条命名字段拿回来在模型里找同名成员（偏移、宽度、键名三者都要对）。
+
+### 这一步把一个上一轮的归属错误逼了出来
+
+`Model_Check()` 第一次跑就红：
+
+```
+FAIL: IsometricTileTypeClass 的命名字段 0x9C（ARMOR）在模型里找不到成员
+```
+
+顺着查下去，是 `tools/fieldname.py` 的**函数归属**排反了：它按
+`-depth`（深→浅）排序，取 `attach[0]` 当归属类。而 `0x5F92D0` 同时挂在
+`ObjectTypeClass` 和 `IsometricTileTypeClass` 的虚表槽 #25 上 ——
+**同一个函数体不可能被两个类各自实现**，RTTI 说后者继承前者，
+所以实现者是**最浅**的那一个（祖先的槽位上放着别的函数）。
+
+排反的后果不是小错：`IsometricTileTypeClass` 凭空多出 15 个"自己的"字段，
+而这 15 个偏移（0x9C/0xA0/0x1E8/0x211/0x22C~0x238）**全部落在
+`ObjectTypeClass` 的本体里**。
+
+修法两处，缺一不可：
+
+1. 排序改 `depth.get(c, 0)` 升序 → `attach[0]` 是提供实现的类；
+   没覆盖 `Read_INI` 的派生类进 `read_by` 字段留痕，回答"谁在读这些键"。
+2. 记录**不再给每个 attach 的类各复制一份** —— 字段归实现者，
+   否则"某类有 N 个命名字段"会把继承来的算成自己的。
+
+修完 `IsometricTileTypeClass` 自有命名字段 = 0，与对象模型的结论一致。
+`FieldNames.h` 从 6 类 396 条变成 **5 类 381 条**（那 15 条换了个类名）。
+
+**这件事的意义在于**：`Model_Check()` 不是"再跑一遍生成器"。它拿模型去要
+`FieldNames.h` 的账，两条**独立生成**的表对不上就报错 —— 而它真的抓到了一个
+人工审阅很难发现的归属错误。窄口径的交叉核对比宽口径的自证有用得多。
+
+顺带也确认了一个**不是**错误的相似现象：`UnitTypeClass::Read_INI` 读的
+`SPEEDTYPE` 落在 `0x67C`，那是 `TechnoTypeClass` 的字段。派生类的 `Read_INI`
+去写继承来的字段是正常的，所以模型在查名字时沿父类链往上找，
+并把"落在继承来的字段上"的条数单独数出来（本轮 381 条里有 **1** 条）。
+
+### 明确没做到的
+
+- 只覆盖 4 层继承链上的 8 个 `*TypeClass`。`BuildingClass` / `CellClass` /
+  `HouseClass` 这些静态对象池里的类 `sizeof` 拿不到、字段证据也没挖，不进模型。
+- **不表示未知**。`_pad_XXXX` 只代表"构造函数和 `Read_INI` 都没写到那里"，
+  不代表那些字节是空的。`UnitTypeClass` 覆盖率 3.5% 是这个意思，
+  不是"它只有 130 字节有内容"。
+- **没有语义、没有虚函数**。成员名就是 INI 键名原样（有据可查），
+  没换成编出来的 CamelCase 内部名字；虚表信息在 `ClassHierarchy.h` / `docs/vtables.md`。
+- `static_assert` 守的是**回归**，不是取证。偏移本身来自反汇编。

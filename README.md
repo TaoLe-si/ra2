@@ -20,7 +20,8 @@
 | 关键子系统 | 主循环、锁步帧队列、寻路、地图、网络包泵均已定位到具体 VA |
 | C++ 骨架 | 可编译、可运行，寻路并行实测 **3.5~4.0x** 且结果与串行逐位一致 |
 | 对象字段偏移 | **646 个类 / 6965 条**，从构造函数里挖出来的；四条独立证据交叉验证，387 处 RTTI 位移一条不漏 |
-| 对象字段**名** | **6 个类 / 396 条**，从二进制自己的 `Read_INI` 里读出来的 —— 键名两侧同偏移，自证；300 条另被构造函数扫描独立看到且宽度一致 |
+| 对象字段**名** | **5 个类 / 381 条**，从二进制自己的 `Read_INI` 里读出来的 —— 键名两侧同偏移，自证；300 条另被构造函数扫描独立看到且宽度一致 |
+| 对象模型 | **8 个类 / 1161 条成员**铺成能编译的结构体（`src/re/ObjectModel.h`）；每条字段一条 `static_assert`，`pack(1)` + 显式填充，`offsetof` 与实测偏移逐条相等；末端是 `sizeof` 的下界 |
 | 已还原模块 | 对象体系、地图/格子、两级寻路、锁步帧队列、主循环、文件系统(MIX)、INI、Locomotor、战斗、阵营/经济、AI 小队与触发、界面、网络接口 |
 
 ---
@@ -44,6 +45,8 @@ tools/           逆向分析工具（Python）
                    -> db/fieldnames.json + src/re/FieldNames.h
   sizeofscan.py    从 `push N; call new` 配对抽类 sizeof -> db/sizes.json
                    （用 fieldscan 的字段末端硬过滤候选，两条工具互为输入）
+  layout.py        把偏移表 + 名字表 + RTTI 继承铺成能编译的结构体
+                   -> src/re/ObjectModel.h + db/layout.json
   build-msvc.bat   用本机 MSVC 编译 src/
 
 db/              分析数据库（JSON，脚本可重跑）
@@ -51,6 +54,7 @@ db/              分析数据库（JSON，脚本可重跑）
   vtables.json  names.json  sources.json  summary.md
   sizes.json（类 sizeof 实测）  fields.json（类字段偏移）
   fieldnames.json（字段名 + 覆盖面对账 + 争议留痕）
+  layout.json（对象模型：每个类的成员序列、来源、填充）
 
 docs/            逆向笔记
   binary-baseline.md   二进制基线与关键子系统定位
@@ -244,8 +248,17 @@ mov dword ptr [ebp + 0x610], eax   ; 结果存回**同一个**字段
 
 覆盖面对账（`db/fieldnames.json` 的 `coverage` 段）：TechnoTypeClass 252 个键配上
 250、BuildingTypeClass 193→181、UnitTypeClass 44→42、InfantryTypeClass 25→25、
-IsometricTileClass 19→15。**没配上的键名不进常量表**，但会在 `docs/fieldnames.md`
+ObjectTypeClass 19→15。**没配上的键名不进常量表**，但会在 `docs/fieldnames.md`
 里逐个列出来 —— 不让"覆盖率"看起来像"全量"。
+
+**归属用"提供实现的类"，不是"虚表里挂着这个函数指针的类"。** 后者会把继承来的
+`Read_INI` 记成派生类自己的：`0x5F92D0` 同时挂在 `ObjectTypeClass` 和
+`IsometricTileTypeClass` 的虚表槽 #25 上，只有一个实现 —— RTTI 说后者继承前者，
+所以实现者是**最浅**的那一个。按"最深"排（初版就是这么排的）会得出
+"IsometricTileTypeClass 有 15 个命名字段"，而这 15 个字段的偏移全在
+`ObjectTypeClass` 的 0x9C~0x238 里。改对之后它自有命名字段 = 0，
+这一点随后被对象模型的交叉核对独立撞上（见 §3.3）。没覆盖 `Read_INI` 的类
+进 `read_by` 字段留痕，回答"谁在读这些键"用。
 
 够不到的三种形态写进了文档，不靠调宽规则硬凑数字：
 
@@ -261,6 +274,71 @@ IsometricTileClass 19→15。**没配上的键名不进常量表**，但会在 `
 「双向」记录（缺省值与结果同偏移）保留，「单向」记录若被争则弃用。这条规则是被
 冒烟测试的锚点断言逼出来的 —— 最初一刀切"有争议就丢"，把手工核对过的
 `Cost@0x610` / `TechLevel@0x634` 一起丢了，测试立刻红。
+
+### 3.3 对象模型（P3 第三步：从查询表到能编译的结构体）
+
+前三步都是**查询表**：按 (类, 偏移) 查宽度、查名字、按类查 `sizeof`。
+查询表回答不了 `obj.COST = 1000`，也说不出 `sizeof(TechnoTypeClass)`。
+
+```bash
+python tools\layout.py
+
+build\ra2core.exe --model
+build\ra2core.exe --model TechnoTypeClass
+```
+
+产出：`src/re/ObjectModel.h`、`db/layout.json`、`docs/object-model.md`。
+把 (偏移, 宽度, 名字) 按 RTTI 的继承链铺成**连续内存布局**：
+
+```cpp
+#pragma pack(push, 1)                 // 二进制里的布局是事实，不让编译器改写它
+struct ObjectTypeClass : public AbstractTypeClass {
+    u8  _pad_0065[51];               // +0x65  没有证据
+    ...
+    u32 ARMOR;                       // +0x9C  INI: ARMOR
+    u32 STRENGTH;                    // +0xA0  INI: STRENGTH
+    ...
+};
+struct TechnoTypeClass : public ObjectTypeClass {
+    ...
+    u32 COST;                        // +0x610 INI: COST
+    ...
+};
+#pragma pack(pop)
+RA2_OFF(TechnoTypeClass, COST, 0x610);   // static_assert(offsetof(...) == 0x610)
+```
+
+| 环节 | 做法 | 实测 |
+|---|---|---|
+| 字段集合 | 构造函数写过 ∪ Read_INI 读写过 | 两条通道宽度不一致 **0** 处 |
+| 铺法 | 字段之间插 `_pad_XXXX[n]`，使每个已知字段恰好落在它的偏移上 | 8 个类 / **1161** 条成员，严丝合缝铺满，无洞无重叠 |
+| 对齐 | `#pragma pack(push,1)`；MSVC 下 `offsetof`/`sizeof` 精确等于铺出来的偏移 | `tools/_probe_offsetof.cpp` 造 4 层继承链实测过，不是推测 |
+| 钉死 | 每条字段一条 `static_assert(offsetof(...) == 偏移)` | 改坏布局**编译不过**，不会悄悄漂移 |
+| 交叉核对 | `Model_Check()` 拿 `FieldNames.h` 的每条命名字段回来在模型里找同名成员 | 381 条全对齐（其中 1 条落在继承来的字段上） |
+
+算出来的数（**末端是 `sizeof` 的下界，不是 `sizeof`**）：
+
+| 类 | 父类 | 起点 | 末端 | 已知字段 | 有名字 | 填充 |
+|---|---|---|---|---|---|---|
+| `ObjectTypeClass` | `AbstractTypeClass` | 0x65 | 0x294 | 65 | 15 | 392 |
+| `TechnoTypeClass` | `ObjectTypeClass` | 0x294 | 0xDF4 | 460 | 178 | 1490 |
+| `BuildingTypeClass` | `TechnoTypeClass` | 0xDF4 | 0x1792 | 311 | 170 | 1640 |
+| `UnitTypeClass` | `TechnoTypeClass` | 0xDF4 | 0xE5F | 40 | 10 | 4 |
+| `InfantryTypeClass` | `TechnoTypeClass` | 0xDF4 | 0xECC | 65 | 22 | 34 |
+
+`_pad_XXXX` **不代表**那些字节是空的，只代表"构造函数和 `Read_INI` 都没写到那里"。
+`UnitTypeClass` 覆盖率低是这个意思，不是"它只有 130 字节有内容"。
+
+**独立对账**：`ObjectTypeClass` 的末端（扫构造函数得到 0x294）与 `TechnoTypeClass`
+自有命名字段的最小偏移（扫 `Read_INI` 得到 0x294）**正好吻合** —— RTTI 只说
+"继承"，不给边界在哪，边界是两条独立通道各自算出来又对上的。
+
+**这一步还逼出了一个上一轮的归属错误。** `Model_Check()` 第一次跑就红：
+`IsometricTileTypeClass` 的 `ARMOR@0x9C` 在模型里找不到成员。查下去是
+`fieldname.py` 把函数归属按"深→浅"排了 —— 而 `0x5F92D0` 同时挂在
+`ObjectTypeClass` 和 `IsometricTileTypeClass` 的虚表槽 #25 上，同一个函数体不可能
+被两个类各自实现，实现者是**最浅**的那个。修完 `FieldNames.h` 从 6 类 396 条变成
+**5 类 381 条**。细节见 `docs/re-ledger.md`。
 
 渲染层的诊断开关（都是环境变量，默认关）：
 
@@ -302,9 +380,18 @@ IsometricTileClass 19→15。**没配上的键名不进常量表**，但会在 `
 ## 已知限制
 
 - 结构体的字段偏移与 `sizeof` 已从二进制确认（见 §3.1）；字段**名**只覆盖
-  各 TypeClass 的 `Read_INI`（6 个类 / 396 条，见 §3.2），其余类的字段仍是
+  各 TypeClass 的 `Read_INI`（5 个类 / 381 条，见 §3.2），其余类的字段仍是
   无名偏移 —— 代码中所有未确认处都标了 `TODO(逆向)` 并给出验证方法，
   不以猜测填充。
+- 对象模型（§3.3）里 `_pad_XXXX[n]` 的填充**只代表"构造函数和 `Read_INI`
+  都没写到那里"**，不代表那些字节是空的；类末端是 `sizeof` 的**下界**，
+  不是 `sizeof`。覆盖率低不等于字段少。
+- 对象模型只覆盖 4 层继承链上的 8 个 `*TypeClass`。`BuildingClass` /
+  `CellClass` / `HouseClass` 这些静态对象池里的类 `sizeof` 拿不到
+  （不是 `operator new` 出来的），字段证据也还没挖。
+- `offsetof` 用在非 standard-layout 类型上是**条件支持**的（模型里每一层基类都
+  有数据成员）。MSVC 给出正确结果且被 900+ 条 `static_assert` 钉过 —— 是
+  "在目标编译器上已验证"，不是"标准保证"；换编译器要重跑这一层。
 - 虚函数表的槽位顺序未还原（原因见上面结论 2）。
 - `Hierarchical_Find_Path` 目前退化为常规 A*：分层规划的区域图
   （`MapRegionClass` / `PlanningNodeClass` 等）尚未还原。

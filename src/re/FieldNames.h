@@ -218,23 +218,6 @@ inline constexpr FieldName kFN_InfantryTypeClass[] = {
     {0xECA, "USEOWNNAME", 1, "bool"},
     {0xECB, "JUMPJETTURN", 1, "bool"},
 };
-inline constexpr FieldName kFN_IsometricTileTypeClass[] = {
-    {0x9C, "ARMOR", 4, "?"},
-    {0xA0, "STRENGTH", 4, "int"},
-    {0x1E8, "NOSPAWNALT", 1, "bool"},
-    {0x211, "ALTERNATEARCTICART", 1, "bool"},
-    {0x22C, "THEATER", 1, "bool"},
-    {0x22D, "CRUSHABLE", 1, "bool"},
-    {0x22E, "BOMBABLE", 1, "bool"},
-    {0x22F, "RADARINVISIBLE", 1, "bool"},
-    {0x230, "SELECTABLE", 1, "bool"},
-    {0x231, "LEGALTARGET", 1, "bool"},
-    {0x232, "INSIGNIFICANT", 1, "bool"},
-    {0x233, "IMMUNE", 1, "bool"},
-    {0x236, "VOXEL", 1, "bool"},
-    {0x237, "NEWTHEATER", 1, "bool"},
-    {0x238, "HASRADIALINDICATOR", 1, "bool"},
-};
 inline constexpr FieldName kFN_ObjectTypeClass[] = {
     {0x9C, "ARMOR", 4, "?"},
     {0xA0, "STRENGTH", 4, "int"},
@@ -438,7 +421,6 @@ inline constexpr FieldName kFN_UnitTypeClass[] = {
 inline constexpr ClassFieldNames kFieldNames[] = {
     {"BuildingTypeClass", 168, kFN_BuildingTypeClass},
     {"InfantryTypeClass", 20, kFN_InfantryTypeClass},
-    {"IsometricTileTypeClass", 15, kFN_IsometricTileTypeClass},
     {"ObjectTypeClass", 15, kFN_ObjectTypeClass},
     {"TechnoTypeClass", 168, kFN_TechnoTypeClass},
     {"UnitTypeClass", 10, kFN_UnitTypeClass},

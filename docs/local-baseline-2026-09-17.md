@@ -1,7 +1,7 @@
 # 本机基线复现（2026-09-17）
 
 **目的**：在中文 Windows（ACP=936）上把工程**编译起来**，并以本机实际安装的
-`D:\RA2\Reunion 2023` 作素材源，把 P0/P1/P2 各条回归**跑一遍并留数**。
+`D:\RA2\Reunion 2023` 作素材源，把 P0/P1/P2 与 P3 各步回归**跑一遍并留数**。
 文档里记录的旧基线取自 `D:\westwood\RA2YR`，两者**素材包不同**，本文把差异摊开。
 
 ---
@@ -61,6 +61,44 @@
 | `docs/re-ledger.md` | 新增「对象字段名」一节（含三个真踩到的坑） | 留 RE 证据链 |
 | `docs/restoration-plan.md` | P3 第二步标记完成；状态表加「对象字段名」行 | 同上 |
 
+### 2.3 本轮（P3 对象模型）改动
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `tools/layout.py` | **新增**：偏移表 + 名字表 + RTTI 继承 → 连续结构体 | P3 第三步 |
+| `src/re/ObjectModel.h` | **新增**（自动生成）：8 个结构体 + 900+ 条 `static_assert` + 成员表 | 让对象模型能编译、能被代码用、能被运行期查 |
+| `db/layout.json` | **新增**（自动生成）：每个类的成员序列（偏移/宽度/名字/来源/填充） | 全量数据 |
+| `docs/object-model.md` | **新增**（自动生成）：方法、对账、未知量、明确没做到的 | 人读版 |
+| `tools/_probe_offsetof.cpp` | **新增**：4 层继承 + 混合宽度 + `pack(1)` 的 `offsetof`/`sizeof` 实测 | 证明"pack(1) 下偏移精确"是实测而非推测 |
+| `tools/fieldname.py` | **改**：函数归属按"深→浅"排错了，改"浅→深"（实现者）；记录不再给每个 attach 的类复制一份；新增 `read_by` | 修掉 `0x5F92D0` 被记成 `IsometricTileTypeClass` 的归属错误（见 §2.4） |
+| `db/fieldnames.json` / `docs/fieldnames.md` / `src/re/FieldNames.h` | 重新生成：6 类 396 条 → **5 类 381 条** | 同上 |
+| `src/main.cpp` | 新增 `Model_Check()`（进冒烟测试）与 `--model` 命令 | 把对象模型变成可回归的硬判据，并交叉核对 `FieldNames.h` |
+| `README.md` | 新增 §3.3「对象模型」；现状速览、目录结构、已知限制同步 | 不留过期描述 |
+| `docs/re-ledger.md` | 新增「对象模型」一节（含归属错误的来龙去脉） | 留 RE 证据链 |
+| `docs/restoration-plan.md` | P3 第三步标记完成；状态表加「对象模型」行；第三步修掉第二步的归属错误留痕 | 同上 |
+
+### 2.4 顺带修掉的上一轮缺陷
+
+`Model_Check()` 第一次跑就红：
+
+```
+FAIL: IsometricTileTypeClass 的命名字段 0x9C（ARMOR）在模型里找不到成员
+```
+
+根因：`tools/fieldname.py` 用 `sorted(..., key=lambda c: -depth.get(c, 0))` 取
+`attach[0]` 当归属类 —— 按**深→浅**排。而 `0x5F92D0` 同时挂在 `ObjectTypeClass`
+和 `IsometricTileTypeClass` 的虚表槽 #25 上，**同一个函数体不可能被两个类各自实现**；
+RTTI 说后者继承前者，所以实现者是**最浅**的那一个。
+
+后果：`IsometricTileTypeClass` 凭空多出 15 个"自己的"字段，而这 15 个偏移
+（0x9C/0xA0/0x1E8/0x211/0x22C~0x238）**全部落在 `ObjectTypeClass` 的本体里**。
+
+修法两处：排序改升序（`attach[0]` = 提供实现的类），且记录不再给每个
+`attach` 的类各复制一份（字段归实现者）；没覆盖 `Read_INI` 的派生类进 `read_by`。
+
+**这个缺陷是人工审阅很难发现的** —— 两条记录本身都不自相矛盾，只是归属错了。抓住它的是
+"两条**独立生成**的表对不上就报错"这条窄口径交叉核对。
+
 ---
 
 ## 3. 验证结果（全绿）
@@ -85,8 +123,17 @@
 | 16 | `ra2core.exe --layout` / `--layout UnitClass` | 核心继承链 17 个类的字段表；`UnitClass` 30 个字段，末端 0x6E8（sizeof 2280 之内） |
 | 17 | `python tools/fieldname.py` | 5 个 `Read_INI`（全部落在虚表槽 #25）；字段名 **411 条 / 6 个类**，「双向」307 条（75%）；C++ 表收 **396** 条；覆盖面 TechnoTypeClass 250/252、BuildingTypeClass 181/193、UnitTypeClass 42/44、InfantryTypeClass 25/25、ObjectTypeClass(IsometricTile) 15/19 |
 | 18 | `ra2core.exe`（无参数） | 冒烟 **23 OK**（比上一轮多 1 条：`FieldNames_Check()` 字段名硬判据）；帧 CRC 仍 `0x15307EAB` |
-| 19 | `ra2core.exe --fieldnames` / `--fieldnames TechnoTypeClass` | 6 个类合计 396 条；`TechnoTypeClass` 168 条（`Cost@0x610`、`TechLevel@0x634`、`Sight@0x5E8`、`Points@0x728` 等） |
-| 17 | `python tools/sizeofscan.py` | 按字段末端校准 1 个类：`CCFileClass` 36 → **108**；另 4 个类所有候选都小于字段末端，只记 `note` 不改。写入 C++ 表 67 条 |
+| 19 | `ra2core.exe --fieldnames` / `--fieldnames TechnoTypeClass` | 5 个类合计 **381** 条（修归属错误前是 6 类 396 条）；`TechnoTypeClass` 168 条（`Cost@0x610`、`TechLevel@0x634`、`Sight@0x5E8`、`Points@0x728` 等） |
+| 14b | `python tools/sizeofscan.py` | 按字段末端校准 1 个类：`CCFileClass` 36 → **108**；另 4 个类所有候选都小于字段末端，只记 `note` 不改。写入 C++ 表 67 条 |
+| 20 | `python tools/layout.py` | 8 个类 / **1161 条成员**（395 条有 INI 键名），严丝合缝铺满每个类的区间；两条通道宽度不一致 **0** 处；类内重叠 **0** 处；对账注记（异常）**0** 条 |
+| 21 | `tools/_probe_offsetof.cpp` 用 MSVC 14.51 编过再跑 | 4 层继承 + 混合宽度 + `pack(1)`：`sizeof` = 0x21 / 0x65 / 0x294 / 0xDF4，跨层 `offsetof` 全部等于预期 —— `pack(1)` 下 `offsetof` 精确，是实测不是推测 |
+| 22 | `ra2core.exe`（无参数） | 冒烟 **24 OK**（比上一轮多 1 条：`Model_Check()`）；帧 CRC 仍 `0x15307EAB`（逐位一致） |
+| 23 | `ra2core.exe --model` / `--model TechnoTypeClass` | 8 个类的起点/末端/字段数/命名数/填充/覆盖率；`TechnoTypeClass` 460 字段（178 条有 INI 键名） |
+| 24 | `ra2core.exe --layout UnitClass` | 17 个类 / `UnitClass` 30 字段末端 0x6E8（未变） |
+| 25 | `ra2core.exe --unitdb <10 个包>` | `段 rules=1482 art=1594 \| 单位 559 \| 体素 86 \| 炮塔 17 \| 炮管 7 \| 车体缺失 0`（与基线逐字一致） |
+| 26 | `ra2core.exe --typetable <10 个包>` | `TechnoType 553`；rules 477 键种 / art 206 键种；**逐键对账 0 处不一致**；武器 189 / 弹头 116 / 抛射体 38 / 声音 1018 / 曲目 36 |
+| 27 | `ra2core.exe --vxlhash` / `--hvahash` / `--pcxhash <ra2.mix>` | 183 VXL（失败 0）/ 183 HVA / 159 PCX（失败 0）—— 三条与基线一致 |
+| 28 | `ra2view.exe --gamedir <目录> --unit YTNK --offscreen` 与 `ra2game.exe --gamedir <目录> --offscreen` | 两边都出 `1024x768` 一帧 = **3145728 字节**（与基线一致） |
 
 第 4 项复现了文档基线**逐项完全相同**（`1482/1594/559/86/17/7/0`）。
 第 1 项的帧 CRC 也逐位一致 —— 这两条是"代码无回归"的硬证据。
@@ -144,17 +191,23 @@ python tools/raw2png.py build/frame.raw build/ytnk_40.png
    （旧基线里有：`AI.INI=0x9E11E49A @ra2.mix`、`AIMD.INI=0x116F3F76 @ra2md.mix`），
    加载器已就绪、缺素材；剩余 164 种 rules 键 / 95 种 art 键的类型化
    （顺序见 `--typetable --top N` 表尾）；声音/曲目接进 AudioDevice。
-3. **P3 已完成两步**：
+3. **P3 已完成三步**：
    - 第一步：对象字段偏移表（`tools/fieldscan.py` + `db/fields.json` +
      `src/re/FieldOffsets.h`），646 个类 / 6965 条。四条独立证据：
      sizeof 越界 4（207 通过）、RTTI 位移 387 处**一条不漏**（159 处可判定全中
      + 228 处同链写入）、继承链末端严格递增。
    - 第二步：**对象字段名表**（`tools/fieldname.py` + `db/fieldnames.json` +
-     `src/re/FieldNames.h`），6 个类 / 396 条，来自二进制自己的 `Read_INI`。
-     396 条里 300 条被构造函数扫描独立看到且宽度一致，sizeof 越界 0，
+     `src/re/FieldNames.h`），现在 **5 个类 / 381 条**，来自二进制自己的 `Read_INI`。
+     381 条里 300 条被构造函数扫描独立看到且宽度一致，sizeof 越界 0，
      6 条手工反汇编锚点进冒烟测试。
+   - 第三步：**对象模型**（`tools/layout.py` + `src/re/ObjectModel.h` +
+     `db/layout.json`），8 个类 / 1161 条成员铺成能编译的结构体；
+     每条字段一条 `static_assert(offsetof)`；`pack(1)` + 显式填充；
+     类末端即 `sizeof` 下界（`TechnoTypeClass >= 0xDF4`）。
+     这一步的交叉核对还修掉了第二步的一个归属错误（6 类 396 条 → 5 类 381 条）。
    **下一步**：其余类的字段名（构造函数赋常量、或逻辑里才算出来的字段，
-   不能再靠"读 INI"这一条通道）；P3 剩余还有静态对象池类的 sizeof。
+   不能再靠"读 INI"这一条通道）；静态对象池类的 sizeof；把命名后的字段接进
+   P2 的类型表，让 INI 值直接落到结构体成员上。
 4. P4 锁步、P5 多核并行。
 5. ~~`db/sizes.json` 里 `CCFileClass` 的 sizeof 取错（36，应为 108）~~
    —— **本轮已修**：`tools/sizeofscan.py` 用字段末端硬过滤候选，

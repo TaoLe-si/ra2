@@ -25,6 +25,7 @@
 #include "data/UnitModel.h"
 #include "re/FieldOffsets.h"
 #include "re/FieldNames.h"
+#include "re/ObjectModel.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/HvaFile.h"
@@ -1784,9 +1785,221 @@ static int FieldNames_Check() {
     return 0;
 }
 
-/// `ra2core --fieldnames [类名]`：把 (偏移, INI 键名) 打出来给人看。
-static int FieldNames_Dump(const char* want) {
+/// 对象模型的闸门（src/re/ObjectModel.h，由 tools/layout.py 生成）。
+///
+/// FieldNames_Check 查的是"偏移有没有名字"；这里查的是"名字有没有真的落到
+/// 结构体的那个偏移上" —— 把两张各自独立生成出来的表互相钉住，顺带钉住
+/// 继承边界（父类字段在子类里的绝对偏移）。
+static int Model_Check() {
+    uint32_t members = 0;
+    uint32_t named = 0;
+    uint32_t cross = 0;
+
+    // 判据 1：成员序列必须严丝合缝铺满 [start, end) —— 不留洞、不重叠、不越界
+    for (uint32_t i = 0; i < re::model::kModelClassCount; ++i) {
+        const re::model::ModelClass& C = re::model::kModelClasses[i];
+        if (C.start >= C.end) {
+            std::printf("FAIL: %s 的区间是空的（0x%X..0x%X）\n", C.name, C.start, C.end);
+            return 1;
+        }
+        uint32_t at = C.start;
+        uint32_t pads = 0;
+        uint32_t flds = 0;
+        uint32_t nm = 0;
+        for (uint32_t j = 0; j < C.count; ++j) {
+            const re::model::ModelMember& M =
+                re::model::kModelMembers[C.first + j];
+            if (M.off != at) {
+                std::printf("FAIL: %s 第 %u 个成员落在 0x%X，应该落在 0x%X\n",
+                            C.name, j, M.off, at);
+                return 1;
+            }
+            if (M.size == 0) {
+                std::printf("FAIL: %s 的成员 %s 宽度是 0\n", C.name, M.name);
+                return 1;
+            }
+            if (M.kind <= 1) {
+                if (M.kind == 0) {
+                    ++flds;
+                    if (M.key != nullptr) ++nm;
+                } else {
+                    pads += M.size;
+                    if (M.key != nullptr) {
+                        std::printf("FAIL: %s 的填充段 %s 竟然有 INI 键名\n",
+                                    C.name, M.name);
+                        return 1;
+                    }
+                }
+            } else {
+                std::printf("FAIL: %s 的成员 %s 有个不认识的 kind=%u\n",
+                            C.name, M.name, M.kind);
+                return 1;
+            }
+            at += M.size;
+            ++members;
+            if (M.key != nullptr) ++named;
+        }
+        if (at != C.end) {
+            std::printf("FAIL: %s 的成员只铺到 0x%X，末端却是 0x%X\n",
+                        C.name, at, C.end);
+            return 1;
+        }
+        if (pads != C.pad_bytes || flds != C.fields || nm != C.named) {
+            std::printf("FAIL: %s 的统计对不上：填充 %u/%u，字段 %u/%u，有名字 %u/%u\n",
+                        C.name, pads, C.pad_bytes, flds, C.fields, nm, C.named);
+            return 1;
+        }
+    }
+
+    // 判据 2：FieldNames.h 里每条命名字段，都要能在模型里找到一条同偏移、同宽度、
+    //         同键名的**字段**。字段可能不在本类本体里 —— 派生类的 Read_INI 也会去写
+    //         继承来的字段（`UnitTypeClass::Read_INI` 就把 SPEEDTYPE 读进
+    //         TechnoTypeClass 的 0x67C）。所以查不到本类就沿父类链往上找，
+    //         并把这个"落在祖先上"的条数单独数出来（它是个有意义的量）。
+    uint32_t via_base = 0;
+    for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+        const re::ClassFieldNames& F = re::kFieldNames[i];
+        const re::model::ModelClass* C = re::model::ModelOf(F.cls);
+        if (C == nullptr) {
+            std::printf("FAIL: 字段名表里有 %s，模型里却没有这个类\n", F.cls);
+            return 1;
+        }
+        for (uint32_t j = 0; j < F.count; ++j) {
+            const re::FieldName& N = F.fields[j];
+            const re::model::ModelMember* M = nullptr;
+            const re::model::ModelClass* owner = C;
+            for (const re::model::ModelClass* K = C; K != nullptr;) {
+                M = re::model::ModelMemberAt(*K, N.off);
+                if (M != nullptr) {
+                    owner = K;
+                    break;
+                }
+                K = K->parent ? re::model::ModelOf(K->parent) : nullptr;
+            }
+            if (M == nullptr) {
+                std::printf("FAIL: %s 的命名字段 0x%X（%s）在模型里（含继承链）"
+                            "找不到成员\n", F.cls, N.off, N.key);
+                return 1;
+            }
+            if (M->kind != 0 || M->key == nullptr ||
+                std::strcmp(M->key, N.key) != 0 || M->size != N.width) {
+                std::printf("FAIL: %s 的 0x%X 在模型里是 %s（键 %s，宽 %u），"
+                            "字段名表说应该是 %s（宽 %u）\n",
+                            F.cls, N.off, M->name,
+                            M->key ? M->key : "(无)",
+                            M->size, N.key, N.width);
+                return 1;
+            }
+            if (owner != C) ++via_base;
+            ++cross;
+        }
+    }
+
+    // 判据 3：继承边界。父类的字段在子类里必须落在同一个绝对偏移上 ——
+    // 这只有"父类末端恰好等于子类本体起点"时才成立，所以它同时钉住了继承边界。
+    // 用 offsetof 而不是查表：查表是查自己的数据，offsetof 问的是编译器。
+    static_assert(sizeof(re::model::ObjectTypeClass) == 0x294,
+                  "ObjectTypeClass 的末端变了，继承边界跟着变");
+    if (offsetof(re::model::TechnoTypeClass, ARMOR) != 0x9C ||
+        offsetof(re::model::TechnoTypeClass, ARMOR) !=
+            offsetof(re::model::ObjectTypeClass, ARMOR) ||
+        offsetof(re::model::TechnoTypeClass, STRENGTH) != 0xA0 ||
+        offsetof(re::model::TechnoTypeClass, COST) != 0x610 ||
+        offsetof(re::model::TechnoTypeClass, TECHLEVEL) != 0x634 ||
+        offsetof(re::model::TechnoTypeClass, SIGHT) != 0x5E8 ||
+        offsetof(re::model::TechnoTypeClass, POINTS) != 0x728) {
+        std::printf("FAIL: 继承链没把父类字段带到正确的绝对偏移"
+                    "（ARMOR 在 TechnoTypeClass 里落到 0x%llX，"
+                    "在 ObjectTypeClass 里是 0x%llX，应该是 0x9C）\n",
+                    static_cast<unsigned long long>(
+                        offsetof(re::model::TechnoTypeClass, ARMOR)),
+                    static_cast<unsigned long long>(
+                        offsetof(re::model::ObjectTypeClass, ARMOR)));
+        return 1;
+    }
+
+    // 判据 4：父类末端必须严格小于子类末端（继承链方向没搞反）
+    for (uint32_t i = 0; i < re::model::kModelClassCount; ++i) {
+        const re::model::ModelClass& C = re::model::kModelClasses[i];
+        if (C.parent == nullptr) continue;
+        const re::model::ModelClass* P = re::model::ModelOf(C.parent);
+        if (P == nullptr || P->end != C.start || P->end >= C.end) {
+            std::printf("FAIL: %s 的父类 %s 对不上（父末端 0x%X，本体起点 0x%X）\n",
+                        C.name, C.parent, P ? P->end : 0, C.start);
+            return 1;
+        }
+        if (C.end > P->end + 0x10000) {
+            std::printf("FAIL: %s 的末端 0x%X 离父类 0x%X 太远，像是填错了\n",
+                        C.name, C.end, P->end);
+            return 1;
+        }
+    }
+
+    // 判据 5：反向 —— 不存在的类/键不该查得到东西
+    if (re::model::ModelOf("这个类不存在") != nullptr ||
+        re::model::ModelOf("TechnoTypeClass") == nullptr) {
+        std::printf("FAIL: 模型按类名查表的结果不对\n");
+        return 1;
+    }
+    const re::model::ModelClass* tt = re::model::ModelOf("TechnoTypeClass");
+    if (re::model::ModelMemberOfKey(*tt, "COST") == nullptr ||
+        re::model::ModelMemberOfKey(*tt, "COST")->off != 0x610 ||
+        re::model::ModelMemberOfKey(*tt, "这个键不存在") != nullptr ||
+        re::model::ModelMemberAt(*tt, 0xFFFF0) != nullptr) {
+        std::printf("FAIL: 模型按键名/偏移查成员的结果不对\n");
+        return 1;
+    }
+
+    std::printf("OK  对象模型 %u 个类 / %u 条成员（%u 条有 INI 键名）："
+                "成员严丝合缝铺满每个类的区间；与字段名表交叉核对 %u 条全对齐"
+                "（其中 %u 条落在继承来的字段上）；继承边界由 offsetof 实测钉住\n",
+                re::model::kModelClassCount, members, named, cross, via_base);
+    return 0;
+}
+
+/// `ra2core --model [类名]`：打印对象模型的成员序列。
+static int Model_Dump(const char* want) {
     if (want == nullptr) {
+        std::printf("%-24s %-22s %7s %7s %6s %6s %9s %8s\n",
+                    "类", "父类", "本体起点", "末端", "字段", "有名", "填充字节", "覆盖");
+        for (uint32_t i = 0; i < re::model::kModelClassCount; ++i) {
+            const re::model::ModelClass& C = re::model::kModelClasses[i];
+            const uint32_t span = C.end - C.start;
+            std::printf("%-24s %-22s 0x%-5X 0x%-5X %6u %6u %9u %7.1f%%\n",
+                        C.name, C.parent ? C.parent : "(根)", C.start, C.end,
+                        C.fields, C.named, C.pad_bytes,
+                        span ? 100.0 * (span - C.pad_bytes) / span : 0.0);
+        }
+        std::printf("\n（末端 = 最后一个有证据的字段的末端，是 sizeof 的**下界**；"
+                    "覆盖 = 有证据的字节 / 本体字节。只含构造函数与 Read_INI "
+                    "两条通道的证据，不等于「这里什么都没有」。"
+                    "见 docs/object-model.md）\n");
+        return 0;
+    }
+    const re::model::ModelClass* C = re::model::ModelOf(want);
+    if (C == nullptr) {
+        std::printf("模型里没有 %s（全量见 db/layout.json）\n", want);
+        return 1;
+    }
+    std::printf("struct %s%s   // 0x%X .. 0x%X（本体 %u 字节）\n",
+                C->name, C->parent ? "" : "", C->start, C->end, C->end - C->start);
+    for (uint32_t j = 0; j < C->count; ++j) {
+        const re::model::ModelMember& M = re::model::kModelMembers[C->first + j];
+        if (M.kind == 1) {
+            std::printf("  +0x%-5X %-30s u8[%u]    —— 没有证据\n",
+                        M.off, M.name, M.size);
+            continue;
+        }
+        std::printf("  +0x%-5X %-30s %-4s     %s\n",
+                    M.off, M.name,
+                    M.size == 1 ? "u8" : (M.size == 2 ? "u16" : "u32"),
+                    M.key ? M.key : "(没名字：只有构造函数写过的证据)");
+    }
+    return 0;
+}
+
+/// `ra2core --fieldnames [类名]`：把 (偏移, INI 键名) 打出来给人看。
+static int FieldNames_Dump(const char* want) {    if (want == nullptr) {
         std::printf("%-34s %8s\n", "类", "命名字段");
         int total = 0;
         for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
@@ -1929,6 +2142,9 @@ int main(int argc, char** argv) {
     }
     if (argc > 1 && std::strcmp(argv[1], "--fieldnames") == 0) {
         return FieldNames_Dump(argc > 2 ? argv[2] : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--model") == 0) {
+        return Model_Dump(argc > 2 ? argv[2] : nullptr);
     }
     if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
         return Ini_Self_Test();
@@ -2195,6 +2411,13 @@ int main(int argc, char** argv) {
     // src/re/FieldNames.h 由 tools/fieldname.py 扫 gamemd.exe 的 Read_INI 得出。
     // 偏移知道"有个字段"，名字才知道"这个字段是哪个 INI 键"。
     if (FieldNames_Check() != 0) {
+        return 1;
+    }
+
+    // ---- 对象模型 ----
+    // src/re/ObjectModel.h 由 tools/layout.py 把「偏移表 + 名字表 + RTTI 继承」
+    // 铺成能编译的结构体。这一步查的是名字有没有真的落到那个偏移上。
+    if (Model_Check() != 0) {
         return 1;
     }
 
