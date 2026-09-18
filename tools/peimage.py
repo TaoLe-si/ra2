@@ -19,7 +19,34 @@ if _PYLIBS not in sys.path:
 
 import pefile  # noqa: E402
 
-DEFAULT_IMAGE = r"D:\westwood\RA2YR\gamemd.exe"
+# 默认镜像的搜索顺序。旧的 D:\westwood\RA2YR 目录已经不存在了（那份基线是
+# 在另一台机器上做的），现在本机唯一的一份是 Reunion 2023。
+# 实测两者是同一个构建：入口点 0x007CD80F、链接时间戳 0x3BDF544E、
+# 文件大小 4813072 全部一致 —— 所以旧的 RTTI/sizeof 数据继续有效。
+_CANDIDATE_IMAGES = [
+    os.environ.get("RA2_GAMEMD", ""),
+    r"D:\RA2\Reunion 2023\gamemd.exe",
+    r"D:\westwood\RA2YR\gamemd.exe",
+    r"C:\Program Files (x86)\EA Games\Command and Conquer Red Alert II\gamemd.exe",
+]
+
+
+def resolve_default_image() -> str:
+    """找到本机的 gamemd.exe。
+
+    环境变量 RA2_GAMEMD 优先（显式指定时不检查存在性，让错误直接暴露在
+    调用点上，而不是悄悄退回另一个镜像）。
+    """
+    env = os.environ.get("RA2_GAMEMD")
+    if env:
+        return env
+    for p in _CANDIDATE_IMAGES[1:]:
+        if p and os.path.exists(p):
+            return p
+    return _CANDIDATE_IMAGES[1]      # 都不在也要给个确定值，好让报错信息有意义
+
+
+DEFAULT_IMAGE = resolve_default_image()
 
 # Data directory 索引
 DIR_EXPORT = 0

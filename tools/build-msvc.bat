@@ -27,7 +27,8 @@ if errorlevel 1 exit /b 1
 
 if not exist build mkdir build
 
-cl /nologo /std:c++17 /EHsc /W3 /O2 /Isrc /Fo build\ /Fe build\ra2core.exe src\main.cpp src\map\Map.cpp src\ai\PathFinder.cpp src\engine\FrameQueue.cpp src\engine\GameLoop.cpp src\threading\TaskSystem.cpp
+REM /utf-8 必需：src/ 是 UTF-8 无 BOM，中文 Windows（ACP=936）下不加会被按 GBK 解码。
+cl /nologo /std:c++17 /utf-8 /EHsc /W3 /O2 /Isrc /Fo build\ /Fe build\ra2core.exe src\main.cpp src\map\Map.cpp src\ai\PathFinder.cpp src\engine\FrameQueue.cpp src\engine\GameLoop.cpp src\threading\TaskSystem.cpp
 
 if errorlevel 1 (
     echo [x] build failed

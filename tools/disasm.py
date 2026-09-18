@@ -29,7 +29,8 @@ from peimage import PEImage  # noqa: E402
 
 try:
     from capstone import Cs, CS_ARCH_X86, CS_MODE_32
-    from capstone.x86 import X86_OP_IMM, X86_INS_CALL, X86_INS_JMP, X86_INS_RET
+    from capstone.x86 import (X86_OP_IMM, X86_OP_MEM, X86_INS_CALL, X86_INS_JMP,
+                             X86_INS_RET)
 except ImportError as e:  # pragma: no cover
     raise SystemExit("需要 capstone：python -m pip install --target tools/pylibs capstone") from e
 
@@ -58,14 +59,47 @@ JCC_MNEMONICS = {
 class CodeIndex:
     """线性扫描得到的指令索引（三个 bytearray，紧凑）"""
 
-    def __init__(self, img: PEImage, md):
+    def __init__(self, img: PEImage, md, anchors=None, data_ranges=None):
         lo, hi = img.text_range()
         self.lo, self.hi = lo, hi
         self.n = hi - lo
+        # 已知的函数入口（**VA**，升序）。扫描跨过锚点时改从锚点重新解码。
+        # 内部存的是相对 .text 起点的**偏移**，所以要减掉 ImageBase 再减 lo
+        # ——这里混用过一次，锚点整体偏了 0x400000，静默失效了很久。
+        # 传 None 时行为与旧版完全一致。
+        self.anchors = (sorted(a - img.image_base - lo for a in anchors)
+                        if anchors else None)
+        # 数据区（跳表本体等），**RVA 半开区间** [start, end)。
+        #
+        # 为什么光有 anchors 不够：锚点是**点**，数据是**区间**。跳表本体的
+        # dword 常能解成一串合法指令，扫描一头扎进去就再也回不来，只能等
+        # 撞上下一个锚点。实测代价：`0x7C7758` 那张 12 项跳表让紧随其后的
+        # `0x7C7788`（表尾那个真函数入口）**永远拿不到指令边界**，
+        # 于是空隙通道退而求其次，把表内的一个 case 标签 `0x7C77D0`
+        # （跳表 `0x7C7B3C` 的第 3 项）当成了"函数入口"顶替它。
+        #
+        # 有了区间就可以：进区间直接跳到区间末尾重开解码 —— 这一步**制造**
+        # 了区间末尾的指令边界，而表尾/表首之间往往正夹着一个函数入口。
+        self.data_ranges = None
+        if data_ranges:
+            rs = sorted((a - lo, b - lo) for a, b in data_ranges)
+            merged: list[list[int]] = []          # 合并重叠 / 相接，保证单调不交
+            for a, b in rs:
+                if merged and a <= merged[-1][1]:
+                    if b > merged[-1][1]:
+                        merged[-1][1] = b
+                else:
+                    merged.append([a, b])
+            self.data_ranges = [(a, b) for a, b in merged]
         self.starts = bytearray(self.n)   # 1 = 该 RVA 是指令起点
         self.sizes = bytearray(self.n)    # 指令长度（仅起点处有效）
         self.flags = bytearray(self.n)    # F_* 位掩码
         self.targets: dict[int, int] = {}  # 指令 RVA -> 调用/跳转目标 RVA
+        # 下面三个是增量补的：只新增字段，不改动既有字段的语义，
+        # 所以 analyze.py 等既有调用方的输出不受影响。
+        self.jt: dict[int, int] = {}        # `jmp [reg*4+disp]` RVA -> 跳表基址 RVA
+        self.jt_indirect = 0                # `jmp [base+reg*4]`（表址在寄存器里）的处数
+        self.ret_imm: dict[int, int] = {}   # `ret imm` 指令 RVA -> 弹出字节数
         self.decoded = 0
         self._build(img, md)
 
@@ -76,20 +110,65 @@ class CodeIndex:
         ib = img.image_base
         # capstone 的 disasm 生成器遇到无法解码的字节会直接终止，
         # 因此这里按窗口推进 + 逐字节重同步，保证扫完整段 .text。
+        #
+        # 但「逐字节重同步」只在**解码失败**时触发。.text 里嵌着跳表/数据，
+        # 数据往往能被解成一串合法指令，此时扫描会一直跑偏、再也不回来。
+        # anchors 就是为此准备的：调用方先给出「这里一定是函数入口」的地址集合，
+        # 扫描一旦跨过锚点就丢弃这条指令、改从锚点重新开始。
+        # 锚点由第一遍扫描的结果算出（见 tools/funcscan.py），所以是两遍扫描。
+        # 但锚点救不了「区间」型数据（跳表本体），那要靠 data_ranges（见 __init__）。
         pos = 0
         n = len(code)
         WINDOW = 512
+        anc = self.anchors
+        dr = self.data_ranges
+        di = 0                      # 数据区游标：pos 单调递增，所以游标只往前走
+
+        def skip_data(p: int) -> int:
+            """p 若落在数据区，返回区间末尾；否则原样返回 p。
+
+            必须做成函数而不是"在循环顶上判一次"：`md.disasm` 是**生成器**，
+            进入它之后就按同一个 512 字节窗口一路解下去了，循环顶部的检查
+            根本轮不到执行。实测代价：只判顶部时，遮罩 `0x7C7758..0x7C7788`
+            完全没有效果（`0x7C7758` 照样被解成指令）—— 因为这个位置的解码
+            是**紧跟在前一条 `nop` 后面**、在同一个生成器里发生的。
+            """
+            nonlocal di
+            if dr is None:
+                return p
+            while di < len(dr) and dr[di][1] <= p:
+                di += 1
+            if di < len(dr) and dr[di][0] <= p < dr[di][1]:
+                return dr[di][1]
+            return p
+
         while pos < n:
-            decoded_any = False
+            # 数据区（跳表本体）：整段跳过，从区间末尾重开解码。
+            q = skip_data(pos)
+            if q != pos:
+                pos = q
+                continue
+            advanced = False
             for ins in md.disasm(code[pos:pos + WINDOW], ib + lo + pos):
                 rva = ins.address - ib
                 if not (lo <= rva < hi):
                     break
-                decoded_any = True
-                pos += ins.size
+                nxt = pos + ins.size
+                if anc:
+                    j = bisect.bisect_right(anc, pos)
+                    if j < len(anc) and anc[j] < nxt:
+                        pos = anc[j]          # 跨过锚点：从这里重新解码
+                        advanced = True
+                        break
                 self.decoded += 1
                 self._record(rva - lo, ins, ib, lo, hi)
-            if not decoded_any:
+                pos = nxt
+                advanced = True
+                # 这一步解码已经落进数据区：立刻收手，回外层由 skip_data 跳过。
+                # 不在这里 `continue` —— 生成器还按老窗口在跑，走不出数据区。
+                if skip_data(pos) != pos:
+                    break
+            if not advanced:
                 pos += 1
 
     def _record(self, i: int, ins, ib: int, lo: int, hi: int) -> None:
@@ -119,6 +198,19 @@ class CodeIndex:
                         if lo <= t < hi:
                             self.targets[lo + i] = t
                         break
+            # 跳表：`jmp dword ptr [reg*4 + 表址]`。表址取寄存器的那种形式
+            # （`lea reg,[tab]; jmp [reg+reg*4]`）这里只计数，不解析。
+            if ins.id == X86_INS_JMP and ins.operands:
+                op = ins.operands[0]
+                if op.type == X86_OP_MEM and op.mem.index != 0 and op.mem.scale == 4:
+                    if op.mem.base == 0:
+                        self.jt[lo + i] = op.mem.disp - ib
+                    else:
+                        self.jt_indirect += 1
+            # `ret imm16` 弹出的字节数 = __stdcall 的参数字节数
+            if (ins.id == X86_INS_RET and len(ins.operands) == 1
+                    and ins.operands[0].type == X86_OP_IMM):
+                self.ret_imm[lo + i] = ins.operands[0].imm
             self.flags[i] = f
 
     # ---------- 查询 ----------
@@ -138,10 +230,10 @@ class CodeIndex:
         return rva + self.size_at(rva)
 
 
-def build_index(img: PEImage) -> CodeIndex:
+def build_index(img: PEImage, anchors=None, data_ranges=None) -> CodeIndex:
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     md.detail = True
-    return CodeIndex(img, md)
+    return CodeIndex(img, md, anchors, data_ranges)
 
 
 class FunctionFinder:

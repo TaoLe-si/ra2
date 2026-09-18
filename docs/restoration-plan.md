@@ -45,6 +45,9 @@ Blitter 家族整体作废，不再还原。
 | MSVC RTTI 全量提取 | ✅ | 988 TypeDescriptor / 1209 虚表 / **949 个真实类名** |
 | 继承层次 + 虚表槽位 | ✅ | `src/re/ClassHierarchy.h`，12717 槽位，可运行时 vptr 反查类名 |
 | 关键类 sizeof | 🟡 | 233 个类有实测值；`UnitClass=2280` `InfantryClass=1776` `AircraftClass=1752` |
+| **对象字段偏移** | ✅ | 646 个类 / 6965 条字段，来自构造函数里的 `mov [this+off], …`；**387 处 RTTI 位移一条不漏**（可判定 159 处全中 + 228 处同链写入），sizeof 越界 4；见 `src/re/FieldOffsets.h`、`db/fields.json`、`docs/fields.md` |
+| **对象字段名** | 🟡 | 5 个类 / 381 条，来自二进制自己的 `Read_INI`（键名两侧同偏移，自证）；300 条另被构造函数扫描独立看到且宽度一致；见 `src/re/FieldNames.h`、`db/fieldnames.json`、`docs/fieldnames.md` |
+| **对象模型** | ✅ | 8 个类 / 1161 条成员铺成能编译的结构体；每条字段一条 `static_assert(offsetof)`，`pack(1)` + 显式填充；末端即 `sizeof` 下界（`TechnoTypeClass >= 0xDF4`）；见 `src/re/ObjectModel.h`、`db/layout.json`、`docs/object-model.md` |
 | **加密 MIX 解密** | ✅ | RSA(320bit) + Blowfish + Westwood CRC，C++ 与 Python 双实现结果一致 |
 | **明文 MIX** | ✅ | flags 不带 0x00020000；地形归档全是这一类，之前完全看不见 |
 | 嵌套 MIX | ✅ | ra2md.mix → 6 个子 MIX → 400 个叶子条目 |
@@ -54,6 +57,7 @@ Blitter 家族整体作废，不再还原。
 | **PAL 调色板** | ✅ | 768 字节，6→8 bit 用 `(v<<2)|(v>>4)`，索引 0 透明 |
 | **TMP 等距地形** | ✅ | 660 个模板 / 2626 个 cell 全量对账通过；见 commit 44ac040 |
 | **INI 解析** | ✅ | 4 个真实 INI、63790 行，与参考实现逐行一致；见 `src/data/Ini.{h,cpp}` |
+| **INI → 类型表** | ✅ | 553 个 TechnoType，rules 477 键 / art 206 键直方图清点后**全量**落表；逐键对账 0 处不一致 + 独立实现 22637 行 0 差异；见 `src/data/TypeDB.{h,cpp}` |
 | **PCX 解码** | ✅ | 255 个样本全解通；ra2.mix 的 160 个逐条 RGBA 哈希与参考实现 0 差异 |
 | **HVA 体素动画** | ✅ | 220 个样本全解通；ra2.mix 183 个逐条哈希与参考实现 0 差异 |
 | **VXL 体素** | ✅ | 184+37 个全解通；239309 列 / 856623 体素零异常，哈希 0 差异；已接进 DX12 |
@@ -317,13 +321,38 @@ RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必�
 | DX12 设备 + 交换链 + 命令队列 | `src/gfx/dx12/Dx12Renderer.cpp` | ✅ |
 | 调色板纹理（256×1 RGBA）+ 索引纹理上传 | `src/gfx/dx12/` | ✅ |
 | 等距地形渲染（60×30 菱形格） | `ViewerMain.cpp --tmp` | ✅ 已出画面 |
-| 精灵批渲染（一个 draw call 画几千个精灵） | `src/gfx/dx12/SpriteBatch.cpp` | ⬜ |
+| 精灵批渲染（一个 draw call 画几千个精灵） | `src/gfx/dx12/Dx12Renderer.{h,cpp}`（图集 + 实例缓冲） | ✅ |
 
 **已达成**：`ra2view.exe <mix> --tmp <0x归档ID> --offscreen` 能从明文 MIX 里
 取出全部 TMP 模板、按等距格点由远及近铺成一张索引图并上屏，
 树冠/岩壁这类 extra 也画出来了（见 `build/terrain_random.png`）。
 
-**还差**：批渲染 + 与原版截图逐像素比对。
+**批渲染（已完成）**：小图拼进 4096² 的 shelf 图集（索引色一张、真彩一张），
+N 个精灵共用一个 SRV，差异只剩"矩形 + UV + 颜色"——那三样塞进实例缓冲，
+同类连续区段合成一次 `DrawInstanced(6, N)`。
+放不进图集的大件（地形整图 5220×2395）退回"一精灵一纹理"，
+由 `Flush_Batch` 在切换时刻发出，**绘制顺序与录制顺序严格一致**。
+
+实测（`ra2game --gamedir <安装> --offscreen`，一帧）：
+
+```
+批渲染：索引 0 批 / 真彩 3 批 / 纯色 2 批，批内精灵 417 条，单独 draw 1 次
+```
+
+也就是**一帧 417 个精灵 = 6 次 draw call**（老路径 417 次），
+帧时间 3.5 ms → 2.1 ms。
+
+正确性判定不靠肉眼：`RA2_NO_SPRITE_BATCH=1` 走完全相同的旧路径，
+两条路的回读图**逐字节一致**（3145728 字节，0 处不同）；
+`RA2_BATCH_ONE=1`（每条实例单独一批）也一致 —— 后者能单独卡住
+"批次起点算错"这一类问题。
+
+**踩过的坑**：`DrawInstanced` 的第 4 个参数 `StartInstanceLocation`
+（本该整体偏移 `SV_InstanceID`）**实测无效** —— 每一批都从第 0 条实例开始读，
+症状是整屏只剩一个精灵被反复画、纯色矩形叠成白色方块。
+改成把批次起点用根常量（`b1`）喂给顶点着色器，自己加下标。详见 `docs/re-ledger.md`。
+
+**还差**：与原版截图逐像素比对（需要一份原版运行时的参考截图）。
 
 ### P2 — 数据层：rules.ini / art.ini / ai.ini
 
@@ -334,7 +363,9 @@ RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必�
 - `art.ini`：图形绑定（SHP 文件名、帧数、朝向数）
 - `ai.ini`、`sound.ini`、`theme.ini`
 
-**验收**：打表出 500+ 个 TechnoType，属性与原版一致（可用 XCC Mixer 导出的数据对拍）。
+**验收**（2026-09-17 达成）：打表出 **553** 个 TechnoType（四个类型列表共 559 个名字，
+其中 6 个在原版数据里没有对应段 —— 见下文），属性与原版一致。
+对拍方式比"用 XCC Mixer 导出的数据比"更硬：**直接与游戏自己的 INI 字节比**。
 
 #### P2 第一步（已完成）：单位名 → 体素模型组成
 
@@ -400,30 +431,264 @@ RLE-Zero，真正的坑是"行尾那个游程计数常常比实际多 1"，必�
   `--unit YTNK --yaw 40` → 加特林坦克，双管炮塔转 40°；
   `--unit ZEP/APOC/LTNK/DISK/HARV/SREF/AMCV/V3` 全部出图。
 
-#### P2 后续（未开始）
+#### P2 第二步（已完成）：INI 全量进类型表
 
-- 把 INI 全量填进 TechnoTypeClass 表（不止"模型组成"这一跳）。
-- `ai.ini` / `sound(md).ini` / `theme.ini`。
-- 属性对拍（与 XCC 导出的原版数据比）。
+`src/data/TypeDB.{h,cpp}` + `ra2core --typetable <mix...>`。
+
+**先清点，再定结构**。`tools/inikeys.py` 把四个真实 INI 扫了一遍（输出
+`build/_inikeys.txt`），先弄清楚**原版到底写了哪些键**：
+
+| 来源 | 键种数 | 出现次数 |
+|---|---|---|
+| rules(md) 单位段（559 个名字） | **477** | 15315 |
+| art(md) 的 `[Image]` 段 | **206** | 7322 |
+| 武器段（117 个被引用的） | 52 | — |
+| 弹头段 | 85 | — |
+| 抛射体段 | 35 | — |
+
+然后才是 **"类型化字段 + 原始键值表"双轨**：
+
+- `TechnoType.rules` / `.art` 两个 `ValueMap` 存**全量**键值 —— 一个键都不丢；
+- 结构体字段是类型化**视图**，**声明与填充用同一份 X-macro 清单**
+  （`RA2_TECHNO_FIELDS`），两边不可能分叉。
+
+**验收（两条独立证据，缺一不可）**
+
+1. `ra2core --typetable` 自检 —— 对 553 个 TechnoType 的 rules 段与 art 段
+   逐键对账：**段的去重键数 == 表的大小**、**每个键的值逐字节相等**。
+   这一条证明"表里存的东西 == 它自己读的 INI"。
+2. `tools/techno.py`（**独立实现**，从 MIX 字节重新读起、自己实现合并语义）
+   产出同一份 dump，逐行 diff —— **22637 行 0 差异**。
+   这一条才真正证明 **INI 解析/合并本身**没错（自检做不到这点：
+   如果合并语义写反了，自检照样全绿）。
+
+**实测（Reunion 2023，553 个 TechnoType）**
+
+```
+类型表：TechnoType 553（四个类型列表共 559 个名字，其中 6 个在原版数据里没有对应段）
+  rules 单位段：键种 477  出现 15315 次  已类型化 313 种（65.6%） / 按出现次数 95.8%
+  art  Image 段：键种 206  出现 7322 次  已类型化 111 种（53.9%） / 按出现次数 97.3%
+  X-macro 声明 424 个键，其中 0 个在数据里一次都没出现
+武器 189（全库有 Damage+Warhead 的段共 272）
+弹头 116（[Warheads] 列表 105）  抛射体 38
+sound.ini 有（1018 个编号）  theme.ini 有（36 首）  ai.ini 无
+逐键对账：不一致 0 处
+```
+
+覆盖率按**键种**看只有 46%/54%，按**出现次数**看是 96%/97% —— 没类型化的
+那 164 种 rules 键绝大多数只出现在 1~3 个单位上。剩下没类型化的高频键
+已按频次排好印在 `--top` 的表尾（"还没类型化的键 Top N"），
+要补字段照着加就行，不用猜。
+
+**踩过的坑**
+
+- **`Occupier=` / `Assaulter=` 是布尔，不是武器名**。第一版按名字猜成
+  "武器字段"，实测值是 `yes`/`no`（`Occupier=yes ; I can Occupy UC buildings`）。
+  这种"名字像就当地址用"的错最容易溜过去 —— 现在 X-macro 里声明了却
+  在数据里一次都不命中的键会被逐个列出来，等于给手误上了闸。
+- 键名打错**不会报任何错**，只会永远取缺省值。所以加了
+  "声明的键 vs 实际命中的键"这条对账，当前 424/424 全命中。
+- `techno.py` 第一版把 units 行全局排序，导致同一单位里 `art` 排在
+  `rules` 前面（C++ 是"先扫完 rules 再扫 art"），**每一行都错位** ——
+  跨实现对账必须先把"排序口径"写清楚，否则红的是对账本身而不是数据。
+
+#### P2 还差的（下一轮）
+
+- `ai.ini` / `aimd.ini`：**本安装的 8 个归档里都没有**（旧基线的名字表里
+  有这两个 CRC：`AI.INI=0x9E11E49A @ra2.mix`、`AIMD.INI=0x116F3F76 @ra2md.mix`，
+  但 Reunion 2023 重打包时没带上）。加载器已就绪，喂进去就能用；
+  `--typetable` 会如实打 `ai.ini 无`，不假装读过。
+- `sound(md).ini` / `theme(md).ini` 已进 `SoundDB` / `ThemeDB`
+  （1018 个声音编号、36 首曲目），但还没接给 AudioDevice / 战场音乐。
+- 剩下 164 种 rules 键 + 95 种 art 键的类型化（按 `--top` 表尾的顺序补）。
+- 属性对拍（与 XCC 导出的原版数据比）—— 现在这条其实**更强**：
+  不与第三方导出比，直接与游戏自己的 INI 字节比。
 
 ### P3 — 逻辑层：还原对象模型与游戏循环
 
 按 RTTI 实证的层次自底向上写：
 
 ```
-AbstractClass(24) → ObjectClass(122) → MissionClass(157) → RadioClass(161)
-  → TechnoClass(309) → {FootClass(341) → Unit/Infantry/Aircraft,
-                        BuildingClass(322)}
-AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 TypeClass
+AbstractClass → ObjectClass → MissionClass → RadioClass
+  → TechnoClass → {FootClass → Unit/Infantry/Aircraft,
+                        BuildingClass}
+AbstractTypeClass → ObjectTypeClass → TechnoTypeClass → 各 TypeClass
 ```
 
 先做到：**一个单位能从 A 走到 B**（寻路已有 `src/ai/PathFinder.cpp`），
 再做到：能选中、能攻击、能建造。
 
-**字段偏移问题**：RTTI 给了类名和槽位，但没给字段偏移。
-- 已证：`AircraftClass` 最后一字段在 `[esi+0x6D4]`；
-- 静态对象池类（`BuildingClass`/`CellClass`/`HouseClass`）的 sizeof 拿不到（不走 `operator new`）；
-- 办法：从访问字段的指令里统计偏移分布 + 用已知的相邻对象大小反推。
+#### P3 第一步（已完成）：字段偏移
+
+RTTI 给类名、继承关系、虚表槽位，**不给字段偏移**。没有偏移，写出来的
+结构体就是空壳。所以第一步先把偏移表建出来。
+
+`tools/fieldscan.py`：构造函数会把虚表指针写进对象首字段，这是强特征。
+扫每个函数体、跟踪 this 指针在哪个寄存器（`mov r,ecx` / `lea r,[this+d]` /
+`mov [ebp-d],ecx` 回取），把 `mov [this+off], ...` 记成字段访问。
+
+**归属判据是『有效偏移恰为 0 的虚表写入』**，不是指令里的 `disp == 0`
+—— 见 `docs/re-ledger.md` 里 `MouseClass` 那个例子。
+
+**实测（Reunion 2023）**
+
+```
+扫描函数体 21657 个；抽到字段的类 646 个；字段条目 6965
+sizeof 比对：207 个有基准且字段末端落在界内，435 个无基准，4 个越界（逐个判定了原因）
+RTTI 嵌入基类位移 387 处，一条不漏：
+  可判定 159 处（基类有自己的虚表）→ 全部命中，100%
+  另 228 处基类在二进制里没有虚表 → 退到「同链写入」印证，228 处
+```
+
+核心继承链（`ra2core --layout`）：
+
+| 类 | 字段数 | 字段末端 | sizeof |
+|---|---:|---:|---:|
+| `AbstractClass` | 9 | 0x21 | — |
+| `ObjectClass` | 36 | 0xAC | 172 |
+| `MissionClass` | 13 | 0xD4 | — |
+| `RadioClass` | 12 | 0xEE | — |
+| `TechnoClass` | 224 | 0x520 | — |
+| `FootClass` | 98 | 0x6B9 | — |
+| `UnitClass` | 30 | 0x6E8 | 2280 |
+| `TechnoTypeClass` | 455 | 0xDF4 | — |
+| `BuildingTypeClass` | 251 | 0x1792 | — |
+
+**验收（四条独立证据）**
+
+1. 每个类的字段末端必须落在**它自己的 sizeof 之内** —— sizeof 来自
+   `push N; call operator new` 的配对，是另一套完全无关的分析。
+2. RTTI 的嵌入基类位移 `mdisp` 与指令流对拍，三条递进的通道：
+   `mov [对象+mdisp], <该基类主虚表>` → `lea ecx,[对象+mdisp]; call <基类构造函数>`
+   → 该继承链上某个类的构造函数在有效偏移 `mdisp` 上写过东西。
+3. 沿继承链字段末端**严格递增**。
+4. 归属判据本身：`Layout_Check()` 断言 `TechnoClass` 在 0xF0 / 0xF8 上有字段写入，
+   与 RTTI 的 `FlasherClass @240` / `StageClass @248` 对上。
+
+sizeof 与继承链两条在 `ra2core` 冒烟测试里做成了硬判据（`Layout_Check()`），
+不成立就返回非 0。
+
+**两条更正（上一版写过头了，详见 `docs/re-ledger.md`）**
+
+- 「387 处里 159 处印证」的分母是错的。159 是**可判定子集的全部**，不是 41%。
+  其余 228 处的基类是二进制里**没有虚表**的东西：纯抽象接口（`IUnknown`、
+  `IRTTITypeInfo`、`ILocomotion`、`IPiggyback` …，MSVC 对"没有非内联虚函数、
+  又从不被完整构造"的类既不生成虚表也不生成 COL）与没有虚函数的普通子对象
+  （`FlasherClass`、`StageClass`）。
+- 「0xF0 / 0xF8 上各找到一次虚表写入」是**伪印证**。反汇编显示
+  `TechnoClass::ctor@0x6F2B40` 在 0xF0 上写的是 `mov dword ptr [esi+0xf0], ebx`
+  —— `ebx` 是 0，不是虚表。当时那条通道统计的是"全库有没有人在偏移 0xF8 上写过
+  虚表"，别的类写过就误判成命中。现在收到**该继承链**上再判。
+
+**顺带纠正**：`db/sizes.json` 里 `CCFileClass` 的 sizeof 是 36，
+但它的字段末端是 0x6C = 108，而它的候选列表里本来就有 `108: 2` 票 ——
+字段扫描独立证明了 36 取错了。`tools/sizeofscan.py` 现在用字段末端**硬过滤
+候选**并给改过的条目打 `calibrated` 标记；所有候选都不合法时**不改**，只记
+`note` 留给人看（那说明两条数据里有一条本身错了，乱猜比不改更坏）。
+
+#### P3 第二步（已完成）：字段名
+
+偏移只说"这个位置有个 4 字节的东西"。名字从二进制**自己的** `Read_INI` 里读：
+`Cost = ini.ReadInteger(section, "Cost", Cost);` 编译出来是"键名两侧同一个偏移"
+各访问一次 —— 这条是**自证**的，不依赖任何外部资料。
+
+`tools/fieldname.py`：对每张虚表的每个函数数"引用了多少个**真实存在**的 INI 键名"，
+超阈值即认作 `Read_INI`。**槽号是发现出来的**：5 个函数全部落在虚表**槽 #25**，
+且 TechnoTypeClass / BuildingTypeClass / UnitTypeClass 三张互不相干的表独立收敛。
+
+**实测（Reunion 2023）**
+
+```
+认作 Read_INI 的函数 5 个（引用 >= 12 个真实键）；全部落在槽 #25
+抽出字段名 411 条，覆盖 6 个类，其中「双向」（缺省值与结果同偏移）307 条 = 75%
+C++ 常量表收 396 条（23 条有人争但本身是双向证据，保留；15 条单向且有争议，不收）
+覆盖面：TechnoTypeClass 250/252、BuildingTypeClass 181/193、UnitTypeClass 42/44、
+        InfantryTypeClass 25/25、ObjectTypeClass(IsometricTile) 15/19
+```
+
+**验收（三条独立证据）**
+
+1. 名字侧的字段宽度必须与**构造函数扫描**（`db/fields.json`）给出的宽度一致 ——
+   396 条里 **300 条**被构造函数扫描独立看到，宽度不符 **0**。
+2. 偏移必须落在该类的 **sizeof** 之内（`push N; call new`，第三条通道）—— 越界 **0**。
+3. 手工反汇编锚点：`ObjectTypeClass` 的 `Armor@0x9C` / `Strength@0xA0`，
+   `TechnoTypeClass` 的 `Cost@0x610` / `TechLevel@0x634` / `Sight@0x5E8` /
+   `Points@0x728`。全部写进 `FieldNames_Check()` 做硬判据。
+
+**三个真踩到的坑（详见 `docs/re-ledger.md`）**
+
+- 字面量是 `"Cost"` 这种首字母大写，不是全大写。第一版按全大写筛，一个 INI 键都没扫到。
+- 结果存回**必须**以 `call` 为锚。编译器会把**上一条键**的结果存调度到这一条键的
+  键名与调用之间（`ObjectTypeClass::Read_INI@0x5F94B3`），按"键后第一条存"会给错偏移。
+- 「有争议就丢」是错的取舍。`Cost@0x610` 是手工核对过的，被这条规则连着丢了，
+  冒烟测试立刻红。改成按证据强度分档：双向保留，单向且被争才弃用。
+
+**明确没做的**：数组字段（`TurretType[i]`，32 个键名争一个基偏移）、经变换再存的
+字段（`Speed` 先钳 100、再 ×256/100、再钳 255，最后存到离键名十几条指令外的
+`0x678`）、目的地不在对象上的字符串字段 —— 这三类**够不到就不给名字**，
+不做外推（放宽规则只会让错误更自信）。
+
+#### P3 第三步（已完成）：对象模型 —— 从查询表到能编译的结构体
+
+前三步的产物都是**查询表**（按 (类, 偏移) 查宽度/名字、按类查 `sizeof`），
+回答不了两个最基本的问题：代码里写不出 `obj.COST = 1000`，也说不出
+`sizeof(TechnoTypeClass)`（它不在 `operator new` 的 `push` 里）。
+
+`tools/layout.py` 把三张表铺成连续内存布局：
+
+```
+字段集合 = 构造函数写过（fields.json） ∪ Read_INI 读写过（fieldnames.json）
+继承链   = RTTI 的 bases[0]（4 层 8 个类）
+填充     = 字段之间插 u8 _pad_XXXX[n]，使每个已知字段恰好落在它的偏移上
+```
+
+**实测（Reunion 2023）**
+
+```
+8 个类 / 1161 条成员（395 条有 INI 键名），成员严丝合缝铺满每个类的区间
+AbstractClass  0x0  .. 0x21    9 字段
+AbstractType   0x21 .. 0x65    4
+ObjectType     0x65 .. 0x294  65   15 有名
+IsometricTile  0x294.. 0x30C  33
+TechnoType     0x294.. 0xDF4 460  178 有名
+BuildingType   0xDF4.. 0x1792 311 170 有名
+InfantryType   0xDF4.. 0xECC  65   22 有名
+UnitType       0xDF4.. 0xE5F  40   10 有名
+```
+
+**末端是 `sizeof` 的下界，不是 `sizeof`**：`sizeof(TechnoTypeClass) >= 0xDF4`。
+
+**验收**
+
+1. 每条字段一条 `static_assert(offsetof(...) == 偏移)` —— 900+ 条，改坏布局编译不过
+   （这是**回归**闸门，不是取证）。
+2. `#pragma pack(push,1)` 下 MSVC 的 `offsetof`/`sizeof` 精确等于铺出来的偏移。
+   `tools/_probe_offsetof.cpp` 造 4 层继承 + 混合宽度链实测过（0x21/0x65/0x294/0xDF4）。
+3. `Model_Check()`（进冒烟测试）：成员序列严丝合缝；`FieldNames.h` 的 381 条命名
+   字段回来在模型里找同名成员，偏移/宽度/键名三者全对；继承边界由 `offsetof` 实测钉住。
+4. 同一偏移两条通道的宽度不一致 **0** 处；类内重叠字段 **0** 处。
+
+**独立对账（两套证据撞在一起）**：`ObjectTypeClass` 的末端（扫构造函数）= 0x294，
+`TechnoTypeClass` 自有命名字段的最小偏移（扫 `Read_INI`）= 0x294。RTTI 只说"继承"，
+**不给**边界在哪。
+
+**顺带修掉一个上一轮的归属错误**：`Model_Check()` 第一次跑就报
+`IsometricTileTypeClass` 的 `ARMOR@0x9C` 在模型里找不到成员。根因是
+`fieldname.py` 按"深→浅"排函数归属，而 `0x5F92D0` 同时挂在 `ObjectTypeClass` 和
+`IsometricTileTypeClass` 的虚表槽 #25 上 —— 同一个函数体不可能被两个类各自实现，
+实现者是**最浅**的那个。修完 `FieldNames.h` 从 6 类 396 条变成 **5 类 381 条**。
+
+**明确没做的**：`_pad_XXXX` 不代表那些字节是空的（只代表两条通道都没写到）；
+只覆盖 4 层继承链上的 8 个 `*TypeClass`；没有虚函数；成员名就是 INI 键名原样。
+
+#### P3 还差的
+
+- **其余类的字段名**。现在只有各 TypeClass 的 `Read_INI` 那一批（5 个类 / 381 条）。
+  构造函数里赋常量、或游戏逻辑里才算出来的字段仍然没名字 —— 需要换通道，
+  不再是"读 INI"这一条。
+- 只扫了写虚表的函数；只被游戏逻辑赋值、构造函数不碰的字段还没覆盖。
+- 静态对象池里的类（`BuildingClass`/`CellClass`/`HouseClass`）`sizeof` 拿不到
+  （不是 `operator new` 出来的），字段证据也还没挖，不进对象模型。
 
 ### P4 — 网络与锁步
 
@@ -466,7 +731,12 @@ AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 Ty
 ## 4. 已知待办与风险
 
 1. ~~SHP flags=0x3 解码未定~~ —— **已解**：它和 0x02 共用同一套 RLE，6373 帧全过。
-2. **字段偏移基本未知** —— RTTI 只给类名和槽位。P3 的主要工作量在这。
+2. ~~**字段偏移基本未知** —— RTTI 只给类名和槽位。~~ **已建立**：
+   `tools/fieldscan.py` 扫构造函数里的 `mov [this+off], ...`，产出
+   `db/fields.json`（**646 个类 / 6965 条字段**）+ `src/re/FieldOffsets.h`。
+   三条独立证据交叉验证（sizeof 边界 / RTTI 的 `mdisp` / 继承链末端递增），
+   全部对上。**但字段名仍然未知** —— 偏移有了，语义要一个个读出来。
+   详见 `docs/fields.md` 与 `docs/re-ledger.md`。
 3. **静态对象池类的 sizeof** —— 不走 `operator new`，现有扫描法拿不到，需要换思路。
 4. **文件名反查 26.0%**（11233 个叶子 ID / 2926 个命中，原 8.7%）—— 不阻塞
    （游戏按 CRC 查）。补齐的关键是"INI 节名也算候选名 + 后缀扩展"两轮，
@@ -482,8 +752,10 @@ AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 Ty
 - **P0 已完成 9/9**：MIX（加密 + 明文）✅、嵌套 ✅、CRC ✅、文件名反查 🟡、
   SHP ✅、PAL ✅、TMP ✅、INI ✅、PCX ✅、**HVA ✅、VXL ✅**。
   素材层到此**没有未解格式**。
-- **P1 部分完成**：DX12 设备/交换链/离屏/调色板纹理/地形渲染 ✅、
-  **体素渲染 ✅**（软件等距光栅化 → R8 索引纹理 → 查表着色），精灵批渲染 ⬜。
+- **P1 已完成 4/4**：DX12 设备/交换链/离屏/调色板纹理/地形渲染 ✅、
+  **体素渲染 ✅**（软件等距光栅化 → R8 索引纹理 → 查表着色）、
+  **精灵批渲染 ✅**（图集 + 实例缓冲：一帧 417 精灵 = 6 次 draw call，
+  与关掉批渲染的旧路径**逐字节一致**）。
 - 端到端链路（五档，全绿）：
   1. `ra2view.exe ra2.mix --vxl 0x8C848DEE --offscreen` → 基洛夫（ZEP），静态姿态正确；
   2. `ra2view.exe ra2.mix --vxl 0x891E5F6E` → JEEP，**带车顶机枪、轮子落地**；
@@ -496,15 +768,52 @@ AbstractTypeClass(27) → ObjectTypeClass(40) → TechnoTypeClass(48) → 各 Ty
   外加回归：`--vxlhash` / `--hvahash` / `--tmphash` / `--initest` / 路径并行 全过，
   184+37 个 VXL 结构失败 0，239309 列 / 856623 体素异常 0，
   C++ vs Python VXL 哈希 184/184、37/37 差异 0。
-- **P2 数据层第一步完成**：`Image=` / `Voxel=yes` / `Turret=yes` / `PrimaryFireFLH=`
-  已接起来，`--unit <单位名>` 自动推出 `<名>.VXL + <名>TUR.VXL + <名>BARL.VXL`
-  （+ 同名 HVA），不再手写 0xID。端到端链路扩展到**六档**：
+- **P2 数据层已完成两步**：
+  1. 模型组成（`Image=` / `Voxel=yes` / `Turret=yes` / `PrimaryFireFLH=`）——
+     `--unit <单位名>` 自动推出 `<名>.VXL + <名>TUR.VXL + <名>BARL.VXL`（+ 同名 HVA）；
+  2. **全量类型表**（`src/data/TypeDB.*`）—— 553 个 TechnoType 的 rules/art
+     **全部 477 + 206 种键一个不丢**，值逐字节与原 INI 一致（C++ 自检 +
+     Python 独立实现 22637 行 0 差异）；另有武器 189 / 弹头 116 / 抛射体 38 /
+     声音 1018 / 曲目 36。
+  端到端链路扩展到**六档**：
   6. `ra2view.exe ra2.mix --addmix ra2md.mix --unit YTNK --turretyaw 40 --offscreen`
      → INI 解析 → 名字拼装 → 三段 CRC → MIX 递归取件 → VXL 解码 → HVA 姿态
      → 等距光栅化（含附加层）→ R8 索引纹理 → 调色板查表 → 回读 PNG，
      画出加特林坦克的双管炮塔转 40°。
   自检：86 个体素单位车体命中 **86/86**，车体缺失 **0**；
   C++ vs Python **559 单位 × 9 字段零差异**。
-- 再往后：P2 剩余（全量 TechnoTypeClass 打表）、P3 逻辑层、P4 锁步、P5 多核并行。
+- **P3 已完成第一步**：**对象字段偏移表**（`tools/fieldscan.py` +
+  `db/fields.json` + `src/re/FieldOffsets.h`）—— 646 个类 / 6965 条字段。
+  四条独立证据交叉验证：字段末端落在 sizeof 内（207 个有基准且全过，4 个越界
+  已逐条判定）；RTTI 的 387 处 `mdisp` **一条不漏**（可判定 159 处全中，
+  另 228 处基类无虚表、退到同链写入印证）；继承链末端严格递增
+  （`0x21→0xAC→0xD4→0xEE→0x520→0x6B9→0x6E8`）。sizeof 与继承链两条进了冒烟
+  测试做硬判据（`Layout_Check()`）。
+  顺带证明 `db/sizes.json` 里 `CCFileClass` 的 sizeof（36）取错了，应为 108 ——
+  `tools/sizeofscan.py` 已改成用字段末端硬过滤候选，该类已修正为 108。
+- **P3 已完成第二步**：**对象字段名表**（`tools/fieldname.py` +
+  `db/fieldnames.json` + `src/re/FieldNames.h`）—— 现在 5 个类 / 381 条。
+  名字来自二进制**自己的** `Read_INI`：键名两侧同一个偏移各访问一次，自证。
+  可判定的交叉验证：381 条里 **300 条**被构造函数扫描独立看到且宽度一致（不符 0），
+  sizeof 越界 0，另有 6 条手工反汇编锚点写进 `FieldNames_Check()` 做硬判据。
+  覆盖面逐个类对账（TechnoTypeClass 250/252 等），没配上的键名在
+  `docs/fieldnames.md` 里列出来，不进常量表。
+  够不到的三类（数组字段、经变换再存的字段、栈上缓冲再 `strcpy` 的字符串）
+  **不做外推**。详细口径见 `docs/re-ledger.md`。
+  第三步修掉了这里的一个归属错误：函数归属原本按"深→浅"排，把
+  `0x5F92D0`（同时挂在 `ObjectTypeClass` 和 `IsometricTileTypeClass` 槽 #25 上）
+  记成后者的 —— 同一个函数体不可能被两个类各自实现，实现者是**最浅**的那个。
+  修完 6 类 396 条 → **5 类 381 条**。是第三步的 `Model_Check()` 交叉核对抓出来的。
+- **P3 已完成第三步**：**对象模型**（`tools/layout.py` + `src/re/ObjectModel.h` +
+  `db/layout.json` + `docs/object-model.md`）—— 把偏移表 + 名字表 + RTTI 继承
+  铺成**能编译的结构体**，8 个类 / 1161 条成员，严丝合缝铺满每个类的区间。
+  每条字段一条 `static_assert(offsetof(...) == 偏移)`；`#pragma pack(push,1)` +
+  显式 `_pad_XXXX[n]` 填充，MSVC 下 `offsetof`/`sizeof` 精确等于铺出来的偏移
+  （`tools/_probe_offsetof.cpp` 造 4 层继承链实测过）。
+  类末端 = 已知字段的最大末端，是 `sizeof` 的**下界**（`TechnoTypeClass >= 0xDF4`）。
+  独立对账：`ObjectTypeClass` 的末端（扫构造函数 = 0x294）与 `TechnoTypeClass`
+  自有命名字段的最小偏移（扫 `Read_INI` = 0x294）正好吻合 —— RTTI 只说继承，
+  不给边界在哪。
+- 再往后：P3 剩余（其余类的字段名、静态对象池类的 sizeof）、P4 锁步、P5 多核并行。
 - **代码尚未提交**：本轮的 `UnitModel.*`、`Ini::Merge`、`Collect_Leaf_IDs`、
   `ViewerMain --unit/--addmix`、新脚本都在工作区里没 commit（git push 也没通）。

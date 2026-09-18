@@ -1,6 +1,7 @@
 // 自动生成文件，请勿手改。生成工具：tools/sizeofscan.py
 // 数据来源：gamemd.exe 的 `push <size>; call operator new` 与构造函数写虚表的配对。
-// 只保留票数 >= 4 的条目（同 size 被多个独立调用点证实）。
+// 只保留票数 >= 4 的条目（同 size 被多个独立调用点证实）；
+// 另外无条件保留被『字段末端』校准过的条目（证据比投票硬）。
 // 完整数据见 db/sizes.json，说明见 docs/sizes.md。
 #pragma once
 #include <cstdint>
@@ -46,6 +47,7 @@ inline constexpr SizeInfo kSizeTable[kSizeCount] = {
     {"Mouse", 152, 1, 6},
     {"PBVTechnoTypeClass::?$DynamicVectorClass", 116, 1, 26},
     {"RadSiteClass", 116, 1, 6},
+    {"CCFileClass", 108, 1, 2},
     {"AirstrikeClass", 96, 1, 4},
     {"BombClass", 92, 1, 4},
     {"CCINIClass", 88, 1, 6},
@@ -63,7 +65,6 @@ inline constexpr SizeInfo kSizeTable[kSizeCount] = {
     {"ScriptClass", 48, 1, 9},
     {"I::?$DynamicVectorClass", 40, 1, 4},
     {"MixFileClass", 40, 1, 106},
-    {"CCFileClass", 36, 1, 4},
     {"DSurface", 36, 1, 41},
     {"RawFileClass", 36, 1, 4},
     {"MSFont", 32, 1, 4},

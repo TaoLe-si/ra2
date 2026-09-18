@@ -21,7 +21,13 @@
 #include "core/GameVersion.h"
 #include "core/VTableMap.h"
 #include "data/Ini.h"
+#include "data/TypeDB.h"
 #include "data/UnitModel.h"
+#include "re/BlockTable.h"
+#include "re/FieldOffsets.h"
+#include "re/FieldNames.h"
+#include "re/FuncTable.h"
+#include "re/ObjectModel.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/HvaFile.h"
@@ -1010,6 +1016,66 @@ static int Unit_DB(const std::vector<std::string>& mix_paths, const char* dump_p
     return s.body_missing == 0 ? 0 : 1;
 }
 
+/// P2 全量打表：把 rules / art / sound / theme 装进 TypeDB，并**逐键对账**。
+///
+/// 验收标准不是"看着对"，而是可数的：
+///   1. 每个单位的 rules 段与 art 段，**去重键数**必须与表里一致（不丢键、不添键）；
+///   2. 每个键的**值必须逐字节相等**（不改值）。
+/// 打印那一行 `逐键对账：不一致 0 处` 就是这一阶段的通过判据。
+///
+/// --raw <out>：把全量键值按 `单位/来源/键/值` 落盘，供独立实现（tools/techno.py）
+///              逐行 diff。两边都排序输出，所以不依赖插入顺序。
+static int Type_Table(const std::vector<std::string>& mix_paths, const char* raw_dump,
+                      const char* summary_path, int top_keys) {
+    std::vector<ra2::MixFileClass> mixes(mix_paths.size());
+    std::vector<const ra2::MixFileClass*> ptrs(mix_paths.size());
+    for (size_t i = 0; i < mix_paths.size(); ++i) {
+        if (!mixes[i].Open(mix_paths[i].c_str())) {
+            std::printf("[x] 打不开 %s\n", mix_paths[i].c_str());
+            return 1;
+        }
+        ptrs[i] = &mixes[i];
+    }
+    ra2::UnitModelDB unitdb;
+    if (!unitdb.Load(ptrs.data(), static_cast<int>(ptrs.size()))) {
+        return 1;
+    }
+    ra2::TypeDB db;
+    if (!db.Load(unitdb, ptrs.data(), static_cast<int>(ptrs.size()))) {
+        return 1;
+    }
+
+    db.Dump_Summary(stdout, top_keys);
+
+    // 逐键对账：表是从这两个 IniFile 建的，所以直接拿它们回查。
+    const int bad = db.Verify(unitdb.Rules(), unitdb.Art(), stdout);
+    std::printf("\n逐键对账：不一致 %d 处（%d 个 TechnoType × rules+art）\n", bad,
+                db.Stats_().types);
+    if (bad == 0) {
+        std::printf("OK   键一个不丢、值一个不改\n");
+    }
+
+    if (summary_path) {
+        std::FILE* f = std::fopen(summary_path, "wb");
+        if (f) {
+            db.Dump_Summary(f, top_keys);
+            std::fclose(f);
+            std::printf("已写出 %s\n", summary_path);
+        }
+    }
+    if (raw_dump) {
+        std::FILE* f = std::fopen(raw_dump, "wb");
+        if (!f) {
+            std::printf("[x] 写不了 %s\n", raw_dump);
+            return 1;
+        }
+        db.Dump_Raw(f);
+        std::fclose(f);
+        std::printf("已写出 %s\n", raw_dump);
+    }
+    return bad == 0 ? 0 : 1;
+}
+
 /// 体素光影：渲染一个单位并出图，同时做"顶面亮 / 底面暗"的硬判据自检。
 ///
 /// 为什么要自检而不是"看着差不多"：本环境看不到图，判断只能靠数值。
@@ -1495,6 +1561,690 @@ static int Remap_Dump(const std::vector<std::string>& mix_paths,
     return bad == 0 ? 0 : 1;
 }
 
+/// 字段偏移的判据全部是"能算出来"的，不靠肉眼：
+///
+///  1. 每个类的字段末端必须落在它自己的 sizeof 之内（sizeof 来自
+///     `push N; call operator new` 的配对，是**另一条**独立分析）；
+///  2. 沿继承链，字段末端必须**严格递增** —— 派生类只会比基类字段更多；
+///  3. TechnoClass 的 0xF0 / 0xF8 上必须有字段写入，因为 MSVC RTTI 的
+///     基类位移表说 FlasherClass 在 240、StageClass 在 248。这是字段扫描
+///     与 RTTI 两条完全独立的证据的交点，对不上就是有一边错了。
+///
+/// 3 条里任何一条不成立都返回非 0，冒烟测试挂掉。
+static int Layout_Check() {
+    int checked = 0;
+    int entries = 0;
+    for (int i = 0; i < re::kLayoutCount; ++i) {
+        const re::ClassLayout& L = re::kLayouts[i];
+        uint32_t worst = 0;
+        for (int j = 0; j < L.count; ++j) {
+            worst = std::max(worst, L.fields[j].off + L.fields[j].size);
+        }
+        entries += L.count;
+        if (L.size == 0) {
+            continue;
+        }
+        ++checked;
+        if (worst > L.size) {
+            std::printf("FAIL: %s 字段末端 0x%X 超出 sizeof %u\n",
+                        L.name, worst, L.size);
+            return 1;
+        }
+    }
+
+    static const char* const kChain[] = {
+        "AbstractClass", "ObjectClass", "MissionClass", "RadioClass",
+        "TechnoClass", "FootClass", "UnitClass",
+    };
+    uint32_t prev = 0;
+    uint32_t last = 0;
+    for (const char* name : kChain) {
+        const re::ClassLayout* L = re::LayoutOf(name);
+        if (L == nullptr) {
+            std::printf("FAIL: 布局表里没有 %s\n", name);
+            return 1;
+        }
+        uint32_t worst = 0;
+        for (int j = 0; j < L->count; ++j) {
+            worst = std::max(worst, L->fields[j].off + L->fields[j].size);
+        }
+        if (worst <= prev) {
+            std::printf("FAIL: 继承链末端没有递增 —— %s 末端 0x%X <= 前一个 0x%X\n",
+                        name, worst, prev);
+            return 1;
+        }
+        prev = worst;
+        last = worst;
+    }
+
+    const re::ClassLayout* tc = re::LayoutOf("TechnoClass");
+    if (tc == nullptr) {
+        std::printf("FAIL: 布局表里没有 TechnoClass\n");
+        return 1;
+    }
+    bool has_f0 = false;
+    bool has_f8 = false;
+    for (int j = 0; j < tc->count; ++j) {
+        has_f0 = has_f0 || tc->fields[j].off == 0xF0;
+        has_f8 = has_f8 || tc->fields[j].off == 0xF8;
+    }
+    if (!has_f0 || !has_f8) {
+        std::printf("FAIL: TechnoClass 的 0xF0/0xF8 上没有字段，与 RTTI 的"
+                    " FlasherClass/StageClass 基类位移矛盾\n");
+        return 1;
+    }
+
+    std::printf("OK  字段偏移 %d 个类 / %d 个字段；%d 个有 sizeof 基准的全部落在界内；"
+                "继承链末端严格递增（UnitClass 0x%X）\n",
+                re::kLayoutCount, entries, checked, last);
+    return 0;
+}
+
+/// `ra2core --layout [类名]`：把字段偏移表打印出来给人看。
+static int Layout_Dump(const char* want) {
+    if (want == nullptr) {
+        std::printf("%-34s %8s %8s %6s\n", "类", "sizeof", "字段末端", "字段数");
+        for (int i = 0; i < re::kLayoutCount; ++i) {
+            const re::ClassLayout& L = re::kLayouts[i];
+            uint32_t worst = 0;
+            for (int j = 0; j < L.count; ++j) {
+                worst = std::max(worst, L.fields[j].off + L.fields[j].size);
+            }
+            if (L.size != 0) {
+                std::printf("%-34s %8u 0x%-6X %6d\n", L.name, L.size, worst,
+                            L.count);
+            } else {
+                std::printf("%-34s %8s 0x%-6X %6d\n", L.name, "—", worst,
+                            L.count);
+            }
+        }
+        std::printf("\n（这里只含核心继承链；全量类与人读版说明见"
+                    " db/fields.json 与 docs/fields.md）\n");
+        return 0;
+    }
+    const re::ClassLayout* L = re::LayoutOf(want);
+    if (L == nullptr) {
+        std::printf("布局表里没有 %s（只含核心继承链，全量见 db/fields.json）\n", want);
+        return 1;
+    }
+    std::printf("%s  sizeof=%s  字段 %d 个\n", L->name,
+                L->size ? std::to_string(L->size).c_str() : "未知", L->count);
+    for (int j = 0; j < L->count; ++j) {
+        std::printf("  +0x%-5X 宽%d 写%-3u 读%-3u\n", L->fields[j].off,
+                    L->fields[j].size, L->fields[j].written,
+                    L->fields[j].read);
+    }
+    return 0;
+}
+
+/// 字段**名**的判据。名字来自各 TypeClass 的 `Read_INI`（`tools/fieldname.py`），
+/// 全部是"能算出来"的，不靠肉眼：
+///
+///  1. **宽度必须与构造函数扫描出来的字段宽度一致**。两条通道完全无关：
+///     名字来自 `Read_INI` 的"键名两侧同偏移"，宽度来自构造函数的
+///     `mov [this+off], …`。同一个偏移上两边宽度对不上，就是有一边错了。
+///  2. **偏移必须落在该类的 sizeof 之内**（sizeof 来自 `push N; call new`，第三条通道）。
+///  3. 手工反汇编核对过的锚点：`ObjectTypeClass` 的 Armor@0x9C / Strength@0xA0，
+///     `TechnoTypeClass` 的 Cost@0x610 / TechLevel@0x634 / Sight@0x5E8 / Points@0x728。
+///     这些地址在 docs/fieldnames.md 里能逐条查到对应的指令流。
+///  4. 反向对照：随便一个没被命名过的偏移必须查不到名字（防止表被写坏成通配）。
+///
+/// 任何一条不成立都返回非 0，冒烟测试挂掉。
+static int FieldNames_Check() {
+    int named = 0;
+    int cross_width_ok = 0;
+    int cross_width_bad = 0;
+    int beyond_sizeof = 0;
+
+    for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+        const re::ClassFieldNames& C = re::kFieldNames[i];
+        uint32_t prev = 0;
+        bool first = true;
+        const uint32_t size = re::SizeOf(C.cls);
+
+        for (uint32_t j = 0; j < C.count; ++j) {
+            const re::FieldName& F = C.fields[j];
+            ++named;
+
+            if (F.key == nullptr || F.key[0] == '\0') {
+                std::printf("FAIL: %s 偏移 0x%X 的名字是空的\n", C.cls, F.off);
+                return 1;
+            }
+            if (F.width != 1 && F.width != 2 && F.width != 4 && F.width != 8) {
+                std::printf("FAIL: %s 偏移 0x%X 宽度 %u 不是 1/2/4/8\n",
+                            C.cls, F.off, F.width);
+                return 1;
+            }
+            if (!first && F.off <= prev) {
+                std::printf("FAIL: %s 的偏移没有严格递增 —— 0x%X 在 0x%X 之后\n",
+                            C.cls, F.off, prev);
+                return 1;
+            }
+            prev = F.off;
+            first = false;
+
+            // 判据 1：与构造函数扫描出来的字段宽度对拍
+            const re::ClassLayout* L = re::LayoutOf(C.cls);
+            if (L != nullptr) {
+                for (int k = 0; k < L->count; ++k) {
+                    if (L->fields[k].off != F.off) {
+                        continue;
+                    }
+                    if (L->fields[k].size == F.width) {
+                        ++cross_width_ok;
+                    } else {
+                        ++cross_width_bad;
+                        std::printf("FAIL: %s 偏移 0x%X（%s）：Read_INI 说宽 %u，"
+                                    "构造函数扫描说宽 %u\n",
+                                    C.cls, F.off, F.key, F.width,
+                                    L->fields[k].size);
+                    }
+                    break;
+                }
+            }
+
+            // 判据 2：必须落在 sizeof 之内
+            if (size != 0 && F.off >= size) {
+                ++beyond_sizeof;
+                std::printf("FAIL: %s 偏移 0x%X（%s）超出 sizeof %u\n",
+                            C.cls, F.off, F.key, size);
+            }
+        }
+    }
+    if (cross_width_bad != 0 || beyond_sizeof != 0) {
+        return 1;
+    }
+
+    // 判据 3：手工反汇编核对过的锚点
+    struct Anchor { const char* cls; uint32_t off; const char* key; };
+    static const Anchor kAnchors[] = {
+        {"ObjectTypeClass", 0x9C, "ARMOR"},
+        {"ObjectTypeClass", 0xA0, "STRENGTH"},
+        {"TechnoTypeClass", 0x5E8, "SIGHT"},
+        {"TechnoTypeClass", 0x610, "COST"},
+        {"TechnoTypeClass", 0x634, "TECHLEVEL"},
+        {"TechnoTypeClass", 0x728, "POINTS"},
+    };
+    for (const Anchor& a : kAnchors) {
+        const char* got = re::FieldNameOf(a.cls, a.off);
+        if (got == nullptr || std::strcmp(got, a.key) != 0) {
+            std::printf("FAIL: %s 的 0x%X 应该是 %s，查到的却是 %s\n",
+                        a.cls, a.off, a.key, got ? got : "(没有)");
+            return 1;
+        }
+    }
+
+    // 判据 4：反向对照 —— 没命名过的偏移查不到名字
+    if (re::FieldNameOf("TechnoTypeClass", 0xFFFF0) != nullptr ||
+        re::FieldNameOf("这个类不存在", 0x610) != nullptr) {
+        std::printf("FAIL: 名字表把不存在的偏移/类也查出了名字\n");
+        return 1;
+    }
+
+    std::printf("OK  字段名 %d 个类 / %d 条；其中 %d 条同时被构造函数扫描"
+                "独立看到且宽度一致；sizeof 越界 0\n",
+                re::kFieldNameClassCount, named, cross_width_ok);
+    return 0;
+}
+
+/// 对象模型的闸门（src/re/ObjectModel.h，由 tools/layout.py 生成）。
+///
+/// FieldNames_Check 查的是"偏移有没有名字"；这里查的是"名字有没有真的落到
+/// 结构体的那个偏移上" —— 把两张各自独立生成出来的表互相钉住，顺带钉住
+/// 继承边界（父类字段在子类里的绝对偏移）。
+static int Model_Check() {
+    uint32_t members = 0;
+    uint32_t named = 0;
+    uint32_t cross = 0;
+
+    // 判据 1：成员序列必须严丝合缝铺满 [start, end) —— 不留洞、不重叠、不越界
+    for (uint32_t i = 0; i < re::model::kModelClassCount; ++i) {
+        const re::model::ModelClass& C = re::model::kModelClasses[i];
+        if (C.start >= C.end) {
+            std::printf("FAIL: %s 的区间是空的（0x%X..0x%X）\n", C.name, C.start, C.end);
+            return 1;
+        }
+        uint32_t at = C.start;
+        uint32_t pads = 0;
+        uint32_t flds = 0;
+        uint32_t nm = 0;
+        for (uint32_t j = 0; j < C.count; ++j) {
+            const re::model::ModelMember& M =
+                re::model::kModelMembers[C.first + j];
+            if (M.off != at) {
+                std::printf("FAIL: %s 第 %u 个成员落在 0x%X，应该落在 0x%X\n",
+                            C.name, j, M.off, at);
+                return 1;
+            }
+            if (M.size == 0) {
+                std::printf("FAIL: %s 的成员 %s 宽度是 0\n", C.name, M.name);
+                return 1;
+            }
+            if (M.kind <= 1) {
+                if (M.kind == 0) {
+                    ++flds;
+                    if (M.key != nullptr) ++nm;
+                } else {
+                    pads += M.size;
+                    if (M.key != nullptr) {
+                        std::printf("FAIL: %s 的填充段 %s 竟然有 INI 键名\n",
+                                    C.name, M.name);
+                        return 1;
+                    }
+                }
+            } else {
+                std::printf("FAIL: %s 的成员 %s 有个不认识的 kind=%u\n",
+                            C.name, M.name, M.kind);
+                return 1;
+            }
+            at += M.size;
+            ++members;
+            if (M.key != nullptr) ++named;
+        }
+        if (at != C.end) {
+            std::printf("FAIL: %s 的成员只铺到 0x%X，末端却是 0x%X\n",
+                        C.name, at, C.end);
+            return 1;
+        }
+        if (pads != C.pad_bytes || flds != C.fields || nm != C.named) {
+            std::printf("FAIL: %s 的统计对不上：填充 %u/%u，字段 %u/%u，有名字 %u/%u\n",
+                        C.name, pads, C.pad_bytes, flds, C.fields, nm, C.named);
+            return 1;
+        }
+    }
+
+    // 判据 2：FieldNames.h 里每条命名字段，都要能在模型里找到一条同偏移、同宽度、
+    //         同键名的**字段**。字段可能不在本类本体里 —— 派生类的 Read_INI 也会去写
+    //         继承来的字段（`UnitTypeClass::Read_INI` 就把 SPEEDTYPE 读进
+    //         TechnoTypeClass 的 0x67C）。所以查不到本类就沿父类链往上找，
+    //         并把这个"落在祖先上"的条数单独数出来（它是个有意义的量）。
+    uint32_t via_base = 0;
+    for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+        const re::ClassFieldNames& F = re::kFieldNames[i];
+        const re::model::ModelClass* C = re::model::ModelOf(F.cls);
+        if (C == nullptr) {
+            std::printf("FAIL: 字段名表里有 %s，模型里却没有这个类\n", F.cls);
+            return 1;
+        }
+        for (uint32_t j = 0; j < F.count; ++j) {
+            const re::FieldName& N = F.fields[j];
+            const re::model::ModelMember* M = nullptr;
+            const re::model::ModelClass* owner = C;
+            for (const re::model::ModelClass* K = C; K != nullptr;) {
+                M = re::model::ModelMemberAt(*K, N.off);
+                if (M != nullptr) {
+                    owner = K;
+                    break;
+                }
+                K = K->parent ? re::model::ModelOf(K->parent) : nullptr;
+            }
+            if (M == nullptr) {
+                std::printf("FAIL: %s 的命名字段 0x%X（%s）在模型里（含继承链）"
+                            "找不到成员\n", F.cls, N.off, N.key);
+                return 1;
+            }
+            if (M->kind != 0 || M->key == nullptr ||
+                std::strcmp(M->key, N.key) != 0 || M->size != N.width) {
+                std::printf("FAIL: %s 的 0x%X 在模型里是 %s（键 %s，宽 %u），"
+                            "字段名表说应该是 %s（宽 %u）\n",
+                            F.cls, N.off, M->name,
+                            M->key ? M->key : "(无)",
+                            M->size, N.key, N.width);
+                return 1;
+            }
+            if (owner != C) ++via_base;
+            ++cross;
+        }
+    }
+
+    // 判据 3：继承边界。父类的字段在子类里必须落在同一个绝对偏移上 ——
+    // 这只有"父类末端恰好等于子类本体起点"时才成立，所以它同时钉住了继承边界。
+    // 用 offsetof 而不是查表：查表是查自己的数据，offsetof 问的是编译器。
+    static_assert(sizeof(re::model::ObjectTypeClass) == 0x294,
+                  "ObjectTypeClass 的末端变了，继承边界跟着变");
+    if (offsetof(re::model::TechnoTypeClass, ARMOR) != 0x9C ||
+        offsetof(re::model::TechnoTypeClass, ARMOR) !=
+            offsetof(re::model::ObjectTypeClass, ARMOR) ||
+        offsetof(re::model::TechnoTypeClass, STRENGTH) != 0xA0 ||
+        offsetof(re::model::TechnoTypeClass, COST) != 0x610 ||
+        offsetof(re::model::TechnoTypeClass, TECHLEVEL) != 0x634 ||
+        offsetof(re::model::TechnoTypeClass, SIGHT) != 0x5E8 ||
+        offsetof(re::model::TechnoTypeClass, POINTS) != 0x728) {
+        std::printf("FAIL: 继承链没把父类字段带到正确的绝对偏移"
+                    "（ARMOR 在 TechnoTypeClass 里落到 0x%llX，"
+                    "在 ObjectTypeClass 里是 0x%llX，应该是 0x9C）\n",
+                    static_cast<unsigned long long>(
+                        offsetof(re::model::TechnoTypeClass, ARMOR)),
+                    static_cast<unsigned long long>(
+                        offsetof(re::model::ObjectTypeClass, ARMOR)));
+        return 1;
+    }
+
+    // 判据 4：父类末端必须严格小于子类末端（继承链方向没搞反）
+    for (uint32_t i = 0; i < re::model::kModelClassCount; ++i) {
+        const re::model::ModelClass& C = re::model::kModelClasses[i];
+        if (C.parent == nullptr) continue;
+        const re::model::ModelClass* P = re::model::ModelOf(C.parent);
+        if (P == nullptr || P->end != C.start || P->end >= C.end) {
+            std::printf("FAIL: %s 的父类 %s 对不上（父末端 0x%X，本体起点 0x%X）\n",
+                        C.name, C.parent, P ? P->end : 0, C.start);
+            return 1;
+        }
+        if (C.end > P->end + 0x10000) {
+            std::printf("FAIL: %s 的末端 0x%X 离父类 0x%X 太远，像是填错了\n",
+                        C.name, C.end, P->end);
+            return 1;
+        }
+    }
+
+    // 判据 5：反向 —— 不存在的类/键不该查得到东西
+    if (re::model::ModelOf("这个类不存在") != nullptr ||
+        re::model::ModelOf("TechnoTypeClass") == nullptr) {
+        std::printf("FAIL: 模型按类名查表的结果不对\n");
+        return 1;
+    }
+    const re::model::ModelClass* tt = re::model::ModelOf("TechnoTypeClass");
+    if (re::model::ModelMemberOfKey(*tt, "COST") == nullptr ||
+        re::model::ModelMemberOfKey(*tt, "COST")->off != 0x610 ||
+        re::model::ModelMemberOfKey(*tt, "这个键不存在") != nullptr ||
+        re::model::ModelMemberAt(*tt, 0xFFFF0) != nullptr) {
+        std::printf("FAIL: 模型按键名/偏移查成员的结果不对\n");
+        return 1;
+    }
+
+    std::printf("OK  对象模型 %u 个类 / %u 条成员（%u 条有 INI 键名）："
+                "成员严丝合缝铺满每个类的区间；与字段名表交叉核对 %u 条全对齐"
+                "（其中 %u 条落在继承来的字段上）；继承边界由 offsetof 实测钉住\n",
+                re::model::kModelClassCount, members, named, cross, via_base);
+    return 0;
+}
+
+/// `ra2core --model [类名]`：打印对象模型的成员序列。
+static int Model_Dump(const char* want) {
+    if (want == nullptr) {
+        std::printf("%-24s %-22s %7s %7s %6s %6s %9s %8s\n",
+                    "类", "父类", "本体起点", "末端", "字段", "有名", "填充字节", "覆盖");
+        for (uint32_t i = 0; i < re::model::kModelClassCount; ++i) {
+            const re::model::ModelClass& C = re::model::kModelClasses[i];
+            const uint32_t span = C.end - C.start;
+            std::printf("%-24s %-22s 0x%-5X 0x%-5X %6u %6u %9u %7.1f%%\n",
+                        C.name, C.parent ? C.parent : "(根)", C.start, C.end,
+                        C.fields, C.named, C.pad_bytes,
+                        span ? 100.0 * (span - C.pad_bytes) / span : 0.0);
+        }
+        std::printf("\n（末端 = 最后一个有证据的字段的末端，是 sizeof 的**下界**；"
+                    "覆盖 = 有证据的字节 / 本体字节。只含构造函数与 Read_INI "
+                    "两条通道的证据，不等于「这里什么都没有」。"
+                    "见 docs/object-model.md）\n");
+        return 0;
+    }
+    const re::model::ModelClass* C = re::model::ModelOf(want);
+    if (C == nullptr) {
+        std::printf("模型里没有 %s（全量见 db/layout.json）\n", want);
+        return 1;
+    }
+    std::printf("struct %s%s   // 0x%X .. 0x%X（本体 %u 字节）\n",
+                C->name, C->parent ? "" : "", C->start, C->end, C->end - C->start);
+    for (uint32_t j = 0; j < C->count; ++j) {
+        const re::model::ModelMember& M = re::model::kModelMembers[C->first + j];
+        if (M.kind == 1) {
+            std::printf("  +0x%-5X %-30s u8[%u]    —— 没有证据\n",
+                        M.off, M.name, M.size);
+            continue;
+        }
+        std::printf("  +0x%-5X %-30s %-4s     %s\n",
+                    M.off, M.name,
+                    M.size == 1 ? "u8" : (M.size == 2 ? "u16" : "u32"),
+                    M.key ? M.key : "(没名字：只有构造函数写过的证据)");
+    }
+    return 0;
+}
+
+/// `ra2core --fieldnames [类名]`：把 (偏移, INI 键名) 打出来给人看。
+static int FieldNames_Dump(const char* want) {
+    if (want == nullptr) {
+        std::printf("%-34s %8s\n", "类", "命名字段");
+        int total = 0;
+        for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+            std::printf("%-34s %8u\n", re::kFieldNames[i].cls,
+                        re::kFieldNames[i].count);
+            total += static_cast<int>(re::kFieldNames[i].count);
+        }
+        std::printf("%-34s %8d\n", "合计", total);
+        std::printf("\n（含「双向」条目，以及没被人争过的单向条目；"
+                    "单向且有争议的不进本表。取舍规则与来争的键名见"
+                    " docs/fieldnames.md，全量见 db/fieldnames.json）\n");
+        return 0;
+    }
+    for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+        const re::ClassFieldNames& C = re::kFieldNames[i];
+        if (std::strcmp(C.cls, want) != 0) {
+            continue;
+        }
+        std::printf("%s  命名字段 %u 个\n", C.cls, C.count);
+        for (uint32_t j = 0; j < C.count; ++j) {
+            std::printf("  +0x%-5X %-30s 宽%u  %s\n", C.fields[j].off,
+                        C.fields[j].key, C.fields[j].width, C.fields[j].type);
+        }
+        return 0;
+    }
+    std::printf("名字表里没有 %s（全量见 db/fieldnames.json）\n", want);
+    return 1;
+}
+
+/// 函数边界表的闸门（src/re/FuncTable.h，由 tools/funcscan.py 生成）。
+///
+/// 这里查的不是"表里有什么"，而是**表自己有没有自相矛盾**：
+/// 判据 1~3 是结构性的，任何一条挂了都说明生成器坏了，而不是数据有噪声。
+/// 判据 4 是这份表最硬的一条 —— 见 docs/decompile-plan.md §3：
+/// 0x401000–0x7C0000 段的函数入口，实测 100% 落在 16 字节边界上
+/// （由直接 call 目标与 RTTI 虚表槽两条独立通道各算一遍，结果一致）。
+namespace {
+constexpr uint32_t kTextLo = 0x00401000u;
+constexpr uint32_t kTextHi = 0x007E038Du;
+
+struct FuncAnchor {
+    uint32_t va;
+    const char* what;
+};
+
+// 逐条反汇编核对过的锚点。改坏了生成器，这里第一时间红。
+constexpr FuncAnchor kFuncAnchors[] = {
+    {0x007CD80F, "PE 入口点"},
+    {0x005F92D0, "ObjectTypeClass::Read_INI（虚表槽 #25）"},
+    {0x00712170, "TechnoTypeClass::Read_INI（虚表槽 #25）"},
+    {0x0042FBA0, "虚表槽目标，析构类小函数"},
+    {0x005378E0, "虚表槽目标，只有 `mov eax,imm; ret`"},
+};
+}  // namespace
+
+static int Funcs_Check() {
+    using namespace ra2::re::funcs;
+    uint32_t above_split_bad = 0;
+    uint32_t covered = 0;
+
+    for (uint32_t i = 0; i < kFuncCount; ++i) {
+        const uint32_t va = kFuncVA[i];
+        const uint32_t sz = kFuncSize[i];
+        // 判据 1：表必须升序（否则二分查找是错的）
+        if (i > 0 && va <= kFuncVA[i - 1]) {
+            std::printf("FAIL: 函数表不是严格升序：0x%08X 在 0x%08X 之后\n",
+                        va, kFuncVA[i - 1]);
+            return 1;
+        }
+        // 判据 2：区间不越界、不为空
+        if (sz == 0 || va < kTextLo || va + sz > kTextHi) {
+            std::printf("FAIL: 0x%08X 长度 %u 越出 .text\n", va, sz);
+            return 1;
+        }
+        // 判据 3：不与前一个函数重叠
+        if (i > 0 && va < kFuncVA[i - 1] + kFuncSize[i - 1]) {
+            std::printf("FAIL: 0x%08X 与前一个函数 0x%08X 重叠\n",
+                        va, kFuncVA[i - 1]);
+            return 1;
+        }
+        // 判据 4（最硬）：本体区的入口必须 16 字节对齐
+        if (va < kAlignSplit && (va & 0xFu) != 0) {
+            if (above_split_bad < 8) {
+                std::printf("FAIL: 本体区入口 0x%08X 没有落在 16 字节边界\n", va);
+            }
+            ++above_split_bad;
+        }
+        covered += sz;
+    }
+    if (above_split_bad != 0) {
+        std::printf("FAIL: 本体区有 %u 个入口不对齐（判据来自 "
+                    "docs/decompile-plan.md §3）\n", above_split_bad);
+        return 1;
+    }
+
+    // 判据 5：手挑的锚点必须都在表里，且真的是入口
+    for (const FuncAnchor& a : kFuncAnchors) {
+        if (!IsFuncEntry(a.va)) {
+            std::printf("FAIL: 锚点 0x%08X（%s）不是函数入口\n", a.va, a.what);
+            return 1;
+        }
+    }
+
+    std::printf("OK  函数表 %u 个函数；本体区入口 16 字节对齐 100%%；"
+                "区间两两不重叠；%d 条锚点全中；函数体合计覆盖 %u 字节"
+                "（占 .text 的 %.1f%%）\n",
+                kFuncCount, static_cast<int>(sizeof(kFuncAnchors) /
+                                             sizeof(kFuncAnchors[0])),
+                covered, 100.0 * covered / static_cast<double>(kTextHi - kTextLo));
+    return 0;
+}
+
+/// Stage 2（基本块与 CFG）的 C++ 侧自检。
+///
+/// 这里只核**恒等式与跨表一致性**，不重算 CFG —— 重算 CFG 是
+/// `tools/cfgcheck.py` 的活（它不复用 `cfgscan.py` 的任何代码路径，
+/// 从磁盘重读 JSON 与这个头文件各算一遍再互钉）。两边核的东西**故意不同**：
+/// Python 那边核"块与边逐条合不合法"，这边核"四个合计常量互相闭合吗、
+/// 入口在不在 FuncTable 里"。同一件事用两条独立路线各证一次。
+static int Cfg_Check() {
+    using namespace ra2::re::cfg;
+    constexpr uint32_t kN = sizeof(kCfgFuncVA) / sizeof(kCfgFuncVA[0]);
+    constexpr uint32_t kBN = sizeof(kCfgBlocks) / sizeof(kCfgBlocks[0]);
+    constexpr uint32_t kEN = sizeof(kCfgEdges) / sizeof(kCfgEdges[0]);
+    constexpr uint32_t kCN = sizeof(kCfgCases) / sizeof(kCfgCases[0]);
+
+    // 判据 1：四个数组等长，且等于函数个数（逐个对下标，错一个就下溢/错读）
+    if (kN != kCfgFuncCount || kBN != kN || kEN != kN || kCN != kN) {
+        std::printf("FAIL: CFG 表长度不一致：VA %u / 块 %u / 边 %u / 跳表 %u，"
+                    "函数个数 %u\n", kN, kBN, kEN, kCN, kCfgFuncCount);
+        return 1;
+    }
+
+    uint64_t bs = 0, es = 0, cs = 0;
+    for (uint32_t i = 0; i < kN; ++i) {
+        // 判据 2：入口升序无重复（否则二分查找是错的）
+        if (i > 0 && kCfgFuncVA[i] <= kCfgFuncVA[i - 1]) {
+            std::printf("FAIL: CFG 入口不是严格升序：0x%08X 在 0x%08X 之后\n",
+                        kCfgFuncVA[i], kCfgFuncVA[i - 1]);
+            return 1;
+        }
+        // 判据 3：每个入口都得在 S1 的函数表里（跨表一致性）
+        if (!ra2::re::funcs::IsFuncEntry(kCfgFuncVA[i])) {
+            std::printf("FAIL: CFG 入口 0x%08X 不在函数表里\n", kCfgFuncVA[i]);
+            return 1;
+        }
+        // 判据 4/5：计数下界 e >= b-1、上界 e <= 2b+c，逐函数实算。
+        // 下界来自「除入口块外每块至少一条入边」——漏一条边就有块被孤立；
+        // 上界来自「块出度最多 2，只有跳表块能更多」。
+        const uint32_t b = kCfgBlocks[i], e = kCfgEdges[i], c = kCfgCases[i];
+        if (b < 2) {
+            std::printf("FAIL: CFG 表里出现单块函数 0x%08X（b=%u）\n",
+                        kCfgFuncVA[i], b);
+            return 1;
+        }
+        if (e + 1 < b || e > 2u * b + c) {
+            std::printf("FAIL: 0x%08X 的计数不闭合：b=%u e=%u c=%u\n",
+                        kCfgFuncVA[i], b, e, c);
+            return 1;
+        }
+        bs += b; es += e; cs += c;
+    }
+
+    // 判据 6：四个合计常量必须等于数组实算之和
+    if (bs != kCfgBlockSum || es != kCfgEdgeSum || cs != kCfgCaseSum) {
+        std::printf("FAIL: CFG 合计常量与数组不符：块 %llu/%u 边 %llu/%u 跳表 %llu/%u\n",
+                    static_cast<unsigned long long>(bs), kCfgBlockSum,
+                    static_cast<unsigned long long>(es), kCfgEdgeSum,
+                    static_cast<unsigned long long>(cs), kCfgCaseSum);
+        return 1;
+    }
+    // 判据 7：总数 == 多块部分 + 单块部分（分解恒等式）。
+    // 少了这一条，「单块函数的边被整体丢掉」这种错会静默通过：
+    // 实测就是这么丢过 254 条边，块数也对不上 8,2xx 个。
+    if (kBlockCount != kCfgBlockSum + kSingleFuncCount
+        || kEdgeCount != kCfgEdgeSum + kSingleEdgeCount
+        || kSwitchEdgeCount != kCfgCaseSum) {
+        std::printf("FAIL: CFG 分解恒等式不成立：块 %u vs %u+%u，边 %u vs %u+%u，"
+                    "跳表 %u vs %u\n",
+                    kBlockCount, kCfgBlockSum, kSingleFuncCount,
+                    kEdgeCount, kCfgEdgeSum, kSingleEdgeCount,
+                    kSwitchEdgeCount, kCfgCaseSum);
+        return 1;
+    }
+
+    std::printf("OK  基本块 %u 个 / 出边 %u 条（跳表边 %u）；"
+                "有 CFG 的函数 %u 个，单块函数 %u 个；"
+                "每函数 b-1<=e<=2b+c 全部成立；分解恒等式闭合\n",
+                kBlockCount, kEdgeCount, kSwitchEdgeCount,
+                kCfgFuncCount, kSingleFuncCount);
+    return 0;
+}
+
+/// `ra2core --funcs [地址]`：给一个 VA，答它属于哪个函数。
+static int Funcs_Dump(const char* arg) {
+    using namespace ra2::re::funcs;
+    if (arg == nullptr) {
+        uint32_t by_tier[8] = {0};
+        for (uint32_t i = 0; i < kFuncCount; ++i) {
+            by_tier[kFuncFlags[i] & 0x0Fu]++;
+        }
+        static const char* kNames[] = {"entry", "vtable", "call", "tail",
+                                       "padend", "prologue", "dataptr", "gap"};
+        std::printf("函数 %u 个（db/funcs.json，由 tools/funcscan.py 生成）\n",
+                    kFuncCount);
+        uint32_t region[2] = {0};   // [0] 游戏本体区 / [1] 运行时库区
+        for (uint32_t i = 0; i < kFuncCount; ++i) {
+            region[kFuncVA[i] < kAlignSplit ? 0 : 1]++;
+        }
+        std::printf("  0x%08X 以下（游戏本体）  %u\n", kAlignSplit, region[0]);
+        std::printf("  0x%08X 以上（运行时库）  %u\n", kAlignSplit, region[1]);
+        std::printf("按证据主档：\n");
+        for (int i = 0; i < 8; ++i) {
+            std::printf("  %-9s %u\n", kNames[i], by_tier[i]);
+        }
+        std::printf("\n（方法、对账、残差见 docs/functions.md；"
+                    "全量见 db/funcs.json）\n");
+        return 0;
+    }
+    uint32_t va = 0;
+    if (std::sscanf(arg, "%x", &va) != 1) {
+        std::printf("用法：ra2core --funcs [十六进制地址]\n");
+        return 1;
+    }
+    uint32_t i = FuncAt(va);
+    if (i == kFuncCount) {
+        std::printf("0x%08X 不属于任何已知函数（落在残差里，见 docs/functions.md §5）\n",
+                    va);
+        return 1;
+    }
+    static const char* kNames[] = {"entry", "vtable", "call", "tail",
+                                   "padend", "prologue", "dataptr", "gap"};
+    std::printf("0x%08X 在函数 0x%08X..0x%08X（%u 字节，档 %s%s%s%s）内，偏移 +0x%X\n",
+                va, kFuncVA[i], kFuncVA[i] + kFuncSize[i], kFuncSize[i],
+                kNames[kFuncFlags[i] & 0x0Fu],
+                (kFuncFlags[i] & kFlagLeaf) ? " leaf" : "",
+                (kFuncFlags[i] & kFlagSeh) ? " seh" : "",
+                (kFuncFlags[i] & kFlagThunk) ? " thunk" : "",
+                va - kFuncVA[i]);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--vxlit") == 0) {
         if (argc < 3) {
@@ -1603,6 +2353,18 @@ int main(int argc, char** argv) {
         }
         return Detect_Game(argv[2]);
     }
+    if (argc > 1 && std::strcmp(argv[1], "--layout") == 0) {
+        return Layout_Dump(argc > 2 ? argv[2] : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--fieldnames") == 0) {
+        return FieldNames_Dump(argc > 2 ? argv[2] : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--model") == 0) {
+        return Model_Dump(argc > 2 ? argv[2] : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--funcs") == 0) {
+        return Funcs_Dump(argc > 2 ? argv[2] : nullptr);
+    }
     if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
         return Ini_Self_Test();
     }
@@ -1654,6 +2416,38 @@ int main(int argc, char** argv) {
             return 1;
         }
         return Unit_DB(mixes, dump);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--typetable") == 0) {
+        if (argc < 3) {
+            std::printf("用法：ra2core --typetable <顶层mix> [更多mix...]"
+                        " [--raw <out.txt>] [--summary <out.txt>] [--top <N>]\n");
+            std::printf("  例：ra2core --typetable D:/RA2/\"Reunion 2023\"/ra2.mix"
+                        " D:/RA2/\"Reunion 2023\"/ra2md.mix ...\n");
+            std::printf("  把 rules/art/sound/theme 全量装进类型表，并逐键对账\n");
+            return 1;
+        }
+        std::vector<std::string> mixes;
+        const char* raw = nullptr;
+        const char* summary = nullptr;
+        int top = 20;
+        for (int i = 2; i < argc; ++i) {
+            if (argv[i][0] == '-' && argv[i][1] == '-') {
+                if (std::strcmp(argv[i], "--raw") == 0 && i + 1 < argc) {
+                    raw = argv[++i];
+                } else if (std::strcmp(argv[i], "--summary") == 0 && i + 1 < argc) {
+                    summary = argv[++i];
+                } else if (std::strcmp(argv[i], "--top") == 0 && i + 1 < argc) {
+                    top = std::atoi(argv[++i]);
+                }
+                continue;
+            }
+            mixes.push_back(argv[i]);
+        }
+        if (mixes.empty()) {
+            std::printf("[x] 至少要给一个 .mix\n");
+            return 1;
+        }
+        return Type_Table(mixes, raw, summary, top);
     }
     if (argc > 1 && std::strcmp(argv[1], "--vxlhash") == 0) {
         if (argc < 3) {
@@ -1824,6 +2618,39 @@ int main(int argc, char** argv) {
     }
     std::printf("INFO sizeof 实测：UnitClass=%u InfantryClass=%u AircraftClass=%u（共 %d 条）\n",
                 sz_unit, sz_inf, sz_air, re::kSizeCount);
+
+    // ---- 字段偏移 ----
+    // src/re/FieldOffsets.h 由 tools/fieldscan.py 扫 gamemd.exe 的构造函数得出。
+    // 没有字段偏移，还原出的结构体就只是空壳，P3 逻辑层无从下手。
+    if (Layout_Check() != 0) {
+        return 1;
+    }
+
+    // ---- 字段名 ----
+    // src/re/FieldNames.h 由 tools/fieldname.py 扫 gamemd.exe 的 Read_INI 得出。
+    // 偏移知道"有个字段"，名字才知道"这个字段是哪个 INI 键"。
+    if (FieldNames_Check() != 0) {
+        return 1;
+    }
+
+    // ---- 对象模型 ----
+    // src/re/ObjectModel.h 由 tools/layout.py 把「偏移表 + 名字表 + RTTI 继承」
+    // 铺成能编译的结构体。这一步查的是名字有没有真的落到那个偏移上。
+    if (Model_Check() != 0) {
+        return 1;
+    }
+    // ---- 函数边界表 ----
+    // 这份表的判据和上面两张不同：它不查"名字对不对"，查"分区对不对" ——
+    // .text 的每个字节归谁，以及本体区入口的 16 字节对齐律。
+    if (Funcs_Check() != 0) {
+        return 1;
+    }
+    // ---- 基本块与 CFG ----
+    // 查的是"关系对不对"：块与边的四个合计拆得开、合得回，
+    // 且每个入口都在函数表里（跨表一致）。
+    if (Cfg_Check() != 0) {
+        return 1;
+    }
 
     std::printf("INFO 类层次取自 RTTI 实证：%d 个类 / %d 个虚表槽位\n",
                 re::kClassCount, re::kFlatSlotCount);

@@ -1,0 +1,3899 @@
+{
+ "method": "从 Read_INI 的『键名两侧同偏移』配对",
+ "min_keys": 12,
+ "slot_hist": {
+  "25": 6
+ },
+ "verify": {
+  "total": 396,
+  "both": 298,
+  "bad_key": 0,
+  "bad_width": 0,
+  "cross_seen": 313,
+  "beyond": 0,
+  "new_field": 83
+ },
+ "coverage": [
+  {
+   "fn": "0x0045FE50",
+   "cls": "BuildingTypeClass",
+   "read_by": [],
+   "keys_seen": 193,
+   "paired": 181,
+   "unpaired": [
+    "AIRCRAFTCOSTBONUS",
+    "BUILDINGSCOSTBONUS",
+    "BUILDUP",
+    "DEFENSESCOSTBONUS",
+    "EXTRAPOWER",
+    "INFANTRYCOSTBONUS",
+    "OCCUPYHEIGHT",
+    "POWER",
+    "PRIMARYFIREPIXELOFFSET",
+    "QUEUEINGCELL",
+    "UNITSCOSTBONUS",
+    "ZSHAPEPOINTMOVE"
+   ]
+  },
+  {
+   "fn": "0x005240A0",
+   "cls": "InfantryTypeClass",
+   "read_by": [],
+   "keys_seen": 25,
+   "paired": 25,
+   "unpaired": []
+  },
+  {
+   "fn": "0x005F92D0",
+   "cls": "ObjectTypeClass",
+   "read_by": [
+    "IsometricTileTypeClass"
+   ],
+   "keys_seen": 19,
+   "paired": 15,
+   "unpaired": [
+    "ALPHAIMAGE",
+    "AMBIENTSOUND",
+    "CRUSHSOUND",
+    "IMAGE"
+   ]
+  },
+  {
+   "fn": "0x00712170",
+   "cls": "TechnoTypeClass",
+   "read_by": [],
+   "keys_seen": 252,
+   "paired": 250,
+   "unpaired": [
+    "DEATHWEAPONDAMAGEMODIFIER",
+    "ELITEAIRSTRIKETEAM"
+   ]
+  },
+  {
+   "fn": "0x00747620",
+   "cls": "UnitTypeClass",
+   "read_by": [],
+   "keys_seen": 44,
+   "paired": 42,
+   "unpaired": [
+    "NORMALTURRETINDEX",
+    "NORMALTURRETWEAPON"
+   ]
+  }
+ ],
+ "conflicts": [],
+ "classes": {
+  "BuildingTypeClass": {
+   "3592": {
+    "off": 3592,
+    "key": "BUILDCAT",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0045FE84",
+    "call": "0x00475060"
+   },
+   "5420": {
+    "off": 5420,
+    "key": "ANTIINFANTRYVALUE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0045FE9E",
+    "call": "0x005276D0"
+   },
+   "5416": {
+    "off": 5416,
+    "key": "ANTIARMORVALUE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0045FEB8",
+    "call": "0x005276D0",
+    "conflict": [
+     "WATERBOUND"
+    ]
+   },
+   "5412": {
+    "off": 5412,
+    "key": "ANTIAIRVALUE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0045FED2",
+    "call": "0x005276D0"
+   },
+   "5451": {
+    "off": 5451,
+    "key": "HALFDAMAGESMOKELOCATION1",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0045FF04",
+    "call": "0x00529CA0"
+   },
+   "5796": {
+    "off": 5796,
+    "key": "RADAR",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0045FF5A",
+    "call": "0x005295F0"
+   },
+   "5797": {
+    "off": 5797,
+    "key": "SPYSAT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0045FF72",
+    "call": "0x005295F0"
+   },
+   "3764": {
+    "off": 3764,
+    "key": "ADJACENT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0045FFB6",
+    "call": "0x005276D0"
+   },
+   "5490": {
+    "off": 5490,
+    "key": "CAPTURABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0045FFCE",
+    "call": "0x005295F0"
+   },
+   "5491": {
+    "off": 5491,
+    "key": "POWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0045FFE8",
+    "call": "0x005295F0"
+   },
+   "5492": {
+    "off": 5492,
+    "key": "POWEREDSPECIAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460002",
+    "call": "0x005295F0"
+   },
+   "5493": {
+    "off": 5493,
+    "key": "OVERPOWERABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046001C",
+    "call": "0x005295F0"
+   },
+   "5494": {
+    "off": 5494,
+    "key": "SPYABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460036",
+    "call": "0x005295F0"
+   },
+   "5495": {
+    "off": 5495,
+    "key": "CANC4",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460050",
+    "call": "0x005295F0"
+   },
+   "5488": {
+    "off": 5488,
+    "key": "BIB",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460084",
+    "call": "0x005295F0"
+   },
+   "5497": {
+    "off": 5497,
+    "key": "UNSELLABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046009E",
+    "call": "0x005295F0"
+   },
+   "5498": {
+    "off": 5498,
+    "key": "CLICKREPAIRABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004600B8",
+    "call": "0x005295F0"
+   },
+   "5499": {
+    "off": 5499,
+    "key": "CANBEOCCUPIED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004600D2",
+    "call": "0x005295F0"
+   },
+   "5500": {
+    "off": 5500,
+    "key": "CANOCCUPYFIRE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004600EC",
+    "call": "0x005295F0"
+   },
+   "5504": {
+    "off": 5504,
+    "key": "MAXNUMBEROCCUPANTS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460120",
+    "call": "0x005276D0"
+   },
+   "5664": {
+    "off": 5664,
+    "key": "NUMBERIMPASSABLEROWS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046013A",
+    "call": "0x005276D0"
+   },
+   "5464": {
+    "off": 5464,
+    "key": "PRODUCECASHSTARTUP",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460154",
+    "call": "0x005276D0"
+   },
+   "5468": {
+    "off": 5468,
+    "key": "PRODUCECASHAMOUNT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046016E",
+    "call": "0x005276D0"
+   },
+   "5472": {
+    "off": 5472,
+    "key": "PRODUCECASHDELAY",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460188",
+    "call": "0x005276D0"
+   },
+   "5476": {
+    "off": 5476,
+    "key": "INFANTRYGAINSELFHEAL",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004601A2",
+    "call": "0x005276D0"
+   },
+   "5480": {
+    "off": 5480,
+    "key": "UNITSGAINSELFHEAL",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004601BC",
+    "call": "0x005276D0"
+   },
+   "5484": {
+    "off": 5484,
+    "key": "REFINERYSMOKEFRAMES",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004601D6",
+    "call": "0x005276D0"
+   },
+   "5455": {
+    "off": 5455,
+    "key": "BASENORMAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004601F0",
+    "call": "0x005295F0"
+   },
+   "5456": {
+    "off": 5456,
+    "key": "ELIGIBILEFORALLYBUILDING",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046020A",
+    "call": "0x005295F0"
+   },
+   "5457": {
+    "off": 5457,
+    "key": "ELIGIBLEFORDELAYKILL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460224",
+    "call": "0x005295F0"
+   },
+   "5458": {
+    "off": 5458,
+    "key": "NEEDSENGINEER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046023E",
+    "call": "0x005295F0"
+   },
+   "5460": {
+    "off": 5460,
+    "key": "CAPTUREEVAEVENT",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460258",
+    "call": "0x00474FA0"
+   },
+   "5989": {
+    "off": 5989,
+    "key": "PROTECTWITHWALL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460272",
+    "call": "0x005295F0"
+   },
+   "5489": {
+    "off": 5489,
+    "key": "WALL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046049F",
+    "call": "0x005295F0"
+   },
+   "5835": {
+    "off": 5835,
+    "key": "HELIPAD",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004604D3",
+    "call": "0x005295F0"
+   },
+   "5836": {
+    "off": 5836,
+    "key": "OREPURIFIER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004604ED",
+    "call": "0x005295F0",
+    "conflict": [
+     "FREEUNIT"
+    ]
+   },
+   "5837": {
+    "off": 5837,
+    "key": "FACTORYPLANT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460507",
+    "call": "0x005295F0"
+   },
+   "3768": {
+    "off": 3768,
+    "key": "FACTORY",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00460521",
+    "call": "0x00474FF0"
+   },
+   "5450": {
+    "off": 5450,
+    "key": "TOGGLEPOWER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460727",
+    "call": "0x005295F0",
+    "conflict": [
+     "CREATEUNITSOUND",
+     "WORKINGSOUND"
+    ]
+   },
+   "5452": {
+    "off": 5452,
+    "key": "NOTWORKINGSOUND",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004608DC",
+    "call": "0x00528A10"
+   },
+   "5801": {
+    "off": 5801,
+    "key": "UNITREPAIR",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046090D",
+    "call": "0x005295F0"
+   },
+   "5802": {
+    "off": 5802,
+    "key": "UNITRELOAD",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460923",
+    "call": "0x005295F0"
+   },
+   "5803": {
+    "off": 5803,
+    "key": "BUNKER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460941",
+    "call": "0x005295F0"
+   },
+   "5804": {
+    "off": 5804,
+    "key": "CLONING",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046095B",
+    "call": "0x005295F0"
+   },
+   "5805": {
+    "off": 5805,
+    "key": "GRINDING",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460971",
+    "call": "0x005295F0"
+   },
+   "5806": {
+    "off": 5806,
+    "key": "UNITABSORB",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046098F",
+    "call": "0x005295F0"
+   },
+   "5807": {
+    "off": 5807,
+    "key": "INFANTRYABSORB",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004609A9",
+    "call": "0x005295F0"
+   },
+   "5808": {
+    "off": 5808,
+    "key": "SECRETLAB",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004609BF",
+    "call": "0x005295F0"
+   },
+   "5811": {
+    "off": 5811,
+    "key": "DOCKUNLOAD",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004609DD",
+    "call": "0x005295F0"
+   },
+   "5815": {
+    "off": 5815,
+    "key": "GATE",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004609F7",
+    "call": "0x005295F0"
+   },
+   "5817": {
+    "off": 5817,
+    "key": "CONSTRUCTIONYARD",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460A2B",
+    "call": "0x005295F0"
+   },
+   "5818": {
+    "off": 5818,
+    "key": "NUKESILO",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00460A45",
+    "call": "0x005295F0"
+   },
+   "5819": {
+    "off": 5819,
+    "key": "REFINERY",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460A5B",
+    "call": "0x005295F0"
+   },
+   "5821": {
+    "off": 5821,
+    "key": "WEAPONSFACTORY",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460A79",
+    "call": "0x005295F0"
+   },
+   "5825": {
+    "off": 5825,
+    "key": "HOSPITAL",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00460AE1",
+    "call": "0x005295F0"
+   },
+   "5860": {
+    "off": 5860,
+    "key": "GDIBARRACKS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460B15",
+    "call": "0x005295F0"
+   },
+   "5861": {
+    "off": 5861,
+    "key": "NODBARRACKS",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00460B2F",
+    "call": "0x005295F0"
+   },
+   "5862": {
+    "off": 5862,
+    "key": "YURIBARRACKS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460B45",
+    "call": "0x005295F0"
+   },
+   "5828": {
+    "off": 5828,
+    "key": "CHARGEDANIMTIME",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00460B9E",
+    "call": "0x005283D0"
+   },
+   "5872": {
+    "off": 5872,
+    "key": "SUPERWEAPON",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460BB8",
+    "call": "0x00474F50"
+   },
+   "5832": {
+    "off": 5832,
+    "key": "SENSORARRAY",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460C00",
+    "call": "0x005295F0"
+   },
+   "5900": {
+    "off": 5900,
+    "key": "PSYCHICDETECTIONRADIUS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460C39",
+    "call": "0x005276D0"
+   },
+   "3804": {
+    "off": 3804,
+    "key": "DEPLOYFACING",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460C76",
+    "call": "0x005276D0"
+   },
+   "3632": {
+    "off": 3632,
+    "key": "LIGHTVISIBILITY",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00460C93",
+    "call": "0x005276D0"
+   },
+   "3636": {
+    "off": 3636,
+    "key": "LIGHTINTENSITY",
+    "type": "?",
+    "width": 4,
+    "level": "单向-存",
+    "at": "0x00460CCD",
+    "call": "0x005283D0"
+   },
+   "3640": {
+    "off": 3640,
+    "key": "LIGHTREDTINT",
+    "type": "?",
+    "width": 4,
+    "level": "单向-存",
+    "at": "0x00460D16",
+    "call": "0x005283D0"
+   },
+   "3644": {
+    "off": 3644,
+    "key": "LIGHTGREENTINT",
+    "type": "?",
+    "width": 4,
+    "level": "单向-存",
+    "at": "0x00460D5F",
+    "call": "0x005283D0"
+   },
+   "3648": {
+    "off": 3648,
+    "key": "LIGHTBLUETINT",
+    "type": "?",
+    "width": 4,
+    "level": "单向-存",
+    "at": "0x00460DA6",
+    "call": "0x005283D0"
+   },
+   "3624": {
+    "off": 3624,
+    "key": "GATECLOSEDELAY",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00460DD8",
+    "call": "0x005283D0"
+   },
+   "5889": {
+    "off": 5889,
+    "key": "INVISIBLEINGAME",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460DF2",
+    "call": "0x005295F0"
+   },
+   "5814": {
+    "off": 5814,
+    "key": "BRIDGEREPAIRHUT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460E8D",
+    "call": "0x005295F0"
+   },
+   "5813": {
+    "off": 5813,
+    "key": "HASSTUPIDGUARDMODE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460EA7",
+    "call": "0x005295F0"
+   },
+   "5991": {
+    "off": 5991,
+    "key": "CRATEBENEATH",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460EC1",
+    "call": "0x005295F0"
+   },
+   "5993": {
+    "off": 5993,
+    "key": "CRATEBENEATHISMONEY",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460EDB",
+    "call": "0x005295F0"
+   },
+   "5992": {
+    "off": 5992,
+    "key": "LEAVERUBBLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460EF5",
+    "call": "0x005295F0"
+   },
+   "5891": {
+    "off": 5891,
+    "key": "PLACEANYWHERE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460F0F",
+    "call": "0x005295F0"
+   },
+   "5833": {
+    "off": 5833,
+    "key": "TARGETCOORDOFFSET",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00460F70",
+    "call": null,
+    "conflict": [
+     "EXITCOORD"
+    ]
+   },
+   "5893": {
+    "off": 5893,
+    "key": "AIBUILDTHIS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00460FE9",
+    "call": "0x005295F0"
+   },
+   "5894": {
+    "off": 5894,
+    "key": "ISBASEDEFENSE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461003",
+    "call": "0x005295F0"
+   },
+   "5896": {
+    "off": 5896,
+    "key": "CONCENTRICRADIALINDICATOR",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461037",
+    "call": "0x005295F0"
+   },
+   "3828": {
+    "off": 3828,
+    "key": "HEIGHT",
+    "type": "int",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x004610E5",
+    "call": "0x005276D0"
+   },
+   "5812": {
+    "off": 5812,
+    "key": "RECOILLESS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461119",
+    "call": "0x005295F0"
+   },
+   "5809": {
+    "off": 5809,
+    "key": "DOUBLETHICK",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461136",
+    "call": "0x005295F0"
+   },
+   "5810": {
+    "off": 5810,
+    "key": "FLAT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461153",
+    "call": "0x005295F0"
+   },
+   "5799": {
+    "off": 5799,
+    "key": "ISANIMDELAYEDFIRE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004611AA",
+    "call": "0x005295F0",
+    "conflict": [
+     "TOOVERLAY"
+    ]
+   },
+   "5868": {
+    "off": 5868,
+    "key": "DELAYEDFIREDELAY",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004611C7",
+    "call": "0x005276D0"
+   },
+   "3824": {
+    "off": 3824,
+    "key": "FOUNDATION",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x0046122C",
+    "call": "0x00474DA0"
+   },
+   "5890": {
+    "off": 5890,
+    "key": "TERRAINPALETTE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004612BB",
+    "call": "0x005295F0"
+   },
+   "5880": {
+    "off": 5880,
+    "key": "GATESTAGES",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004612D8",
+    "call": "0x005276D0"
+   },
+   "5988": {
+    "off": 5988,
+    "key": "PRIMARYFIREDUALOFFSET",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461354",
+    "call": "0x005295F0"
+   },
+   "5892": {
+    "off": 5892,
+    "key": "EXTRADAMAGESTAGE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046136C",
+    "call": "0x005295F0"
+   },
+   "5990": {
+    "off": 5990,
+    "key": "CANHIDETHINGS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046140F",
+    "call": "0x005295F0"
+   },
+   "3868": {
+    "off": 3868,
+    "key": "ANIMACTIVE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00461691",
+    "call": "0x00528A10"
+   },
+   "3908": {
+    "off": 3908,
+    "key": "ACTIVEANIM",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x004617C4",
+    "call": "0x00528A10",
+    "conflict": [
+     "ACTIVEANIMDAMAGED"
+    ]
+   },
+   "3912": {
+    "off": 3912,
+    "key": "ACTIVEANIMGARRISONED",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x004618BC",
+    "call": "0x00528A10"
+   },
+   "4176": {
+    "off": 4176,
+    "key": "ACTIVEANIMZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004619B9",
+    "call": "0x005276D0"
+   },
+   "4180": {
+    "off": 4180,
+    "key": "ACTIVEANIMYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004619D6",
+    "call": "0x005276D0"
+   },
+   "4184": {
+    "off": 4184,
+    "key": "ACTIVEANIMPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004619F3",
+    "call": "0x005295F0"
+   },
+   "4185": {
+    "off": 4185,
+    "key": "ACTIVEANIMPOWEREDLIGHT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461A10",
+    "call": "0x005295F0",
+    "conflict": [
+     "ACTIVEANIMTWO"
+    ]
+   },
+   "4187": {
+    "off": 4187,
+    "key": "ACTIVEANIMPOWEREDSPECIAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461A4A",
+    "call": "0x005295F0"
+   },
+   "4186": {
+    "off": 4186,
+    "key": "ACTIVEANIMTWODAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00461AD0",
+    "call": "0x00528A10"
+   },
+   "4244": {
+    "off": 4244,
+    "key": "ACTIVEANIMTWOZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00461C67",
+    "call": "0x005276D0"
+   },
+   "4248": {
+    "off": 4248,
+    "key": "ACTIVEANIMTWOYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00461C84",
+    "call": "0x005276D0"
+   },
+   "4252": {
+    "off": 4252,
+    "key": "ACTIVEANIMTWOPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461CA1",
+    "call": "0x005295F0"
+   },
+   "4253": {
+    "off": 4253,
+    "key": "ACTIVEANIMTHREE",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00461D20",
+    "call": "0x00528A10"
+   },
+   "4254": {
+    "off": 4254,
+    "key": "ACTIVEANIMTHREEDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00461D7E",
+    "call": "0x00528A10"
+   },
+   "4312": {
+    "off": 4312,
+    "key": "ACTIVEANIMTHREEZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00461F15",
+    "call": "0x005276D0"
+   },
+   "4316": {
+    "off": 4316,
+    "key": "ACTIVEANIMTHREEYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00461F32",
+    "call": "0x005276D0"
+   },
+   "4320": {
+    "off": 4320,
+    "key": "ACTIVEANIMTHREEPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00461F4F",
+    "call": "0x005295F0"
+   },
+   "4321": {
+    "off": 4321,
+    "key": "ACTIVEANIMFOUR",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00461FCE",
+    "call": "0x00528A10"
+   },
+   "4322": {
+    "off": 4322,
+    "key": "ACTIVEANIMFOURDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046202C",
+    "call": "0x00528A10"
+   },
+   "4380": {
+    "off": 4380,
+    "key": "ACTIVEANIMFOURZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004621C3",
+    "call": "0x005276D0"
+   },
+   "4384": {
+    "off": 4384,
+    "key": "ACTIVEANIMFOURYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004621E0",
+    "call": "0x005276D0"
+   },
+   "4389": {
+    "off": 4389,
+    "key": "SUPERANIM",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046227C",
+    "call": "0x00528A10"
+   },
+   "4390": {
+    "off": 4390,
+    "key": "SUPERANIMDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004622DA",
+    "call": "0x00528A10"
+   },
+   "4924": {
+    "off": 4924,
+    "key": "SUPERANIMZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00462471",
+    "call": "0x005276D0"
+   },
+   "4928": {
+    "off": 4928,
+    "key": "SUPERANIMYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046248E",
+    "call": "0x005276D0"
+   },
+   "4932": {
+    "off": 4932,
+    "key": "SUPERANIMPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004624AB",
+    "call": "0x005295F0"
+   },
+   "4933": {
+    "off": 4933,
+    "key": "SUPERANIMTWO",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046252A",
+    "call": "0x00528A10"
+   },
+   "4934": {
+    "off": 4934,
+    "key": "SUPERANIMTWODAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00462588",
+    "call": "0x00528A10"
+   },
+   "4992": {
+    "off": 4992,
+    "key": "SUPERANIMTWOZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046271F",
+    "call": "0x005276D0"
+   },
+   "4996": {
+    "off": 4996,
+    "key": "SUPERANIMTWOYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046273C",
+    "call": "0x005276D0"
+   },
+   "5000": {
+    "off": 5000,
+    "key": "SUPERANIMTWOPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00462759",
+    "call": "0x005295F0"
+   },
+   "5001": {
+    "off": 5001,
+    "key": "SUPERANIMTHREE",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004627D8",
+    "call": "0x00528A10"
+   },
+   "5002": {
+    "off": 5002,
+    "key": "SUPERANIMTHREEDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00462836",
+    "call": "0x00528A10"
+   },
+   "5060": {
+    "off": 5060,
+    "key": "SUPERANIMTHREEZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004629CD",
+    "call": "0x005276D0"
+   },
+   "5064": {
+    "off": 5064,
+    "key": "SUPERANIMTHREEYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004629EA",
+    "call": "0x005276D0"
+   },
+   "5068": {
+    "off": 5068,
+    "key": "SUPERANIMTHREEPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00462A07",
+    "call": "0x005295F0"
+   },
+   "5070": {
+    "off": 5070,
+    "key": "SUPERANIMTHREEPOWEREDEFFECT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00462A41",
+    "call": "0x005295F0",
+    "conflict": [
+     "SUPERANIMFOURDAMAGED"
+    ]
+   },
+   "5069": {
+    "off": 5069,
+    "key": "SUPERANIMFOUR",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00462A86",
+    "call": "0x00528A10"
+   },
+   "5128": {
+    "off": 5128,
+    "key": "SUPERANIMFOURZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00462C7B",
+    "call": "0x005276D0"
+   },
+   "5132": {
+    "off": 5132,
+    "key": "SUPERANIMFOURYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00462C98",
+    "call": "0x005276D0"
+   },
+   "5136": {
+    "off": 5136,
+    "key": "SUPERANIMFOURPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00462CB5",
+    "call": "0x005295F0"
+   },
+   "5137": {
+    "off": 5137,
+    "key": "SPECIALANIM",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00462D34",
+    "call": "0x00528A10"
+   },
+   "5138": {
+    "off": 5138,
+    "key": "SPECIALANIMDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00462D92",
+    "call": "0x00528A10"
+   },
+   "4652": {
+    "off": 4652,
+    "key": "SPECIALANIMZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00462F29",
+    "call": "0x005276D0"
+   },
+   "4656": {
+    "off": 4656,
+    "key": "SPECIALANIMYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00462F46",
+    "call": "0x005276D0"
+   },
+   "4660": {
+    "off": 4660,
+    "key": "SPECIALANIMPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00462F63",
+    "call": "0x005295F0"
+   },
+   "4661": {
+    "off": 4661,
+    "key": "SPECIALANIMPOWEREDLIGHT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00462F80",
+    "call": "0x005295F0",
+    "conflict": [
+     "SPECIALANIMTWO"
+    ]
+   },
+   "4662": {
+    "off": 4662,
+    "key": "SPECIALANIMTWODAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00463040",
+    "call": "0x00528A10"
+   },
+   "4720": {
+    "off": 4720,
+    "key": "SPECIALANIMTWOZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004631D7",
+    "call": "0x005276D0"
+   },
+   "4724": {
+    "off": 4724,
+    "key": "SPECIALANIMTWOYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004631F4",
+    "call": "0x005276D0"
+   },
+   "4729": {
+    "off": 4729,
+    "key": "SPECIALANIMTHREE",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00463290",
+    "call": "0x00528A10"
+   },
+   "4730": {
+    "off": 4730,
+    "key": "SPECIALANIMTHREEDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004632EE",
+    "call": "0x00528A10"
+   },
+   "4788": {
+    "off": 4788,
+    "key": "SPECIALANIMTHREEZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00463485",
+    "call": "0x005276D0"
+   },
+   "4792": {
+    "off": 4792,
+    "key": "SPECIALANIMTHREEYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004634A2",
+    "call": "0x005276D0"
+   },
+   "4797": {
+    "off": 4797,
+    "key": "SPECIALANIMFOUR",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046353E",
+    "call": "0x00528A10"
+   },
+   "4798": {
+    "off": 4798,
+    "key": "SPECIALANIMFOURDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046359C",
+    "call": "0x00528A10"
+   },
+   "4856": {
+    "off": 4856,
+    "key": "SPECIALANIMFOURZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00463733",
+    "call": "0x005276D0"
+   },
+   "4865": {
+    "off": 4865,
+    "key": "LOWPOWER",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x004637EC",
+    "call": "0x00528A10"
+   },
+   "4866": {
+    "off": 4866,
+    "key": "LOWPOWERDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0046384A",
+    "call": "0x00528A10"
+   },
+   "5272": {
+    "off": 5272,
+    "key": "LOWPOWERPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00463A1B",
+    "call": "0x005295F0"
+   },
+   "5273": {
+    "off": 5273,
+    "key": "SUPERLOWPOWER",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00463A9A",
+    "call": "0x00528A10"
+   },
+   "5274": {
+    "off": 5274,
+    "key": "SUPERLOWPOWERDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00463AF8",
+    "call": "0x00528A10"
+   },
+   "5340": {
+    "off": 5340,
+    "key": "SUPERLOWPOWERPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00463CC9",
+    "call": "0x005295F0"
+   },
+   "5341": {
+    "off": 5341,
+    "key": "PRODUCTIONANIM",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00463D48",
+    "call": "0x00528A10"
+   },
+   "5342": {
+    "off": 5342,
+    "key": "PRODUCTIONANIMDAMAGED",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00463DA6",
+    "call": "0x00528A10"
+   },
+   "4516": {
+    "off": 4516,
+    "key": "PRODUCTIONANIMZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00463F39",
+    "call": "0x005276D0"
+   },
+   "4520": {
+    "off": 4520,
+    "key": "PRODUCTIONANIMYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00463F56",
+    "call": "0x005276D0",
+    "conflict": [
+     "IDLEANIMDAMAGED"
+    ]
+   },
+   "4512": {
+    "off": 4512,
+    "key": "IDLEANIM",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00463F7E",
+    "call": "0x00528A10"
+   },
+   "5196": {
+    "off": 5196,
+    "key": "IDLEANIMZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00464173",
+    "call": "0x005276D0"
+   },
+   "5200": {
+    "off": 5200,
+    "key": "IDLEANIMYSORT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00464190",
+    "call": "0x005276D0"
+   },
+   "5204": {
+    "off": 5204,
+    "key": "IDLEANIMPOWERED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x004641AD",
+    "call": "0x005295F0"
+   },
+   "4444": {
+    "off": 4444,
+    "key": "TURRETANIM",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x0046445F",
+    "call": "0x00528A10"
+   },
+   "4576": {
+    "off": 4576,
+    "key": "TURRETANIMX",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004645D7",
+    "call": "0x005276D0"
+   },
+   "4580": {
+    "off": 4580,
+    "key": "TURRETANIMY",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x004645F1",
+    "call": "0x005276D0"
+   },
+   "4584": {
+    "off": 4584,
+    "key": "TURRETANIMZADJUST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046460B",
+    "call": "0x005276D0"
+   },
+   "5829": {
+    "off": 5829,
+    "key": "TURRETANIMISVOXEL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0046463F",
+    "call": "0x005295F0"
+   },
+   "5344": {
+    "off": 5344,
+    "key": "UPGRADES",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0046472E",
+    "call": "0x005276D0"
+   },
+   "6016": {
+    "off": 6016,
+    "key": "NUMBEROFDOCKS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00464938",
+    "call": "0x005276D0"
+   }
+  },
+  "InfantryTypeClass": {
+   "3580": {
+    "off": 3580,
+    "key": "PIP",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x005240DB",
+    "call": "0x004748A0",
+    "conflict": [
+     "ELITEOCCUPYWEAPON"
+    ]
+   },
+   "3584": {
+    "off": 3584,
+    "key": "OCCUPYPIP",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x005240F5",
+    "call": "0x004748A0",
+    "conflict": [
+     "OCCUPYWEAPON"
+    ]
+   },
+   "3757": {
+    "off": 3757,
+    "key": "NOTHUMAN",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005243C6",
+    "call": "0x005295F0"
+   },
+   "3756": {
+    "off": 3756,
+    "key": "ENTERWATERSOUND",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00524403",
+    "call": "0x00528A10",
+    "conflict": [
+     "LEAVEWATERSOUND"
+    ]
+   },
+   "3772": {
+    "off": 3772,
+    "key": "FEARLESS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00524469",
+    "call": "0x005295F0"
+   },
+   "3775": {
+    "off": 3775,
+    "key": "FRAIDYCAT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00524487",
+    "call": "0x005295F0"
+   },
+   "3774": {
+    "off": 3774,
+    "key": "INFILTRATE",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005244A1",
+    "call": "0x005295F0"
+   },
+   "3758": {
+    "off": 3758,
+    "key": "IVAN",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005244B7",
+    "call": "0x005295F0"
+   },
+   "3764": {
+    "off": 3764,
+    "key": "OCCUPIER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005244D5",
+    "call": "0x005295F0"
+   },
+   "3765": {
+    "off": 3765,
+    "key": "ASSAULTER",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005244EF",
+    "call": "0x005295F0"
+   },
+   "3768": {
+    "off": 3768,
+    "key": "HARVESTRATE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00524523",
+    "call": "0x005276D0"
+   },
+   "3777": {
+    "off": 3777,
+    "key": "CIVILIAN",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00524553",
+    "call": "0x005295F0"
+   },
+   "3779": {
+    "off": 3779,
+    "key": "ENGINEER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00524571",
+    "call": "0x005295F0"
+   },
+   "3776": {
+    "off": 3776,
+    "key": "TIBERIUMPROOF",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0052458B",
+    "call": "0x005295F0"
+   },
+   "3780": {
+    "off": 3780,
+    "key": "AGENT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005245A1",
+    "call": "0x005295F0"
+   },
+   "3784": {
+    "off": 3784,
+    "key": "DEPLOYER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0052460D",
+    "call": "0x005295F0"
+   },
+   "3785": {
+    "off": 3785,
+    "key": "DEPLOYEDCRUSHABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00524627",
+    "call": "0x005295F0"
+   },
+   "3786": {
+    "off": 3786,
+    "key": "USEOWNNAME",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0052463D",
+    "call": "0x005295F0"
+   },
+   "3787": {
+    "off": 3787,
+    "key": "JUMPJETTURN",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0052465B",
+    "call": "0x005295F0"
+   },
+   "3773": {
+    "off": 3773,
+    "key": "CRAWLS",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005246AE",
+    "call": "0x005295F0"
+   },
+   "3648": {
+    "off": 3648,
+    "key": "FIREUP",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x005246CA",
+    "call": "0x005276D0"
+   },
+   "3656": {
+    "off": 3656,
+    "key": "SECONDARYFIRE",
+    "type": "int",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00524705",
+    "call": "0x005276D0"
+   }
+  },
+  "ObjectTypeClass": {
+   "557": {
+    "off": 557,
+    "key": "CRUSHABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005F940A",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "558": {
+    "off": 558,
+    "key": "BOMBABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F9420",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "488": {
+    "off": 488,
+    "key": "NOSPAWNALT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F943E",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "529": {
+    "off": 529,
+    "key": "ALTERNATEARCTICART",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005F9458",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "559": {
+    "off": 559,
+    "key": "RADARINVISIBLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F946E",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "560": {
+    "off": 560,
+    "key": "SELECTABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F948C",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "561": {
+    "off": 561,
+    "key": "LEGALTARGET",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005F94A6",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "156": {
+    "off": 156,
+    "key": "ARMOR",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x005F94BC",
+    "call": "0x004753F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "160": {
+    "off": 160,
+    "key": "STRENGTH",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x005F94DA",
+    "call": "0x005276D0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "563": {
+    "off": 563,
+    "key": "IMMUNE",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005F94F4",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "562": {
+    "off": 562,
+    "key": "INSIGNIFICANT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F950A",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "568": {
+    "off": 568,
+    "key": "HASRADIALINDICATOR",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005F9528",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "556": {
+    "off": 556,
+    "key": "THEATER",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x005F95E9",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "567": {
+    "off": 567,
+    "key": "NEWTHEATER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F9605",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   },
+   "566": {
+    "off": 566,
+    "key": "VOXEL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x005F9623",
+    "call": "0x005295F0",
+    "read_by": [
+     "IsometricTileTypeClass"
+    ]
+   }
+  },
+  "TechnoTypeClass": {
+   "1540": {
+    "off": 1540,
+    "key": "LANDTARGETING",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007121A4",
+    "call": "0x005276D0"
+   },
+   "1536": {
+    "off": 1536,
+    "key": "NAVALTARGETING",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007121BE",
+    "call": "0x005276D0"
+   },
+   "1660": {
+    "off": 1660,
+    "key": "SPEEDTYPE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007121D8",
+    "call": "0x00476FC0"
+   },
+   "1828": {
+    "off": 1828,
+    "key": "CANBEHIDDEN",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007121F2",
+    "call": "0x005295F0"
+   },
+   "3212": {
+    "off": 3212,
+    "key": "TYPEIMMUNE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071220F",
+    "call": "0x005295F0"
+   },
+   "660": {
+    "off": 660,
+    "key": "WALKRATE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00712229",
+    "call": "0x005276D0"
+   },
+   "664": {
+    "off": 664,
+    "key": "IDLERATE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00712243",
+    "call": "0x005276D0"
+   },
+   "3213": {
+    "off": 3213,
+    "key": "MOVETOSHROUD",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071225D",
+    "call": "0x005295F0"
+   },
+   "1464": {
+    "off": 1464,
+    "key": "GUARDRANGE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007122AB",
+    "call": "0x00474620"
+   },
+   "3349": {
+    "off": 3349,
+    "key": "EXPLODES",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007122C5",
+    "call": "0x005295F0"
+   },
+   "3225": {
+    "off": 3225,
+    "key": "DEATHWEAPON",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x007122F0",
+    "call": "0x00528A10"
+   },
+   "3221": {
+    "off": 3221,
+    "key": "PITCHANGLE",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0071236B",
+    "call": "0x005283D0"
+   },
+   "936": {
+    "off": 936,
+    "key": "PITCHSPEED",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x007123DA",
+    "call": "0x005283D0",
+    "conflict": [
+     "LOCOMOTOR"
+    ]
+   },
+   "784": {
+    "off": 784,
+    "key": "CLOAKINGSPEED",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00712441",
+    "call": "0x005276D0"
+   },
+   "752": {
+    "off": 752,
+    "key": "THREATAVOIDANCECOEFFICIENT",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00712460",
+    "call": "0x005283D0"
+   },
+   "768": {
+    "off": 768,
+    "key": "DEACCELERATIONFACTOR",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x0071249B",
+    "call": "0x005283D0"
+   },
+   "776": {
+    "off": 776,
+    "key": "ACCELERATIONFACTOR",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x007124BC",
+    "call": "0x005283D0"
+   },
+   "880": {
+    "off": 880,
+    "key": "WEIGHT",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x007124DD",
+    "call": "0x005283D0"
+   },
+   "888": {
+    "off": 888,
+    "key": "PHYSICALSIZE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x007124FE",
+    "call": "0x005283D0"
+   },
+   "896": {
+    "off": 896,
+    "key": "SIZE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x0071251F",
+    "call": "0x005283D0"
+   },
+   "904": {
+    "off": 904,
+    "key": "SIZELIMIT",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00712540",
+    "call": "0x005283D0"
+   },
+   "912": {
+    "off": 912,
+    "key": "HOVERATTACK",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071255A",
+    "call": "0x005295F0"
+   },
+   "916": {
+    "off": 916,
+    "key": "VHPSCAN",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00712574",
+    "call": "0x00477590",
+    "conflict": [
+     "DEBRISTYPES"
+    ]
+   },
+   "1468": {
+    "off": 1468,
+    "key": "MAXDEBRIS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071258E",
+    "call": "0x005276D0",
+    "conflict": [
+     "DEBRISANIMS"
+    ]
+   },
+   "1472": {
+    "off": 1472,
+    "key": "MINDEBRIS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007125A8",
+    "call": "0x005276D0"
+   },
+   "3352": {
+    "off": 3352,
+    "key": "DEBRISMAXIMUMS",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x007126EB",
+    "call": "0x00524EC0"
+   },
+   "2054": {
+    "off": 2054,
+    "key": "HASTURRETTOOLTIPS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00712837",
+    "call": "0x005295F0"
+   },
+   "2056": {
+    "off": 2056,
+    "key": "TURRETCOUNT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00712851",
+    "call": "0x005276D0"
+   },
+   "2060": {
+    "off": 2060,
+    "key": "WEAPONCOUNT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071286B",
+    "call": "0x005276D0",
+    "conflict": [
+     "PRIMARY",
+     "ELITEPRIMARY",
+     "ELITESECONDARY",
+     "AUXSOUND2",
+     "SINKINGSOUND",
+     "SECONDARYFIREFLH"
+    ]
+   },
+   "2064": {
+    "off": 2064,
+    "key": "ISCHARGETURRET",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00712885",
+    "call": "0x005295F0"
+   },
+   "2704": {
+    "off": 2704,
+    "key": "SECONDARY",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x007129ED",
+    "call": "0x00528A10",
+    "conflict": [
+     "AUXSOUND1",
+     "CREATESOUND",
+     "DAMAGESOUND",
+     "IMPACTLANDSOUND",
+     "CRASHINGSOUND",
+     "VOICECRASHING",
+     "VOICEENTER",
+     "VOICECAPTURE"
+    ]
+   },
+   "2736": {
+    "off": 2736,
+    "key": "VOICEMOVE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00712ACC",
+    "call": "0x00524EC0",
+    "conflict": [
+     "VOICESELECT",
+     "VOICESELECTENSLAVED",
+     "VOICESELECTDEACTIVATED",
+     "VOICEATTACK",
+     "VOICESPECIALATTACK",
+     "VOICEFEEDBACK"
+    ]
+   },
+   "2048": {
+    "off": 2048,
+    "key": "STORAGE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00713130",
+    "call": "0x005276D0",
+    "conflict": [
+     "DOCK",
+     "DEPLOYSINTO"
+    ]
+   },
+   "952": {
+    "off": 952,
+    "key": "BUILDLIMIT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071314A",
+    "call": "0x005276D0",
+    "conflict": [
+     "UNDEPLOYSINTO"
+    ]
+   },
+   "956": {
+    "off": 956,
+    "key": "CATEGORY",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00713164",
+    "call": "0x004749E0",
+    "conflict": [
+     "POWERSUNIT"
+    ]
+   },
+   "1040": {
+    "off": 1040,
+    "key": "POWEREDUNIT",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713316",
+    "call": "0x005295F0"
+   },
+   "3361": {
+    "off": 3361,
+    "key": "TURRETSPINS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713360",
+    "call": "0x005295F0",
+    "conflict": [
+     "TURRETROTATESOUND",
+     "CHRONOINSOUND"
+    ]
+   },
+   "3362": {
+    "off": 3362,
+    "key": "TILTCRASHJUMPJET",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071337E",
+    "call": "0x005295F0",
+    "conflict": [
+     "ENTERTRANSPORTSOUND",
+     "DEPLOYSOUND",
+     "CHRONOOUTSOUND",
+     "VOICEDEPLOY",
+     "ACTIVATESOUND",
+     "EXPLOSION",
+     "DESTROYANIM"
+    ]
+   },
+   "3233": {
+    "off": 3233,
+    "key": "TURRET",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00713398",
+    "call": "0x005295F0",
+    "conflict": [
+     "LEAVETRANSPORTSOUND",
+     "UNDEPLOYSOUND",
+     "VOICEHARVEST",
+     "VOICESECONDARYWEAPONATTACK",
+     "DEACTIVATESOUND",
+     "REFINERYSMOKEPARTICLESYSTEM",
+     "DAMAGEPARTICLESYSTEMS"
+    ]
+   },
+   "1384": {
+    "off": 1384,
+    "key": "MOVESOUND",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00713478",
+    "call": "0x00524EC0",
+    "conflict": [
+     "DIESOUND"
+    ]
+   },
+   "1908": {
+    "off": 1908,
+    "key": "DAMAGESMOKEOFFSET",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00713E25",
+    "call": "0x00476420",
+    "conflict": [
+     "REFINERYSMOKEOFFSETONE",
+     "REFINERYSMOKEOFFSETTWO",
+     "REFINERYSMOKEOFFSETTHREE",
+     "REFINERYSMOKEOFFSETFOUR",
+     "PREREQUISITE",
+     "PREREQUISITEOVERRIDE"
+    ]
+   },
+   "3230": {
+    "off": 3230,
+    "key": "NOMINAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713F33",
+    "call": "0x005295F0"
+   },
+   "3231": {
+    "off": 3231,
+    "key": "DONTSCORE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713F4B",
+    "call": "0x005295F0"
+   },
+   "3232": {
+    "off": 3232,
+    "key": "DAMAGESELF",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713F65",
+    "call": "0x005295F0"
+   },
+   "3280": {
+    "off": 3280,
+    "key": "CLOAKABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713F7F",
+    "call": "0x005295F0"
+   },
+   "3281": {
+    "off": 3281,
+    "key": "GAPGENERATOR",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713F99",
+    "call": "0x005295F0"
+   },
+   "3282": {
+    "off": 3282,
+    "key": "GAPRADIUSINCELLS",
+    "type": "int",
+    "width": 1,
+    "level": "双向/宽度存疑",
+    "at": "0x00713FB6",
+    "call": "0x005276D0"
+   },
+   "3283": {
+    "off": 3283,
+    "key": "SUPERGAPRADIUSINCELLS",
+    "type": "int",
+    "width": 1,
+    "level": "双向/宽度存疑",
+    "at": "0x00713FD1",
+    "call": "0x005276D0"
+   },
+   "3284": {
+    "off": 3284,
+    "key": "TELEPORTER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00713FE9",
+    "call": "0x005295F0"
+   },
+   "3229": {
+    "off": 3229,
+    "key": "SENSORS",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714003",
+    "call": "0x005295F0"
+   },
+   "3285": {
+    "off": 3285,
+    "key": "ISGATTLING",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071401D",
+    "call": "0x005295F0"
+   },
+   "3288": {
+    "off": 3288,
+    "key": "WEAPONSTAGES",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714037",
+    "call": "0x005276D0"
+   },
+   "3340": {
+    "off": 3340,
+    "key": "RATEUP",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714051",
+    "call": "0x005276D0"
+   },
+   "3344": {
+    "off": 3344,
+    "key": "RATEDOWN",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071406B",
+    "call": "0x005276D0"
+   },
+   "980": {
+    "off": 980,
+    "key": "PIPSCALE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071411A",
+    "call": "0x00474940"
+   },
+   "984": {
+    "off": 984,
+    "key": "PIPSDRAWFORALL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714132",
+    "call": "0x005295F0"
+   },
+   "992": {
+    "off": 992,
+    "key": "PIXELSELECTIONBRACKETDELTA",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714166",
+    "call": "0x005276D0"
+   },
+   "1512": {
+    "off": 1512,
+    "key": "SIGHT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071429A",
+    "call": "0x005276D0"
+   },
+   "3388": {
+    "off": 3388,
+    "key": "RESELECTIFLIMBOED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007142B4",
+    "call": "0x005295F0"
+   },
+   "3389": {
+    "off": 3389,
+    "key": "REJOINTEAMIFLIMBOED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007142CE",
+    "call": "0x005295F0"
+   },
+   "1520": {
+    "off": 1520,
+    "key": "SENSORSSIGHT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007142E8",
+    "call": "0x005276D0"
+   },
+   "1524": {
+    "off": 1524,
+    "key": "DETECTDISGUISERANGE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714302",
+    "call": "0x005276D0"
+   },
+   "1528": {
+    "off": 1528,
+    "key": "BOMBSIGHT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071431C",
+    "call": "0x005276D0"
+   },
+   "1532": {
+    "off": 1532,
+    "key": "LEADERSHIPRATING",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714336",
+    "call": "0x005276D0"
+   },
+   "1548": {
+    "off": 1548,
+    "key": "BUILDTIMEMULTIPLIER",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00714371",
+    "call": "0x005283D0"
+   },
+   "1518": {
+    "off": 1518,
+    "key": "REVEALTOALL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071438B",
+    "call": "0x005295F0"
+   },
+   "1519": {
+    "off": 1519,
+    "key": "DRAINABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007143A3",
+    "call": "0x005295F0"
+   },
+   "1508": {
+    "off": 1508,
+    "key": "OPENTOPPED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007143BD",
+    "call": "0x005295F0"
+   },
+   "1516": {
+    "off": 1516,
+    "key": "RESOURCEGATHERER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007143D7",
+    "call": "0x005295F0"
+   },
+   "1517": {
+    "off": 1517,
+    "key": "RESOURCEDESTINATION",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007143F1",
+    "call": "0x005295F0"
+   },
+   "3375": {
+    "off": 3375,
+    "key": "CANDISGUISE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071440B",
+    "call": "0x005295F0"
+   },
+   "3376": {
+    "off": 3376,
+    "key": "PERMADISGUISE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714425",
+    "call": "0x005295F0"
+   },
+   "3377": {
+    "off": 3377,
+    "key": "DETECTDISGUISE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071443F",
+    "call": "0x005295F0"
+   },
+   "3378": {
+    "off": 3378,
+    "key": "DISGUISEWHENSTILL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714459",
+    "call": "0x005295F0"
+   },
+   "3481": {
+    "off": 3481,
+    "key": "CANPASSIVEAQUIRE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714473",
+    "call": "0x005295F0"
+   },
+   "3482": {
+    "off": 3482,
+    "key": "CANRETALIATE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071448D",
+    "call": "0x005295F0"
+   },
+   "3379": {
+    "off": 3379,
+    "key": "CANAPPROACHTARGET",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007144A7",
+    "call": "0x005295F0"
+   },
+   "3483": {
+    "off": 3483,
+    "key": "REQUIRESSTOLENTHIRDTECH",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007144DB",
+    "call": "0x005295F0"
+   },
+   "3484": {
+    "off": 3484,
+    "key": "REQUIRESSTOLENSOVIETTECH",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007144F7",
+    "call": "0x005295F0"
+   },
+   "3485": {
+    "off": 3485,
+    "key": "REQUIRESSTOLENALLIEDTECH",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071450F",
+    "call": "0x005295F0"
+   },
+   "3488": {
+    "off": 3488,
+    "key": "REQUIREDHOUSES",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714529",
+    "call": "0x004750D0"
+   },
+   "3496": {
+    "off": 3496,
+    "key": "SECRETHOUSES",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714543",
+    "call": "0x004750D0"
+   },
+   "3492": {
+    "off": 3492,
+    "key": "FORBIDDENHOUSES",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071455D",
+    "call": "0x004750D0",
+    "conflict": [
+     "AIRSTRIKETEAMTYPE",
+     "ELITEAIRSTRIKERECHARGETIME",
+     "SPEED",
+     "UNLOADINGCLASS"
+    ]
+   },
+   "1588": {
+    "off": 1588,
+    "key": "TECHLEVEL",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714577",
+    "call": "0x005276D0",
+    "conflict": [
+     "ELITEAIRSTRIKETEAMTYPE"
+    ]
+   },
+   "1564": {
+    "off": 1564,
+    "key": "AIRSTRIKETEAM",
+    "type": "int",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00714591",
+    "call": "0x005276D0"
+   },
+   "1580": {
+    "off": 1580,
+    "key": "AIRSTRIKERECHARGETIME",
+    "type": "int",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00714629",
+    "call": "0x005276D0"
+   },
+   "1552": {
+    "off": 1552,
+    "key": "COST",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007146A6",
+    "call": "0x005276D0",
+    "conflict": [
+     "DEPLOYINGANIM"
+    ]
+   },
+   "1556": {
+    "off": 1556,
+    "key": "SOYLENT",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007146C0",
+    "call": "0x005276D0"
+   },
+   "1668": {
+    "off": 1668,
+    "key": "AMMO",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071476D",
+    "call": "0x005276D0"
+   },
+   "1672": {
+    "off": 1672,
+    "key": "IFVMODE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714787",
+    "call": "0x005276D0"
+   },
+   "1676": {
+    "off": 1676,
+    "key": "AIRRANGEBONUS",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007147A1",
+    "call": "0x00474620"
+   },
+   "1700": {
+    "off": 1700,
+    "key": "RADIALFIRESEGMENTS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007147BB",
+    "call": "0x005276D0"
+   },
+   "1708": {
+    "off": 1708,
+    "key": "DEPLOYFIRE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007147EF",
+    "call": "0x005295F0"
+   },
+   "1709": {
+    "off": 1709,
+    "key": "DEPLOYTOLAND",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714809",
+    "call": "0x005295F0"
+   },
+   "1711": {
+    "off": 1711,
+    "key": "OPPORTUNITYFIRE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071483D",
+    "call": "0x005295F0"
+   },
+   "1712": {
+    "off": 1712,
+    "key": "DISTRIBUTEDFIRE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714857",
+    "call": "0x005295F0"
+   },
+   "1680": {
+    "off": 1680,
+    "key": "BERSERKFRIENDLY",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007148FA",
+    "call": "0x005295F0"
+   },
+   "1683": {
+    "off": 1683,
+    "key": "NATURAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714946",
+    "call": "0x005295F0"
+   },
+   "1684": {
+    "off": 1684,
+    "key": "UNNATURAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714960",
+    "call": "0x005295F0"
+   },
+   "1685": {
+    "off": 1685,
+    "key": "CLOSERANGE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071497A",
+    "call": "0x005295F0"
+   },
+   "1736": {
+    "off": 1736,
+    "key": "PREVENTATTACKMOVE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714994",
+    "call": "0x005295F0"
+   },
+   "1832": {
+    "off": 1832,
+    "key": "POINTS",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007149AE",
+    "call": "0x005276D0"
+   },
+   "1648": {
+    "off": 1648,
+    "key": "THREATPOSED",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007149CE",
+    "call": "0x005276D0"
+   },
+   "1740": {
+    "off": 1740,
+    "key": "OWNER",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007149E8",
+    "call": "0x004750D0"
+   },
+   "1744": {
+    "off": 1744,
+    "key": "AIBASEPLANNINGSIDE",
+    "type": "int",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714A02",
+    "call": "0x005276D0"
+   },
+   "3214": {
+    "off": 3214,
+    "key": "TRAINABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714A1C",
+    "call": "0x005295F0"
+   },
+   "3277": {
+    "off": 3277,
+    "key": "CREWED",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714A36",
+    "call": "0x005295F0"
+   },
+   "2053": {
+    "off": 2053,
+    "key": "GUNNER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714A50",
+    "call": "0x005295F0"
+   },
+   "3278": {
+    "off": 3278,
+    "key": "NAVAL",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714A6A",
+    "call": "0x005295F0"
+   },
+   "3276": {
+    "off": 3276,
+    "key": "REPAIRABLE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714A84",
+    "call": "0x005295F0"
+   },
+   "3227": {
+    "off": 3227,
+    "key": "RADARVISIBLE",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714AB8",
+    "call": "0x00524EC0"
+   },
+   "3348": {
+    "off": 3348,
+    "key": "SELFHEALING",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714AD9",
+    "call": "0x00524EC0"
+   },
+   "1820": {
+    "off": 1820,
+    "key": "ROT",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714B1B",
+    "call": "0x00524EC0"
+   },
+   "1504": {
+    "off": 1504,
+    "key": "PASSENGERS",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714B3C",
+    "call": "0x00524EC0"
+   },
+   "976": {
+    "off": 976,
+    "key": "FIREANGLE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714B5D",
+    "call": "0x00524EC0"
+   },
+   "968": {
+    "off": 968,
+    "key": "DEPLOYTIME",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00714B85",
+    "call": "0x00524EC0"
+   },
+   "1732": {
+    "off": 1732,
+    "key": "UNDEPLOYDELAY",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714BA8",
+    "call": "0x00524EC0"
+   },
+   "3222": {
+    "off": 3222,
+    "key": "TOPROTECT",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714BE8",
+    "call": "0x00524EC0"
+   },
+   "3217": {
+    "off": 3217,
+    "key": "IMMUNETOVEINS",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714C2A",
+    "call": "0x00524EC0"
+   },
+   "1749": {
+    "off": 1749,
+    "key": "ALLOWEDTOSTARTINMULTIPLAYER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714C4B",
+    "call": "0x00524EC0"
+   },
+   "1748": {
+    "off": 1748,
+    "key": "STUPIDHUNT",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714C6C",
+    "call": "0x00524EC0"
+   },
+   "3216": {
+    "off": 3216,
+    "key": "TARGETLASER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714C8D",
+    "call": "0x00524EC0"
+   },
+   "3368": {
+    "off": 3368,
+    "key": "CRUSHER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714CCF",
+    "call": "0x00524EC0"
+   },
+   "3369": {
+    "off": 3369,
+    "key": "OMNICRUSHER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714CF0",
+    "call": "0x00524EC0"
+   },
+   "3370": {
+    "off": 3370,
+    "key": "OMNICRUSHRESISTANT",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714D11",
+    "call": "0x00524EC0"
+   },
+   "3373": {
+    "off": 3373,
+    "key": "AUTOCRUSH",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714D32",
+    "call": "0x00524EC0"
+   },
+   "3383": {
+    "off": 3383,
+    "key": "IMMUNETORADIATION",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714D53",
+    "call": "0x00524EC0"
+   },
+   "3433": {
+    "off": 3433,
+    "key": "UNDERWATER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714D74",
+    "call": "0x00524EC0"
+   },
+   "3434": {
+    "off": 3434,
+    "key": "BALLOONHOVER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714D95",
+    "call": "0x00524EC0"
+   },
+   "3390": {
+    "off": 3390,
+    "key": "SLAVED",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714DB6",
+    "call": "0x00524EC0"
+   },
+   "3392": {
+    "off": 3392,
+    "key": "ENSLAVES",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714DD7",
+    "call": "0x00524EC0"
+   },
+   "3400": {
+    "off": 3400,
+    "key": "SLAVEREGENRATE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714DF9",
+    "call": "0x00524EC0"
+   },
+   "3396": {
+    "off": 3396,
+    "key": "SLAVESNUMBER",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714E1A",
+    "call": "0x00524EC0"
+   },
+   "3404": {
+    "off": 3404,
+    "key": "SLAVERELOADRATE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714E3B",
+    "call": "0x00524EC0"
+   },
+   "3408": {
+    "off": 3408,
+    "key": "OPENTRANSPORTWEAPON",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714E5C",
+    "call": "0x00524EC0"
+   },
+   "3412": {
+    "off": 3412,
+    "key": "SPAWNED",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714E7D",
+    "call": "0x00524EC0"
+   },
+   "3416": {
+    "off": 3416,
+    "key": "SPAWNS",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714E9E",
+    "call": "0x00524EC0"
+   },
+   "3424": {
+    "off": 3424,
+    "key": "SPAWNREGENRATE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714EC0",
+    "call": "0x00524EC0"
+   },
+   "3420": {
+    "off": 3420,
+    "key": "SPAWNSNUMBER",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714EE1",
+    "call": "0x00524EC0"
+   },
+   "3428": {
+    "off": 3428,
+    "key": "SPAWNRELOADRATE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00714F02",
+    "call": "0x00524EC0"
+   },
+   "3432": {
+    "off": 3432,
+    "key": "MISSILESPAWN",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714F23",
+    "call": "0x00524EC0"
+   },
+   "3385": {
+    "off": 3385,
+    "key": "DEFAULTTOGUARDAREA",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714F44",
+    "call": "0x00524EC0"
+   },
+   "3384": {
+    "off": 3384,
+    "key": "PARASITEABLE",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714F86",
+    "call": "0x00524EC0"
+   },
+   "3381": {
+    "off": 3381,
+    "key": "IMMUNETOPSIONICS",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714FA7",
+    "call": "0x00524EC0"
+   },
+   "3382": {
+    "off": 3382,
+    "key": "IMMUNETOPSIONICWEAPONS",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714FC8",
+    "call": "0x00524EC0"
+   },
+   "3478": {
+    "off": 3478,
+    "key": "CONSIDEREDAIRCRAFT",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00714FE9",
+    "call": "0x00524EC0"
+   },
+   "3374": {
+    "off": 3374,
+    "key": "BUNKERABLE",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071500A",
+    "call": "0x00524EC0"
+   },
+   "3479": {
+    "off": 3479,
+    "key": "ORGANIC",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071502B",
+    "call": "0x00524EC0"
+   },
+   "3387": {
+    "off": 3387,
+    "key": "IMMUNETOPOISON",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071504C",
+    "call": "0x00524EC0"
+   },
+   "3436": {
+    "off": 3436,
+    "key": "SUPPRESSIONTHRESHOLD",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071506D",
+    "call": "0x00524EC0"
+   },
+   "3480": {
+    "off": 3480,
+    "key": "NOSHADOW",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071508E",
+    "call": "0x00524EC0"
+   },
+   "3440": {
+    "off": 3440,
+    "key": "JUMPJETTURNRATE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007150AF",
+    "call": "0x00524EC0",
+    "conflict": [
+     "JUMPJETCLIMB",
+     "JUMPJETCRASH",
+     "JUMPJETACCEL",
+     "JUMPJETWOBBLES"
+    ]
+   },
+   "3444": {
+    "off": 3444,
+    "key": "JUMPJETSPEED",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007150D0",
+    "call": "0x00524EC0"
+   },
+   "3456": {
+    "off": 3456,
+    "key": "JUMPJETHEIGHT",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071513F",
+    "call": "0x00524EC0"
+   },
+   "3468": {
+    "off": 3468,
+    "key": "JUMPJETNOWOBBLES",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007151AC",
+    "call": "0x00524EC0"
+   },
+   "3472": {
+    "off": 3472,
+    "key": "JUMPJETDEVIATION",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007151CB",
+    "call": "0x00524EC0"
+   },
+   "3476": {
+    "off": 3476,
+    "key": "JUMPJET",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007151EC",
+    "call": "0x00524EC0"
+   },
+   "3477": {
+    "off": 3477,
+    "key": "CRASHABLE",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071520D",
+    "call": "0x00524EC0"
+   },
+   "1729": {
+    "off": 1729,
+    "key": "ATTACKCURSORONFRIENDLIES",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x0071524F",
+    "call": "0x00524EC0"
+   },
+   "3234": {
+    "off": 3234,
+    "key": "TURRETRECOIL",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00715270",
+    "call": "0x00524EC0",
+    "conflict": [
+     "TURRETTRAVEL",
+     "BARRELTRAVEL",
+     "BARRELCOMPRESSFRAMES",
+     "BARRELHOLDFRAMES",
+     "BARRELRECOVERFRAMES"
+    ]
+   },
+   "3517": {
+    "off": 3517,
+    "key": "ACCELERATES",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00715402",
+    "call": "0x00524EC0"
+   },
+   "3524": {
+    "off": 3524,
+    "key": "ZFUDGECOLUMN",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00715444",
+    "call": "0x00524EC0"
+   },
+   "3528": {
+    "off": 3528,
+    "key": "ZFUDGETUNNEL",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00715465",
+    "call": "0x00524EC0"
+   },
+   "3532": {
+    "off": 3532,
+    "key": "ZFUDGEBRIDGE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00715486",
+    "call": "0x00524EC0"
+   },
+   "1724": {
+    "off": 1724,
+    "key": "VETERANABILITIES",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x007154A3",
+    "call": "0x00524EC0",
+    "conflict": [
+     "ELITEABILITIES",
+     "PRIMARYFIREFLH",
+     "ELITEPRIMARYFIREFLH"
+    ]
+   },
+   "704": {
+    "off": 704,
+    "key": "SPECIALTHREATVALUE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00715734",
+    "call": "0x00524EC0"
+   },
+   "3516": {
+    "off": 3516,
+    "key": "ISSELECTABLECOMBATANT",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00715757",
+    "call": "0x00524EC0"
+   },
+   "3500": {
+    "off": 3500,
+    "key": "USEBUFFER",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00715776",
+    "call": "0x00524EC0",
+    "conflict": [
+     "PALETTE"
+    ]
+   },
+   "1824": {
+    "off": 1824,
+    "key": "TURRETOFFSET",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x0071587F",
+    "call": "0x00524EC0"
+   },
+   "3279": {
+    "off": 3279,
+    "key": "REMAPABLE",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007158C5",
+    "call": "0x00524EC0"
+   },
+   "3363": {
+    "off": 3363,
+    "key": "NORMALIZED",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007158E9",
+    "call": "0x00524EC0"
+   },
+   "2044": {
+    "off": 2044,
+    "key": "SHADOWINDEX",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00715931",
+    "call": "0x00524EC0",
+    "conflict": [
+     "CAMEO"
+    ]
+   },
+   "3518": {
+    "off": 3518,
+    "key": "DISABLEVOXELCACHE",
+    "type": "?",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00715955",
+    "call": "0x00524EC0",
+    "conflict": [
+     "ALTCAMEO"
+    ]
+   },
+   "3519": {
+    "off": 3519,
+    "key": "DISABLESHADOWCACHE",
+    "type": "?",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00715979",
+    "call": "0x00524EC0"
+   },
+   "2216": {
+    "off": 2216,
+    "key": "PBARRELLENGTH",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00715DD6",
+    "call": "0x00524EC0"
+   },
+   "2220": {
+    "off": 2220,
+    "key": "PBARRELTHICKNESS",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00715DFA",
+    "call": "0x00524EC0"
+   },
+   "2248": {
+    "off": 2248,
+    "key": "ELITESECONDARYFIREFLH",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00715F20",
+    "call": "0x00524EC0",
+    "conflict": [
+     "SECONDSPAWNOFFSET"
+    ]
+   },
+   "1460": {
+    "off": 1460,
+    "key": "MOVEMENTZONE",
+    "type": "?",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00716065",
+    "call": "0x00524EC0"
+   }
+  },
+  "UnitTypeClass": {
+   "3597": {
+    "off": 3597,
+    "key": "CRATEGOODIE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00747658",
+    "call": "0x005295F0"
+   },
+   "3603": {
+    "off": 3603,
+    "key": "ISSIMPLEDEPLOYER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00747688",
+    "call": "0x005295F0"
+   },
+   "3598": {
+    "off": 3598,
+    "key": "HARVESTER",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x007476A6",
+    "call": "0x005295F0"
+   },
+   "1660": {
+    "off": 1660,
+    "key": "SPEEDTYPE",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x007476FA",
+    "call": "0x00476FC0"
+   },
+   "3604": {
+    "off": 3604,
+    "key": "ISTILTER",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x00747712",
+    "call": "0x005295F0"
+   },
+   "3610": {
+    "off": 3610,
+    "key": "CARRIESCRATE",
+    "type": "bool",
+    "width": 1,
+    "level": "双向",
+    "at": "0x00747728",
+    "call": "0x005295F0"
+   },
+   "3606": {
+    "off": 3606,
+    "key": "TOOBIGTOFITUNDERBRIDGE",
+    "type": "bool",
+    "width": 1,
+    "level": "单向-读",
+    "at": "0x0074774E",
+    "call": "0x005295F0"
+   },
+   "3676": {
+    "off": 3676,
+    "key": "WALKFRAMES",
+    "type": "int",
+    "width": 1,
+    "level": "双向/宽度存疑",
+    "at": "0x007477E0",
+    "call": "0x005276D0"
+   },
+   "3677": {
+    "off": 3677,
+    "key": "FIRINGFRAMES",
+    "type": "int",
+    "width": 1,
+    "level": "双向/宽度存疑",
+    "at": "0x00747809",
+    "call": "0x005276D0"
+   },
+   "3580": {
+    "off": 3580,
+    "key": "MOVEMENTRESTRICTEDTO",
+    "type": "?",
+    "width": 4,
+    "level": "双向",
+    "at": "0x00747837",
+    "call": "0x004754B0"
+   },
+   "3640": {
+    "off": 3640,
+    "key": "REPAIRTURRETINDEX",
+    "type": "int",
+    "width": 4,
+    "level": "单向-读",
+    "at": "0x00747C02",
+    "call": "0x005276D0",
+    "conflict": [
+     "REPAIRTURRETWEAPON",
+     "MACHINEGUNTURRETINDEX",
+     "MACHINEGUNTURRETWEAPON",
+     "FLAKTURRETINDEX",
+     "FLAKTURRETWEAPON",
+     "PISTOLTURRETINDEX",
+     "PISTOLTURRETWEAPON",
+     "SNIPERTURRETINDEX",
+     "SNIPERTURRETWEAPON",
+     "SHOCKTURRETINDEX",
+     "SHOCKTURRETWEAPON",
+     "EXPLODETURRETINDEX",
+     "EXPLODETURRETWEAPON",
+     "BRAINBLASTTURRETINDEX",
+     "BRAINBLASTTURRETWEAPON",
+     "RADCANNONTURRETINDEX",
+     "RADCANNONTURRETWEAPON",
+     "CHRONOTURRETINDEX",
+     "CHRONOTURRETWEAPON",
+     "TERRORISTEXPLODETURRETINDEX",
+     "TERRORISTEXPLODETURRETWEAPON",
+     "COWTURRETINDEX",
+     "COWTURRETWEAPON",
+     "INITIATETURRETINDEX",
+     "INITIATETURRETWEAPON",
+     "VIRUSTURRETINDEX",
+     "VIRUSTURRETWEAPON",
+     "YURIPRIMETURRETINDEX",
+     "YURIPRIMETURRETWEAPON",
+     "GUARDIANTURRETINDEX",
+     "GUARDIANTURRETWEAPON"
+    ]
+   }
+  }
+ }
+}

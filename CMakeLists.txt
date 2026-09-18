@@ -34,7 +34,9 @@ target_include_directories(ra2core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(ra2core PRIVATE Threads::Threads)
 
 if(MSVC)
-    target_compile_options(ra2core PRIVATE /W4 /EHsc)
+    # /utf-8：源码是 UTF-8 无 BOM，中文 Windows（ACP=936）下不加会被按 GBK 解码，
+    # 直接编不过（C2001/C3688/C4819）。
+    target_compile_options(ra2core PRIVATE /W4 /EHsc /utf-8)
     target_compile_definitions(ra2core PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(ra2core PRIVATE -Wall -Wextra)
