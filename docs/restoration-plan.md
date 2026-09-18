@@ -46,6 +46,7 @@ Blitter 家族整体作废，不再还原。
 | 继承层次 + 虚表槽位 | ✅ | `src/re/ClassHierarchy.h`，12717 槽位，可运行时 vptr 反查类名 |
 | 关键类 sizeof | 🟡 | 233 个类有实测值；`UnitClass=2280` `InfantryClass=1776` `AircraftClass=1752` |
 | **对象字段偏移** | ✅ | 646 个类 / 6965 条字段，来自构造函数里的 `mov [this+off], …`；**387 处 RTTI 位移一条不漏**（可判定 159 处全中 + 228 处同链写入），sizeof 越界 4；见 `src/re/FieldOffsets.h`、`db/fields.json`、`docs/fields.md` |
+| **对象字段名** | 🟡 | 6 个类 / 396 条，来自二进制自己的 `Read_INI`（键名两侧同偏移，自证）；300 条另被构造函数扫描独立看到且宽度一致；见 `src/re/FieldNames.h`、`db/fieldnames.json`、`docs/fieldnames.md` |
 | **加密 MIX 解密** | ✅ | RSA(320bit) + Blowfish + Westwood CRC，C++ 与 Python 双实现结果一致 |
 | **明文 MIX** | ✅ | flags 不带 0x00020000；地形归档全是这一类，之前完全看不见 |
 | 嵌套 MIX | ✅ | ra2md.mix → 6 个子 MIX → 400 个叶子条目 |
@@ -584,11 +585,53 @@ sizeof 与继承链两条在 `ra2core` 冒烟测试里做成了硬判据（`Layo
 候选**并给改过的条目打 `calibrated` 标记；所有候选都不合法时**不改**，只记
 `note` 留给人看（那说明两条数据里有一条本身错了，乱猜比不改更坏）。
 
+#### P3 第二步（已完成）：字段名
+
+偏移只说"这个位置有个 4 字节的东西"。名字从二进制**自己的** `Read_INI` 里读：
+`Cost = ini.ReadInteger(section, "Cost", Cost);` 编译出来是"键名两侧同一个偏移"
+各访问一次 —— 这条是**自证**的，不依赖任何外部资料。
+
+`tools/fieldname.py`：对每张虚表的每个函数数"引用了多少个**真实存在**的 INI 键名"，
+超阈值即认作 `Read_INI`。**槽号是发现出来的**：5 个函数全部落在虚表**槽 #25**，
+且 TechnoTypeClass / BuildingTypeClass / UnitTypeClass 三张互不相干的表独立收敛。
+
+**实测（Reunion 2023）**
+
+```
+认作 Read_INI 的函数 5 个（引用 >= 12 个真实键）；全部落在槽 #25
+抽出字段名 411 条，覆盖 6 个类，其中「双向」（缺省值与结果同偏移）307 条 = 75%
+C++ 常量表收 396 条（23 条有人争但本身是双向证据，保留；15 条单向且有争议，不收）
+覆盖面：TechnoTypeClass 250/252、BuildingTypeClass 181/193、UnitTypeClass 42/44、
+        InfantryTypeClass 25/25、ObjectTypeClass(IsometricTile) 15/19
+```
+
+**验收（三条独立证据）**
+
+1. 名字侧的字段宽度必须与**构造函数扫描**（`db/fields.json`）给出的宽度一致 ——
+   396 条里 **300 条**被构造函数扫描独立看到，宽度不符 **0**。
+2. 偏移必须落在该类的 **sizeof** 之内（`push N; call new`，第三条通道）—— 越界 **0**。
+3. 手工反汇编锚点：`ObjectTypeClass` 的 `Armor@0x9C` / `Strength@0xA0`，
+   `TechnoTypeClass` 的 `Cost@0x610` / `TechLevel@0x634` / `Sight@0x5E8` /
+   `Points@0x728`。全部写进 `FieldNames_Check()` 做硬判据。
+
+**三个真踩到的坑（详见 `docs/re-ledger.md`）**
+
+- 字面量是 `"Cost"` 这种首字母大写，不是全大写。第一版按全大写筛，一个 INI 键都没扫到。
+- 结果存回**必须**以 `call` 为锚。编译器会把**上一条键**的结果存调度到这一条键的
+  键名与调用之间（`ObjectTypeClass::Read_INI@0x5F94B3`），按"键后第一条存"会给错偏移。
+- 「有争议就丢」是错的取舍。`Cost@0x610` 是手工核对过的，被这条规则连着丢了，
+  冒烟测试立刻红。改成按证据强度分档：双向保留，单向且被争才弃用。
+
+**明确没做的**：数组字段（`TurretType[i]`，32 个键名争一个基偏移）、经变换再存的
+字段（`Speed` 先钳 100、再 ×256/100、再钳 255，最后存到离键名十几条指令外的
+`0x678`）、目的地不在对象上的字符串字段 —— 这三类**够不到就不给名字**，
+不做外推（放宽规则只会让错误更自信）。
+
 #### P3 还差的
 
-- **字段名**。现在只有"这个偏移上确实有这么一个宽度的字段"。
-  填名字的入口是把访问该偏移的代码读通 —— `TechnoTypeClass::Read_INI`
-  的读取顺序可以直接和 P2 那轮做出来的 INI 键表对照。
+- **其余类的字段名**。现在只有各 TypeClass 的 `Read_INI` 那一批（6 个类 / 396 条）。
+  构造函数里赋常量、或游戏逻辑里才算出来的字段仍然没名字 —— 需要换通道，
+  不再是"读 INI"这一条。
 - 只扫了写虚表的函数；只被游戏逻辑赋值、构造函数不碰的字段还没覆盖。
 
 ### P4 — 网络与锁步
@@ -692,7 +735,15 @@ sizeof 与继承链两条在 `ra2core` 冒烟测试里做成了硬判据（`Layo
   测试做硬判据（`Layout_Check()`）。
   顺带证明 `db/sizes.json` 里 `CCFileClass` 的 sizeof（36）取错了，应为 108 ——
   `tools/sizeofscan.py` 已改成用字段末端硬过滤候选，该类已修正为 108。
-  **字段名仍未填** —— 那是 P3 接下来的活。
-- 再往后：P3 剩余（字段命名、对象池 sizeof）、P4 锁步、P5 多核并行。
+- **P3 已完成第二步**：**对象字段名表**（`tools/fieldname.py` +
+  `db/fieldnames.json` + `src/re/FieldNames.h`）—— 6 个类 / 396 条。
+  名字来自二进制**自己的** `Read_INI`：键名两侧同一个偏移各访问一次，自证。
+  可判定的交叉验证：396 条里 **300 条**被构造函数扫描独立看到且宽度一致（不符 0），
+  sizeof 越界 0，另有 6 条手工反汇编锚点写进 `FieldNames_Check()` 做硬判据。
+  覆盖面逐个类对账（TechnoTypeClass 250/252 等），没配上的键名在
+  `docs/fieldnames.md` 里列出来，不进常量表。
+  够不到的三类（数组字段、经变换再存的字段、栈上缓冲再 `strcpy` 的字符串）
+  **不做外推**。详细口径见 `docs/re-ledger.md`。
+- 再往后：P3 剩余（其余类的字段名、静态对象池类的 sizeof）、P4 锁步、P5 多核并行。
 - **代码尚未提交**：本轮的 `UnitModel.*`、`Ini::Merge`、`Collect_Leaf_IDs`、
   `ViewerMain --unit/--addmix`、新脚本都在工作区里没 commit（git push 也没通）。

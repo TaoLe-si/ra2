@@ -24,6 +24,7 @@
 #include "data/TypeDB.h"
 #include "data/UnitModel.h"
 #include "re/FieldOffsets.h"
+#include "re/FieldNames.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
 #include "gfx/HvaFile.h"
@@ -1673,6 +1674,148 @@ static int Layout_Dump(const char* want) {
     return 0;
 }
 
+/// 字段**名**的判据。名字来自各 TypeClass 的 `Read_INI`（`tools/fieldname.py`），
+/// 全部是"能算出来"的，不靠肉眼：
+///
+///  1. **宽度必须与构造函数扫描出来的字段宽度一致**。两条通道完全无关：
+///     名字来自 `Read_INI` 的"键名两侧同偏移"，宽度来自构造函数的
+///     `mov [this+off], …`。同一个偏移上两边宽度对不上，就是有一边错了。
+///  2. **偏移必须落在该类的 sizeof 之内**（sizeof 来自 `push N; call new`，第三条通道）。
+///  3. 手工反汇编核对过的锚点：`ObjectTypeClass` 的 Armor@0x9C / Strength@0xA0，
+///     `TechnoTypeClass` 的 Cost@0x610 / TechLevel@0x634 / Sight@0x5E8 / Points@0x728。
+///     这些地址在 docs/fieldnames.md 里能逐条查到对应的指令流。
+///  4. 反向对照：随便一个没被命名过的偏移必须查不到名字（防止表被写坏成通配）。
+///
+/// 任何一条不成立都返回非 0，冒烟测试挂掉。
+static int FieldNames_Check() {
+    int named = 0;
+    int cross_width_ok = 0;
+    int cross_width_bad = 0;
+    int beyond_sizeof = 0;
+
+    for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+        const re::ClassFieldNames& C = re::kFieldNames[i];
+        uint32_t prev = 0;
+        bool first = true;
+        const uint32_t size = re::SizeOf(C.cls);
+
+        for (uint32_t j = 0; j < C.count; ++j) {
+            const re::FieldName& F = C.fields[j];
+            ++named;
+
+            if (F.key == nullptr || F.key[0] == '\0') {
+                std::printf("FAIL: %s 偏移 0x%X 的名字是空的\n", C.cls, F.off);
+                return 1;
+            }
+            if (F.width != 1 && F.width != 2 && F.width != 4 && F.width != 8) {
+                std::printf("FAIL: %s 偏移 0x%X 宽度 %u 不是 1/2/4/8\n",
+                            C.cls, F.off, F.width);
+                return 1;
+            }
+            if (!first && F.off <= prev) {
+                std::printf("FAIL: %s 的偏移没有严格递增 —— 0x%X 在 0x%X 之后\n",
+                            C.cls, F.off, prev);
+                return 1;
+            }
+            prev = F.off;
+            first = false;
+
+            // 判据 1：与构造函数扫描出来的字段宽度对拍
+            const re::ClassLayout* L = re::LayoutOf(C.cls);
+            if (L != nullptr) {
+                for (int k = 0; k < L->count; ++k) {
+                    if (L->fields[k].off != F.off) {
+                        continue;
+                    }
+                    if (L->fields[k].size == F.width) {
+                        ++cross_width_ok;
+                    } else {
+                        ++cross_width_bad;
+                        std::printf("FAIL: %s 偏移 0x%X（%s）：Read_INI 说宽 %u，"
+                                    "构造函数扫描说宽 %u\n",
+                                    C.cls, F.off, F.key, F.width,
+                                    L->fields[k].size);
+                    }
+                    break;
+                }
+            }
+
+            // 判据 2：必须落在 sizeof 之内
+            if (size != 0 && F.off >= size) {
+                ++beyond_sizeof;
+                std::printf("FAIL: %s 偏移 0x%X（%s）超出 sizeof %u\n",
+                            C.cls, F.off, F.key, size);
+            }
+        }
+    }
+    if (cross_width_bad != 0 || beyond_sizeof != 0) {
+        return 1;
+    }
+
+    // 判据 3：手工反汇编核对过的锚点
+    struct Anchor { const char* cls; uint32_t off; const char* key; };
+    static const Anchor kAnchors[] = {
+        {"ObjectTypeClass", 0x9C, "ARMOR"},
+        {"ObjectTypeClass", 0xA0, "STRENGTH"},
+        {"TechnoTypeClass", 0x5E8, "SIGHT"},
+        {"TechnoTypeClass", 0x610, "COST"},
+        {"TechnoTypeClass", 0x634, "TECHLEVEL"},
+        {"TechnoTypeClass", 0x728, "POINTS"},
+    };
+    for (const Anchor& a : kAnchors) {
+        const char* got = re::FieldNameOf(a.cls, a.off);
+        if (got == nullptr || std::strcmp(got, a.key) != 0) {
+            std::printf("FAIL: %s 的 0x%X 应该是 %s，查到的却是 %s\n",
+                        a.cls, a.off, a.key, got ? got : "(没有)");
+            return 1;
+        }
+    }
+
+    // 判据 4：反向对照 —— 没命名过的偏移查不到名字
+    if (re::FieldNameOf("TechnoTypeClass", 0xFFFF0) != nullptr ||
+        re::FieldNameOf("这个类不存在", 0x610) != nullptr) {
+        std::printf("FAIL: 名字表把不存在的偏移/类也查出了名字\n");
+        return 1;
+    }
+
+    std::printf("OK  字段名 %d 个类 / %d 条；其中 %d 条同时被构造函数扫描"
+                "独立看到且宽度一致；sizeof 越界 0\n",
+                re::kFieldNameClassCount, named, cross_width_ok);
+    return 0;
+}
+
+/// `ra2core --fieldnames [类名]`：把 (偏移, INI 键名) 打出来给人看。
+static int FieldNames_Dump(const char* want) {
+    if (want == nullptr) {
+        std::printf("%-34s %8s\n", "类", "命名字段");
+        int total = 0;
+        for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+            std::printf("%-34s %8u\n", re::kFieldNames[i].cls,
+                        re::kFieldNames[i].count);
+            total += static_cast<int>(re::kFieldNames[i].count);
+        }
+        std::printf("%-34s %8d\n", "合计", total);
+        std::printf("\n（含「双向」条目，以及没被人争过的单向条目；"
+                    "单向且有争议的不进本表。取舍规则与来争的键名见"
+                    " docs/fieldnames.md，全量见 db/fieldnames.json）\n");
+        return 0;
+    }
+    for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
+        const re::ClassFieldNames& C = re::kFieldNames[i];
+        if (std::strcmp(C.cls, want) != 0) {
+            continue;
+        }
+        std::printf("%s  命名字段 %u 个\n", C.cls, C.count);
+        for (uint32_t j = 0; j < C.count; ++j) {
+            std::printf("  +0x%-5X %-30s 宽%u  %s\n", C.fields[j].off,
+                        C.fields[j].key, C.fields[j].width, C.fields[j].type);
+        }
+        return 0;
+    }
+    std::printf("名字表里没有 %s（全量见 db/fieldnames.json）\n", want);
+    return 1;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--vxlit") == 0) {
         if (argc < 3) {
@@ -1783,6 +1926,9 @@ int main(int argc, char** argv) {
     }
     if (argc > 1 && std::strcmp(argv[1], "--layout") == 0) {
         return Layout_Dump(argc > 2 ? argv[2] : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--fieldnames") == 0) {
+        return FieldNames_Dump(argc > 2 ? argv[2] : nullptr);
     }
     if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
         return Ini_Self_Test();
@@ -2042,6 +2188,13 @@ int main(int argc, char** argv) {
     // src/re/FieldOffsets.h 由 tools/fieldscan.py 扫 gamemd.exe 的构造函数得出。
     // 没有字段偏移，还原出的结构体就只是空壳，P3 逻辑层无从下手。
     if (Layout_Check() != 0) {
+        return 1;
+    }
+
+    // ---- 字段名 ----
+    // src/re/FieldNames.h 由 tools/fieldname.py 扫 gamemd.exe 的 Read_INI 得出。
+    // 偏移知道"有个字段"，名字才知道"这个字段是哪个 INI 键"。
+    if (FieldNames_Check() != 0) {
         return 1;
     }
 

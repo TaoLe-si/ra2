@@ -48,6 +48,19 @@
 | `db/sizes.json` | 重新生成：新增 `fields_end` / `note` / `calibrated` 三个键 | 同上 |
 | `docs/sizes.md` | 重新生成：方法补第 4 步 + 结果表加两列 | 同上 |
 
+### 2.2 本轮（P3 字段名）改动
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `tools/fieldname.py` | **新增**：从 `Read_INI` 的「键名两侧同偏移」抽字段名 | P3 第二步 |
+| `db/fieldnames.json` | **新增**（自动生成）：字段名 + 覆盖面对账 + 争议留痕 | 同上 |
+| `docs/fieldnames.md` | **新增**（自动生成）：人读版（含"够不到的三种形态"） | 同上 |
+| `src/re/FieldNames.h` | **新增**（自动生成，396 条） | 同上 |
+| `src/main.cpp` | 新增 `FieldNames_Check()`（进冒烟测试）与 `--fieldnames` 命令 | 把字段名变成可回归的硬判据 |
+| `README.md` | 新增 §3.2「对象字段**名**」；现状速览、目录结构、已知限制同步 | 不留过期描述 |
+| `docs/re-ledger.md` | 新增「对象字段名」一节（含三个真踩到的坑） | 留 RE 证据链 |
+| `docs/restoration-plan.md` | P3 第二步标记完成；状态表加「对象字段名」行 | 同上 |
+
 ---
 
 ## 3. 验证结果（全绿）
@@ -70,6 +83,9 @@
 | 14 | `python tools/fieldscan.py` | 646 个类 / 6965 条字段；sizeof 越界 **4**（通过 207）；RTTI 嵌入基类位移 **387 处一条不漏**：可判定 159 处**全中**，另 228 处基类无虚表，退到同链写入印证 228 处 |
 | 15 | `ra2core.exe`（无参数） | 冒烟 **22 OK**（比上一轮多 1 条：`Layout_Check()` 字段偏移硬判据）；帧 CRC 仍 `0x15307EAB` |
 | 16 | `ra2core.exe --layout` / `--layout UnitClass` | 核心继承链 17 个类的字段表；`UnitClass` 30 个字段，末端 0x6E8（sizeof 2280 之内） |
+| 17 | `python tools/fieldname.py` | 5 个 `Read_INI`（全部落在虚表槽 #25）；字段名 **411 条 / 6 个类**，「双向」307 条（75%）；C++ 表收 **396** 条；覆盖面 TechnoTypeClass 250/252、BuildingTypeClass 181/193、UnitTypeClass 42/44、InfantryTypeClass 25/25、ObjectTypeClass(IsometricTile) 15/19 |
+| 18 | `ra2core.exe`（无参数） | 冒烟 **23 OK**（比上一轮多 1 条：`FieldNames_Check()` 字段名硬判据）；帧 CRC 仍 `0x15307EAB` |
+| 19 | `ra2core.exe --fieldnames` / `--fieldnames TechnoTypeClass` | 6 个类合计 396 条；`TechnoTypeClass` 168 条（`Cost@0x610`、`TechLevel@0x634`、`Sight@0x5E8`、`Points@0x728` 等） |
 | 17 | `python tools/sizeofscan.py` | 按字段末端校准 1 个类：`CCFileClass` 36 → **108**；另 4 个类所有候选都小于字段末端，只记 `note` 不改。写入 C++ 表 67 条 |
 
 第 4 项复现了文档基线**逐项完全相同**（`1482/1594/559/86/17/7/0`）。
@@ -128,13 +144,17 @@ python tools/raw2png.py build/frame.raw build/ytnk_40.png
    （旧基线里有：`AI.INI=0x9E11E49A @ra2.mix`、`AIMD.INI=0x116F3F76 @ra2md.mix`），
    加载器已就绪、缺素材；剩余 164 种 rules 键 / 95 种 art 键的类型化
    （顺序见 `--typetable --top N` 表尾）；声音/曲目接进 AudioDevice。
-3. **P3 已完成第一步**：对象字段偏移表（`tools/fieldscan.py` +
-   `db/fields.json` + `src/re/FieldOffsets.h`），646 个类 / 6965 条。
-   四条独立证据：sizeof 越界 4（206→207 通过）、RTTI 位移 387 处**一条不漏**
-   （159 处可判定全中 + 228 处同链写入）、继承链末端严格递增。
-   **下一步是填字段名** —— 入口是把访问该偏移的代码读通
-   （`TechnoTypeClass::Read_INI` 的读取顺序可以直接和 P2 那轮的
-   INI 键表对照）。P3 剩余还有静态对象池类的 sizeof。
+3. **P3 已完成两步**：
+   - 第一步：对象字段偏移表（`tools/fieldscan.py` + `db/fields.json` +
+     `src/re/FieldOffsets.h`），646 个类 / 6965 条。四条独立证据：
+     sizeof 越界 4（207 通过）、RTTI 位移 387 处**一条不漏**（159 处可判定全中
+     + 228 处同链写入）、继承链末端严格递增。
+   - 第二步：**对象字段名表**（`tools/fieldname.py` + `db/fieldnames.json` +
+     `src/re/FieldNames.h`），6 个类 / 396 条，来自二进制自己的 `Read_INI`。
+     396 条里 300 条被构造函数扫描独立看到且宽度一致，sizeof 越界 0，
+     6 条手工反汇编锚点进冒烟测试。
+   **下一步**：其余类的字段名（构造函数赋常量、或逻辑里才算出来的字段，
+   不能再靠"读 INI"这一条通道）；P3 剩余还有静态对象池类的 sizeof。
 4. P4 锁步、P5 多核并行。
 5. ~~`db/sizes.json` 里 `CCFileClass` 的 sizeof 取错（36，应为 108）~~
    —— **本轮已修**：`tools/sizeofscan.py` 用字段末端硬过滤候选，

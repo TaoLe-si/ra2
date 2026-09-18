@@ -20,6 +20,7 @@
 | 关键子系统 | 主循环、锁步帧队列、寻路、地图、网络包泵均已定位到具体 VA |
 | C++ 骨架 | 可编译、可运行，寻路并行实测 **3.5~4.0x** 且结果与串行逐位一致 |
 | 对象字段偏移 | **646 个类 / 6965 条**，从构造函数里挖出来的；四条独立证据交叉验证，387 处 RTTI 位移一条不漏 |
+| 对象字段**名** | **6 个类 / 396 条**，从二进制自己的 `Read_INI` 里读出来的 —— 键名两侧同偏移，自证；300 条另被构造函数扫描独立看到且宽度一致 |
 | 已还原模块 | 对象体系、地图/格子、两级寻路、锁步帧队列、主循环、文件系统(MIX)、INI、Locomotor、战斗、阵营/经济、AI 小队与触发、界面、网络接口 |
 
 ---
@@ -39,6 +40,8 @@ tools/           逆向分析工具（Python）
   inikeys.py       清点 INI 里**真实出现**的键（P2 打表的证据来源）
   techno.py        类型表打表的独立实现（与 C++ 逐行 diff）
   fieldscan.py     从构造函数里抽对象字段偏移 -> db/fields.json + src/re/FieldOffsets.h
+  fieldname.py     从 Read_INI 的「键名两侧同偏移」抽字段**名**
+                   -> db/fieldnames.json + src/re/FieldNames.h
   sizeofscan.py    从 `push N; call new` 配对抽类 sizeof -> db/sizes.json
                    （用 fieldscan 的字段末端硬过滤候选，两条工具互为输入）
   build-msvc.bat   用本机 MSVC 编译 src/
@@ -47,6 +50,7 @@ db/              分析数据库（JSON，脚本可重跑）
   rtti.json  classes.md  functions.json  strings.json
   vtables.json  names.json  sources.json  summary.md
   sizes.json（类 sizeof 实测）  fields.json（类字段偏移）
+  fieldnames.json（字段名 + 覆盖面对账 + 争议留痕）
 
 docs/            逆向笔记
   binary-baseline.md   二进制基线与关键子系统定位
@@ -198,6 +202,66 @@ sizeof 与继承链两条已固化进 `ra2core` 冒烟测试（`Layout_Check()`�
 镜像路径由 `tools/peimage.py` 自动定位（环境变量 `RA2_GAMEMD` 优先）。
 **跨机器复现认入口点与链接时间戳，不认路径。**
 
+### 3.2 对象字段**名**（P3 第二步）
+
+有了偏移只算"这个位置有个 4 字节的字段"，还是不知道它叫什么。名字从二进制
+**自己的** `Read_INI` 里读：
+
+```bash
+python tools\fieldname.py
+
+build\ra2core.exe --fieldnames
+build\ra2core.exe --fieldnames TechnoTypeClass
+```
+
+产出：`db/fieldnames.json`、`docs/fieldnames.md`、`src/re/FieldNames.h`。
+
+**为什么这条路是通的** —— `XxxTypeClass::Read_INI(CCINIClass&)` 的编译形态极规整，
+实测 `TechnoTypeClass::Read_INI@0x712170`：
+
+```asm
+mov eax, dword ptr [ebp + 0x610]   ; 缺省值：先从字段里读出来
+push eax
+push 0x825470                      ; "Cost"            <- 键名
+push ebx                           ; section 名
+mov ecx, esi                       ; CCINIClass*
+call 0x5276D0                      ; ReadInteger
+mov dword ptr [ebp + 0x610], eax   ; 结果存回**同一个**字段
+```
+
+**同一个偏移在键名两侧各出现一次**，这一条本身就是自证 —— 编译器是从
+`Cost = ini.ReadInteger(section, "Cost", Cost);` 生成的。`ra2core` 的
+`FieldNames_Check()` 把它做成了硬判据，锚点包括 `ObjectTypeClass` 的
+`Armor@0x9C` / `Strength@0xA0`、`TechnoTypeClass` 的
+`Cost@0x610` / `TechLevel@0x634` / `Sight@0x5E8` / `Points@0x728`。
+
+| 环节 | 做法 | 实测 |
+|---|---|---|
+| 找 `Read_INI` | 数每个函数引用了多少个**真实存在**的 INI 键名，超阈值即认定。**槽号是发现出来的，不是规定的** | 5 个函数，全部落在虚表**槽 #25**；TechnoTypeClass / BuildingTypeClass / UnitTypeClass 三张互不相干的表独立收敛到同一槽号 |
+| 键集从哪来 | `tools/inikeys.py` 从真实 INI 文件清点，不做语义解释 | rules 476 种 / art 206 种 |
+| 类型怎么定 | 只有 `ReadBool`(0x5295F0) 与 `ReadInteger`(0x5276D0) 两个入口被实测区分；其余一律 `?`，不留猜测 | `AmbientSound` 这类"值是整数"的键也从收字符串的入口过，硬标 `str` 就是编造 |
+| 交叉验证 | 名字侧宽度必须与构造函数扫描的字段宽度一致；偏移必须落在 sizeof 之内 | **300 条**同时被构造函数扫描独立看到且宽度一致；宽度不符 **0**；sizeof 越界 **0** |
+
+覆盖面对账（`db/fieldnames.json` 的 `coverage` 段）：TechnoTypeClass 252 个键配上
+250、BuildingTypeClass 193→181、UnitTypeClass 44→42、InfantryTypeClass 25→25、
+IsometricTileClass 19→15。**没配上的键名不进常量表**，但会在 `docs/fieldnames.md`
+里逐个列出来 —— 不让"覆盖率"看起来像"全量"。
+
+够不到的三种形态写进了文档，不靠调宽规则硬凑数字：
+
+1. **结果经过变换再存**。`Speed` 读出后先钳 100、再 ×256/100、再钳 255，最后存进
+   `[ebp+0x678]` —— 离键名很远。按"键名旁边那条存"会错认成 `0x630`，而 `0x630`
+   其实属于**上一条**键（它的结果存被调度器插到了这里）。宁可**不命名**。
+2. **数组字段**。32 个 `XxxTurretIndex` / `XxxTurretWeapon` 都往 `TurretType[i]`
+   里写，索引在寄存器里，于是 32 条键名争一个基偏移。
+3. **目的地不是本对象的字段**。字符串键先读进栈上临时缓冲再 `strcpy`，中间隔了
+   `strlen` / `rep movs`。
+
+同一个偏移被两个键名主张时，取舍按**证据强度**分档，不按"有没有人争"一刀切：
+「双向」记录（缺省值与结果同偏移）保留，「单向」记录若被争则弃用。这条规则是被
+冒烟测试的锚点断言逼出来的 —— 最初一刀切"有争议就丢"，把手工核对过的
+`Cost@0x610` / `TechLevel@0x634` 一起丢了，测试立刻红。
+
 渲染层的诊断开关（都是环境变量，默认关）：
 
 | 变量 | 作用 |
@@ -237,8 +301,10 @@ sizeof 与继承链两条已固化进 `ra2core` 冒烟测试（`Layout_Check()`�
 
 ## 已知限制
 
-- 结构体的字段偏移与 `sizeof` **尚未**从二进制确认，代码中所有未确认处
-  都标了 `TODO(逆向)` 并给出验证方法，不以猜测填充。
+- 结构体的字段偏移与 `sizeof` 已从二进制确认（见 §3.1）；字段**名**只覆盖
+  各 TypeClass 的 `Read_INI`（6 个类 / 396 条，见 §3.2），其余类的字段仍是
+  无名偏移 —— 代码中所有未确认处都标了 `TODO(逆向)` 并给出验证方法，
+  不以猜测填充。
 - 虚函数表的槽位顺序未还原（原因见上面结论 2）。
 - `Hierarchical_Find_Path` 目前退化为常规 A*：分层规划的区域图
   （`MapRegionClass` / `PlanningNodeClass` 等）尚未还原。
