@@ -29,7 +29,8 @@ from peimage import PEImage  # noqa: E402
 
 try:
     from capstone import Cs, CS_ARCH_X86, CS_MODE_32
-    from capstone.x86 import X86_OP_IMM, X86_INS_CALL, X86_INS_JMP, X86_INS_RET
+    from capstone.x86 import (X86_OP_IMM, X86_OP_MEM, X86_INS_CALL, X86_INS_JMP,
+                             X86_INS_RET)
 except ImportError as e:  # pragma: no cover
     raise SystemExit("需要 capstone：python -m pip install --target tools/pylibs capstone") from e
 
@@ -58,14 +59,25 @@ JCC_MNEMONICS = {
 class CodeIndex:
     """线性扫描得到的指令索引（三个 bytearray，紧凑）"""
 
-    def __init__(self, img: PEImage, md):
+    def __init__(self, img: PEImage, md, anchors=None):
         lo, hi = img.text_range()
         self.lo, self.hi = lo, hi
         self.n = hi - lo
+        # 已知的函数入口（**VA**，升序）。扫描跨过锚点时改从锚点重新解码。
+        # 内部存的是相对 .text 起点的**偏移**，所以要减掉 ImageBase 再减 lo
+        # ——这里混用过一次，锚点整体偏了 0x400000，静默失效了很久。
+        # 传 None 时行为与旧版完全一致。
+        self.anchors = (sorted(a - img.image_base - lo for a in anchors)
+                        if anchors else None)
         self.starts = bytearray(self.n)   # 1 = 该 RVA 是指令起点
         self.sizes = bytearray(self.n)    # 指令长度（仅起点处有效）
         self.flags = bytearray(self.n)    # F_* 位掩码
         self.targets: dict[int, int] = {}  # 指令 RVA -> 调用/跳转目标 RVA
+        # 下面三个是增量补的：只新增字段，不改动既有字段的语义，
+        # 所以 analyze.py 等既有调用方的输出不受影响。
+        self.jt: dict[int, int] = {}        # `jmp [reg*4+disp]` RVA -> 跳表基址 RVA
+        self.jt_indirect = 0                # `jmp [base+reg*4]`（表址在寄存器里）的处数
+        self.ret_imm: dict[int, int] = {}   # `ret imm` 指令 RVA -> 弹出字节数
         self.decoded = 0
         self._build(img, md)
 
@@ -76,20 +88,34 @@ class CodeIndex:
         ib = img.image_base
         # capstone 的 disasm 生成器遇到无法解码的字节会直接终止，
         # 因此这里按窗口推进 + 逐字节重同步，保证扫完整段 .text。
+        #
+        # 但「逐字节重同步」只在**解码失败**时触发。.text 里嵌着跳表/数据，
+        # 数据往往能被解成一串合法指令，此时扫描会一直跑偏、再也不回来。
+        # anchors 就是为此准备的：调用方先给出「这里一定是函数入口」的地址集合，
+        # 扫描一旦跨过锚点就丢弃这条指令、改从锚点重新开始。
+        # 锚点由第一遍扫描的结果算出（见 tools/funcscan.py），所以是两遍扫描。
         pos = 0
         n = len(code)
         WINDOW = 512
+        anc = self.anchors
         while pos < n:
-            decoded_any = False
+            advanced = False
             for ins in md.disasm(code[pos:pos + WINDOW], ib + lo + pos):
                 rva = ins.address - ib
                 if not (lo <= rva < hi):
                     break
-                decoded_any = True
-                pos += ins.size
+                nxt = pos + ins.size
+                if anc:
+                    j = bisect.bisect_right(anc, pos)
+                    if j < len(anc) and anc[j] < nxt:
+                        pos = anc[j]          # 跨过锚点：从这里重新解码
+                        advanced = True
+                        break
                 self.decoded += 1
                 self._record(rva - lo, ins, ib, lo, hi)
-            if not decoded_any:
+                pos = nxt
+                advanced = True
+            if not advanced:
                 pos += 1
 
     def _record(self, i: int, ins, ib: int, lo: int, hi: int) -> None:
@@ -119,6 +145,19 @@ class CodeIndex:
                         if lo <= t < hi:
                             self.targets[lo + i] = t
                         break
+            # 跳表：`jmp dword ptr [reg*4 + 表址]`。表址取寄存器的那种形式
+            # （`lea reg,[tab]; jmp [reg+reg*4]`）这里只计数，不解析。
+            if ins.id == X86_INS_JMP and ins.operands:
+                op = ins.operands[0]
+                if op.type == X86_OP_MEM and op.mem.index != 0 and op.mem.scale == 4:
+                    if op.mem.base == 0:
+                        self.jt[lo + i] = op.mem.disp - ib
+                    else:
+                        self.jt_indirect += 1
+            # `ret imm16` 弹出的字节数 = __stdcall 的参数字节数
+            if (ins.id == X86_INS_RET and len(ins.operands) == 1
+                    and ins.operands[0].type == X86_OP_IMM):
+                self.ret_imm[lo + i] = ins.operands[0].imm
             self.flags[i] = f
 
     # ---------- 查询 ----------
@@ -138,10 +177,10 @@ class CodeIndex:
         return rva + self.size_at(rva)
 
 
-def build_index(img: PEImage) -> CodeIndex:
+def build_index(img: PEImage, anchors=None) -> CodeIndex:
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     md.detail = True
-    return CodeIndex(img, md)
+    return CodeIndex(img, md, anchors)
 
 
 class FunctionFinder:

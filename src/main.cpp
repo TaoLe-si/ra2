@@ -25,6 +25,7 @@
 #include "data/UnitModel.h"
 #include "re/FieldOffsets.h"
 #include "re/FieldNames.h"
+#include "re/FuncTable.h"
 #include "re/ObjectModel.h"
 #include "re/ObjectSizes.h"
 #include "engine/FrameQueue.h"
@@ -1999,7 +2000,8 @@ static int Model_Dump(const char* want) {
 }
 
 /// `ra2core --fieldnames [类名]`：把 (偏移, INI 键名) 打出来给人看。
-static int FieldNames_Dump(const char* want) {    if (want == nullptr) {
+static int FieldNames_Dump(const char* want) {
+    if (want == nullptr) {
         std::printf("%-34s %8s\n", "类", "命名字段");
         int total = 0;
         for (uint32_t i = 0; i < re::kFieldNameClassCount; ++i) {
@@ -2027,6 +2029,138 @@ static int FieldNames_Dump(const char* want) {    if (want == nullptr) {
     }
     std::printf("名字表里没有 %s（全量见 db/fieldnames.json）\n", want);
     return 1;
+}
+
+/// 函数边界表的闸门（src/re/FuncTable.h，由 tools/funcscan.py 生成）。
+///
+/// 这里查的不是"表里有什么"，而是**表自己有没有自相矛盾**：
+/// 判据 1~3 是结构性的，任何一条挂了都说明生成器坏了，而不是数据有噪声。
+/// 判据 4 是这份表最硬的一条 —— 见 docs/decompile-plan.md §3：
+/// 0x401000–0x7C0000 段的函数入口，实测 100% 落在 16 字节边界上
+/// （由直接 call 目标与 RTTI 虚表槽两条独立通道各算一遍，结果一致）。
+namespace {
+constexpr uint32_t kTextLo = 0x00401000u;
+constexpr uint32_t kTextHi = 0x007E038Du;
+
+struct FuncAnchor {
+    uint32_t va;
+    const char* what;
+};
+
+// 逐条反汇编核对过的锚点。改坏了生成器，这里第一时间红。
+constexpr FuncAnchor kFuncAnchors[] = {
+    {0x007CD80F, "PE 入口点"},
+    {0x005F92D0, "ObjectTypeClass::Read_INI（虚表槽 #25）"},
+    {0x00712170, "TechnoTypeClass::Read_INI（虚表槽 #25）"},
+    {0x0042FBA0, "虚表槽目标，析构类小函数"},
+    {0x005378E0, "虚表槽目标，只有 `mov eax,imm; ret`"},
+};
+}  // namespace
+
+static int Funcs_Check() {
+    using namespace ra2::re::funcs;
+    uint32_t above_split_bad = 0;
+    uint32_t covered = 0;
+
+    for (uint32_t i = 0; i < kFuncCount; ++i) {
+        const uint32_t va = kFuncVA[i];
+        const uint32_t sz = kFuncSize[i];
+        // 判据 1：表必须升序（否则二分查找是错的）
+        if (i > 0 && va <= kFuncVA[i - 1]) {
+            std::printf("FAIL: 函数表不是严格升序：0x%08X 在 0x%08X 之后\n",
+                        va, kFuncVA[i - 1]);
+            return 1;
+        }
+        // 判据 2：区间不越界、不为空
+        if (sz == 0 || va < kTextLo || va + sz > kTextHi) {
+            std::printf("FAIL: 0x%08X 长度 %u 越出 .text\n", va, sz);
+            return 1;
+        }
+        // 判据 3：不与前一个函数重叠
+        if (i > 0 && va < kFuncVA[i - 1] + kFuncSize[i - 1]) {
+            std::printf("FAIL: 0x%08X 与前一个函数 0x%08X 重叠\n",
+                        va, kFuncVA[i - 1]);
+            return 1;
+        }
+        // 判据 4（最硬）：本体区的入口必须 16 字节对齐
+        if (va < kAlignSplit && (va & 0xFu) != 0) {
+            if (above_split_bad < 8) {
+                std::printf("FAIL: 本体区入口 0x%08X 没有落在 16 字节边界\n", va);
+            }
+            ++above_split_bad;
+        }
+        covered += sz;
+    }
+    if (above_split_bad != 0) {
+        std::printf("FAIL: 本体区有 %u 个入口不对齐（判据来自 "
+                    "docs/decompile-plan.md §3）\n", above_split_bad);
+        return 1;
+    }
+
+    // 判据 5：手挑的锚点必须都在表里，且真的是入口
+    for (const FuncAnchor& a : kFuncAnchors) {
+        if (!IsFuncEntry(a.va)) {
+            std::printf("FAIL: 锚点 0x%08X（%s）不是函数入口\n", a.va, a.what);
+            return 1;
+        }
+    }
+
+    std::printf("OK  函数表 %u 个函数；本体区入口 16 字节对齐 100%%；"
+                "区间两两不重叠；%d 条锚点全中；函数体合计覆盖 %u 字节"
+                "（占 .text 的 %.1f%%）\n",
+                kFuncCount, static_cast<int>(sizeof(kFuncAnchors) /
+                                             sizeof(kFuncAnchors[0])),
+                covered, 100.0 * covered / static_cast<double>(kTextHi - kTextLo));
+    return 0;
+}
+
+/// `ra2core --funcs [地址]`：给一个 VA，答它属于哪个函数。
+static int Funcs_Dump(const char* arg) {
+    using namespace ra2::re::funcs;
+    if (arg == nullptr) {
+        uint32_t by_tier[8] = {0};
+        for (uint32_t i = 0; i < kFuncCount; ++i) {
+            by_tier[kFuncFlags[i] & 0x0Fu]++;
+        }
+        static const char* kNames[] = {"entry", "vtable", "call", "tail",
+                                       "padend", "prologue", "dataptr", "gap"};
+        std::printf("函数 %u 个（db/funcs.json，由 tools/funcscan.py 生成）\n",
+                    kFuncCount);
+        uint32_t region[2] = {0};   // [0] 游戏本体区 / [1] 运行时库区
+        for (uint32_t i = 0; i < kFuncCount; ++i) {
+            region[kFuncVA[i] < kAlignSplit ? 0 : 1]++;
+        }
+        std::printf("  0x%08X 以下（游戏本体）  %u\n", kAlignSplit, region[0]);
+        std::printf("  0x%08X 以上（运行时库）  %u\n", kAlignSplit, region[1]);
+        std::printf("按证据主档：\n");
+        for (int i = 0; i < 8; ++i) {
+            std::printf("  %-9s %u\n", kNames[i], by_tier[i]);
+        }
+        std::printf("\n（方法、对账、残差见 docs/functions.md；"
+                    "全量见 db/funcs.json）\n");
+        return 0;
+    }
+    uint32_t va = 0;
+    if (std::sscanf(arg, "%x", &va) != 1) {
+        std::printf("用法：ra2core --funcs [十六进制地址]\n");
+        return 1;
+    }
+    uint32_t i = FuncAt(va);
+    if (i == kFuncCount) {
+        std::printf("0x%08X 不属于任何已知函数（落在残差里，见 docs/functions.md §5）\n",
+                    va);
+        return 1;
+    }
+    static const char* kNames[] = {"entry", "vtable", "call", "tail",
+                                   "padend", "prologue", "dataptr", "gap"};
+    std::printf("0x%08X 在函数 0x%08X..0x%08X（%u 字节，档 %s%s%s%s）内，偏移 +0x%X\n",
+                va, kFuncVA[i], kFuncVA[i] + kFuncSize[i], kFuncSize[i],
+                kNames[kFuncFlags[i] & 0x0Fu],
+                (kFuncFlags[i] & kFlagLeaf) ? " leaf" : "",
+                (kFuncFlags[i] & kFlagSeh) ? " seh" : "",
+                (kFuncFlags[i] & kFlagThunk) ? " thunk" : "",
+                va - kFuncVA[i]);
+    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -2145,6 +2279,9 @@ int main(int argc, char** argv) {
     }
     if (argc > 1 && std::strcmp(argv[1], "--model") == 0) {
         return Model_Dump(argc > 2 ? argv[2] : nullptr);
+    }
+    if (argc > 1 && std::strcmp(argv[1], "--funcs") == 0) {
+        return Funcs_Dump(argc > 2 ? argv[2] : nullptr);
     }
     if (argc > 1 && std::strcmp(argv[1], "--initest") == 0) {
         return Ini_Self_Test();
@@ -2418,6 +2555,12 @@ int main(int argc, char** argv) {
     // src/re/ObjectModel.h 由 tools/layout.py 把「偏移表 + 名字表 + RTTI 继承」
     // 铺成能编译的结构体。这一步查的是名字有没有真的落到那个偏移上。
     if (Model_Check() != 0) {
+        return 1;
+    }
+    // ---- 函数边界表 ----
+    // 这份表的判据和上面两张不同：它不查"名字对不对"，查"分区对不对" ——
+    // .text 的每个字节归谁，以及本体区入口的 16 字节对齐律。
+    if (Funcs_Check() != 0) {
         return 1;
     }
 
