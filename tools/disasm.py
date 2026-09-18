@@ -59,7 +59,7 @@ JCC_MNEMONICS = {
 class CodeIndex:
     """线性扫描得到的指令索引（三个 bytearray，紧凑）"""
 
-    def __init__(self, img: PEImage, md, anchors=None):
+    def __init__(self, img: PEImage, md, anchors=None, data_ranges=None):
         lo, hi = img.text_range()
         self.lo, self.hi = lo, hi
         self.n = hi - lo
@@ -69,6 +69,28 @@ class CodeIndex:
         # 传 None 时行为与旧版完全一致。
         self.anchors = (sorted(a - img.image_base - lo for a in anchors)
                         if anchors else None)
+        # 数据区（跳表本体等），**RVA 半开区间** [start, end)。
+        #
+        # 为什么光有 anchors 不够：锚点是**点**，数据是**区间**。跳表本体的
+        # dword 常能解成一串合法指令，扫描一头扎进去就再也回不来，只能等
+        # 撞上下一个锚点。实测代价：`0x7C7758` 那张 12 项跳表让紧随其后的
+        # `0x7C7788`（表尾那个真函数入口）**永远拿不到指令边界**，
+        # 于是空隙通道退而求其次，把表内的一个 case 标签 `0x7C77D0`
+        # （跳表 `0x7C7B3C` 的第 3 项）当成了"函数入口"顶替它。
+        #
+        # 有了区间就可以：进区间直接跳到区间末尾重开解码 —— 这一步**制造**
+        # 了区间末尾的指令边界，而表尾/表首之间往往正夹着一个函数入口。
+        self.data_ranges = None
+        if data_ranges:
+            rs = sorted((a - lo, b - lo) for a, b in data_ranges)
+            merged: list[list[int]] = []          # 合并重叠 / 相接，保证单调不交
+            for a, b in rs:
+                if merged and a <= merged[-1][1]:
+                    if b > merged[-1][1]:
+                        merged[-1][1] = b
+                else:
+                    merged.append([a, b])
+            self.data_ranges = [(a, b) for a, b in merged]
         self.starts = bytearray(self.n)   # 1 = 该 RVA 是指令起点
         self.sizes = bytearray(self.n)    # 指令长度（仅起点处有效）
         self.flags = bytearray(self.n)    # F_* 位掩码
@@ -94,11 +116,38 @@ class CodeIndex:
         # anchors 就是为此准备的：调用方先给出「这里一定是函数入口」的地址集合，
         # 扫描一旦跨过锚点就丢弃这条指令、改从锚点重新开始。
         # 锚点由第一遍扫描的结果算出（见 tools/funcscan.py），所以是两遍扫描。
+        # 但锚点救不了「区间」型数据（跳表本体），那要靠 data_ranges（见 __init__）。
         pos = 0
         n = len(code)
         WINDOW = 512
         anc = self.anchors
+        dr = self.data_ranges
+        di = 0                      # 数据区游标：pos 单调递增，所以游标只往前走
+
+        def skip_data(p: int) -> int:
+            """p 若落在数据区，返回区间末尾；否则原样返回 p。
+
+            必须做成函数而不是"在循环顶上判一次"：`md.disasm` 是**生成器**，
+            进入它之后就按同一个 512 字节窗口一路解下去了，循环顶部的检查
+            根本轮不到执行。实测代价：只判顶部时，遮罩 `0x7C7758..0x7C7788`
+            完全没有效果（`0x7C7758` 照样被解成指令）—— 因为这个位置的解码
+            是**紧跟在前一条 `nop` 后面**、在同一个生成器里发生的。
+            """
+            nonlocal di
+            if dr is None:
+                return p
+            while di < len(dr) and dr[di][1] <= p:
+                di += 1
+            if di < len(dr) and dr[di][0] <= p < dr[di][1]:
+                return dr[di][1]
+            return p
+
         while pos < n:
+            # 数据区（跳表本体）：整段跳过，从区间末尾重开解码。
+            q = skip_data(pos)
+            if q != pos:
+                pos = q
+                continue
             advanced = False
             for ins in md.disasm(code[pos:pos + WINDOW], ib + lo + pos):
                 rva = ins.address - ib
@@ -115,6 +164,10 @@ class CodeIndex:
                 self._record(rva - lo, ins, ib, lo, hi)
                 pos = nxt
                 advanced = True
+                # 这一步解码已经落进数据区：立刻收手，回外层由 skip_data 跳过。
+                # 不在这里 `continue` —— 生成器还按老窗口在跑，走不出数据区。
+                if skip_data(pos) != pos:
+                    break
             if not advanced:
                 pos += 1
 
@@ -177,10 +230,10 @@ class CodeIndex:
         return rva + self.size_at(rva)
 
 
-def build_index(img: PEImage, anchors=None) -> CodeIndex:
+def build_index(img: PEImage, anchors=None, data_ranges=None) -> CodeIndex:
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     md.detail = True
-    return CodeIndex(img, md, anchors)
+    return CodeIndex(img, md, anchors, data_ranges)
 
 
 class FunctionFinder:

@@ -23,6 +23,7 @@
 #include "data/Ini.h"
 #include "data/TypeDB.h"
 #include "data/UnitModel.h"
+#include "re/BlockTable.h"
 #include "re/FieldOffsets.h"
 #include "re/FieldNames.h"
 #include "re/FuncTable.h"
@@ -2114,6 +2115,87 @@ static int Funcs_Check() {
     return 0;
 }
 
+/// Stage 2（基本块与 CFG）的 C++ 侧自检。
+///
+/// 这里只核**恒等式与跨表一致性**，不重算 CFG —— 重算 CFG 是
+/// `tools/cfgcheck.py` 的活（它不复用 `cfgscan.py` 的任何代码路径，
+/// 从磁盘重读 JSON 与这个头文件各算一遍再互钉）。两边核的东西**故意不同**：
+/// Python 那边核"块与边逐条合不合法"，这边核"四个合计常量互相闭合吗、
+/// 入口在不在 FuncTable 里"。同一件事用两条独立路线各证一次。
+static int Cfg_Check() {
+    using namespace ra2::re::cfg;
+    constexpr uint32_t kN = sizeof(kCfgFuncVA) / sizeof(kCfgFuncVA[0]);
+    constexpr uint32_t kBN = sizeof(kCfgBlocks) / sizeof(kCfgBlocks[0]);
+    constexpr uint32_t kEN = sizeof(kCfgEdges) / sizeof(kCfgEdges[0]);
+    constexpr uint32_t kCN = sizeof(kCfgCases) / sizeof(kCfgCases[0]);
+
+    // 判据 1：四个数组等长，且等于函数个数（逐个对下标，错一个就下溢/错读）
+    if (kN != kCfgFuncCount || kBN != kN || kEN != kN || kCN != kN) {
+        std::printf("FAIL: CFG 表长度不一致：VA %u / 块 %u / 边 %u / 跳表 %u，"
+                    "函数个数 %u\n", kN, kBN, kEN, kCN, kCfgFuncCount);
+        return 1;
+    }
+
+    uint64_t bs = 0, es = 0, cs = 0;
+    for (uint32_t i = 0; i < kN; ++i) {
+        // 判据 2：入口升序无重复（否则二分查找是错的）
+        if (i > 0 && kCfgFuncVA[i] <= kCfgFuncVA[i - 1]) {
+            std::printf("FAIL: CFG 入口不是严格升序：0x%08X 在 0x%08X 之后\n",
+                        kCfgFuncVA[i], kCfgFuncVA[i - 1]);
+            return 1;
+        }
+        // 判据 3：每个入口都得在 S1 的函数表里（跨表一致性）
+        if (!ra2::re::funcs::IsFuncEntry(kCfgFuncVA[i])) {
+            std::printf("FAIL: CFG 入口 0x%08X 不在函数表里\n", kCfgFuncVA[i]);
+            return 1;
+        }
+        // 判据 4/5：计数下界 e >= b-1、上界 e <= 2b+c，逐函数实算。
+        // 下界来自「除入口块外每块至少一条入边」——漏一条边就有块被孤立；
+        // 上界来自「块出度最多 2，只有跳表块能更多」。
+        const uint32_t b = kCfgBlocks[i], e = kCfgEdges[i], c = kCfgCases[i];
+        if (b < 2) {
+            std::printf("FAIL: CFG 表里出现单块函数 0x%08X（b=%u）\n",
+                        kCfgFuncVA[i], b);
+            return 1;
+        }
+        if (e + 1 < b || e > 2u * b + c) {
+            std::printf("FAIL: 0x%08X 的计数不闭合：b=%u e=%u c=%u\n",
+                        kCfgFuncVA[i], b, e, c);
+            return 1;
+        }
+        bs += b; es += e; cs += c;
+    }
+
+    // 判据 6：四个合计常量必须等于数组实算之和
+    if (bs != kCfgBlockSum || es != kCfgEdgeSum || cs != kCfgCaseSum) {
+        std::printf("FAIL: CFG 合计常量与数组不符：块 %llu/%u 边 %llu/%u 跳表 %llu/%u\n",
+                    static_cast<unsigned long long>(bs), kCfgBlockSum,
+                    static_cast<unsigned long long>(es), kCfgEdgeSum,
+                    static_cast<unsigned long long>(cs), kCfgCaseSum);
+        return 1;
+    }
+    // 判据 7：总数 == 多块部分 + 单块部分（分解恒等式）。
+    // 少了这一条，「单块函数的边被整体丢掉」这种错会静默通过：
+    // 实测就是这么丢过 254 条边，块数也对不上 8,2xx 个。
+    if (kBlockCount != kCfgBlockSum + kSingleFuncCount
+        || kEdgeCount != kCfgEdgeSum + kSingleEdgeCount
+        || kSwitchEdgeCount != kCfgCaseSum) {
+        std::printf("FAIL: CFG 分解恒等式不成立：块 %u vs %u+%u，边 %u vs %u+%u，"
+                    "跳表 %u vs %u\n",
+                    kBlockCount, kCfgBlockSum, kSingleFuncCount,
+                    kEdgeCount, kCfgEdgeSum, kSingleEdgeCount,
+                    kSwitchEdgeCount, kCfgCaseSum);
+        return 1;
+    }
+
+    std::printf("OK  基本块 %u 个 / 出边 %u 条（跳表边 %u）；"
+                "有 CFG 的函数 %u 个，单块函数 %u 个；"
+                "每函数 b-1<=e<=2b+c 全部成立；分解恒等式闭合\n",
+                kBlockCount, kEdgeCount, kSwitchEdgeCount,
+                kCfgFuncCount, kSingleFuncCount);
+    return 0;
+}
+
 /// `ra2core --funcs [地址]`：给一个 VA，答它属于哪个函数。
 static int Funcs_Dump(const char* arg) {
     using namespace ra2::re::funcs;
@@ -2561,6 +2643,12 @@ int main(int argc, char** argv) {
     // 这份表的判据和上面两张不同：它不查"名字对不对"，查"分区对不对" ——
     // .text 的每个字节归谁，以及本体区入口的 16 字节对齐律。
     if (Funcs_Check() != 0) {
+        return 1;
+    }
+    // ---- 基本块与 CFG ----
+    // 查的是"关系对不对"：块与边的四个合计拆得开、合得回，
+    // 且每个入口都在函数表里（跨表一致）。
+    if (Cfg_Check() != 0) {
         return 1;
     }
 

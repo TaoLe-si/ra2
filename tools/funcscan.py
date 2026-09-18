@@ -13,10 +13,14 @@ funcscan.py -- 全量反编译计划的 Stage 1：函数边界重建。
   0x401000–0x7C0000 段内，call 目标与虚表槽目标 **100%** 落在 16 字节边界
   （12,374/12,374）。0x7C0000 以上那 ~128 KB 是运行时库，不受这条约束。
 
-两遍扫描：
-  第一遍  不带锚点扫——只为拿到 call 目标，做播种与锚点。
-  第二遍  以「入口锚点」重扫（tools/disasm.py 的 anchors），
-          保证嵌在 .text 里的数据不会把指令流带偏再也不回来。
+三遍扫描（都是 tools/disasm.py 的同一套扫描器）：
+  第一遍  不带锚点扫 —— 只为拿到 call 目标，做播种与锚点。
+  第二遍 a  以「入口锚点」重扫（anchors）—— 拿它认跳表。
+  第二遍 b  锚点 + **跳表本体当数据区**（data_ranges）再扫一遍，正式用这一遍。
+
+  为什么要 b：锚点是**点**，跳表是**区间**。跳表本体的 dword 恰好能解成合法
+  指令，扫描扎进去就回不来 —— 实测一条函数因此被截断、表尾那个真入口拿不到
+  指令边界。详见 docs/functions.md §5.1 第 6 条。
 """
 
 from __future__ import annotations
@@ -45,8 +49,28 @@ WIN_FWD = 0x10000
 MAX_FUNC = 0x20000
 # 跳表最多读多少项。
 JT_LIMIT = 4096
-# 判为填充的最小连续长度（0x90 / 0xCC）。
-PAD_MIN = 4
+# 判为填充的最小连续长度（0x90 / 0xCC）。定成 2 是有实测依据的：
+# 「填充的尽头就是下一个 16 对齐函数」这条规律在连续 ≥2 时成立，
+# 而单字节的 0x90 会先落到空隙通道的候选里（0x40201F 那种），
+# 走不出来才在最后一步归为填充。
+PAD_MIN = 2
+
+# 空隙候选被拒后**值得重试**的原因 —— 判定口径是"边界条件变了就可能翻盘"。
+# 空隙是**顺序剥离**的：同一段空隙里先认下来的函数会把可用边界收窄，
+# 所以下面这三类失败再跑一轮未必还失败：
+#   没有出口     —— 硬边界把出口切掉了
+#   向前回溯     —— 回溯窗口撞上边界，入口自洽性可能随边界改变
+#   密度校验不过 —— 跨度里混着尚未被认领的邻居
+# 而 `不是指令起点` / `空` / `超过 MAX_FUNC` 是**确定性**的：
+# 跟边界无关，重试纯属浪费（实测 3,195 个 × 11 轮全是白跑）。
+GAP_RETRY_REASONS = frozenset({
+    "没有出口",
+    "向前回溯（入口选错）",
+    "密度校验不过（跨度里混进数据）",
+    # 走通了、但出口只剩 `bound` 且拿不出独立证据（见 only_bound_ok）。
+    # 边界收窄后它可能拿到真出口，所以也进重试集。
+    "只剩 bound 出口且无独立证据",
+})
 
 # 播种分档，数字越大越弱。用于给每个函数挑一个"主档"，也用于去重叠时的取舍。
 TIERS = ["entry", "vtable", "call", "tail", "padend", "prologue", "dataptr", "gap"]
@@ -59,6 +83,11 @@ TIER_CNAME = {"entry": "kEntry", "vtable": "kVirtual", "call": "kCall",
 # `padend` **不在**这里 —— 它是启发式，函数体内对齐用的 nop 也会产生候选，
 # 拿它当路标会把真函数截短。它只是个播种通道，冲突交给去重叠解决。
 STRONG = ("entry", "vtable", "call", "tail")
+
+# 「这个入口不在 seeds 里」时用的空档位集合。**不能写成 `()`** ——
+# `() & frozenset(...)` 会抛 TypeError，而 tuple 与 frozenset 只有
+# 在"默认值"这条路径上才会相遇，等于是个只在冷门分支上炸的雷。
+NO_TIERS: frozenset = frozenset()
 
 
 def hx(v: int) -> str:
@@ -94,7 +123,15 @@ class JtResolver:
         self.idx = idx
         self.ib = img.image_base
         self.cache: dict[int, tuple[list[int], int]] = {}
-        self.bytes_of: dict[int, tuple[int, int]] = {}   # va 目标 -> (表起始, 表长度)
+        # **口径：`(表起始 RVA, 表字节长度)`** —— 是"起始 + 长度"，不是"起始 + 结束"。
+        # 这个区别踩过两次：`range(a, b)` 形式的消费方（`scan_dataptrs` 的掩码、
+        # 数据区区间）会把它当"起始 + 结束"，于是 `range(0x3C7758, 48)` 是**空区间**，
+        # 逻辑静默失效、且看不出任何异常。要"起始 + 结束"请用 `ranges()`。
+        self.bytes_of: dict[int, tuple[int, int]] = {}
+
+    def ranges(self) -> list[tuple[int, int]]:
+        """跳表本体区间，`(起始 RVA, 结束 RVA)` 半开 —— 给要 `range(a, b)` 的消费方用。"""
+        return [(base, base + nb) for base, nb in self.bytes_of.values()]
 
     def resolve(self, site_rva: int):
         base = self.idx.jt.get(site_rva)
@@ -145,7 +182,7 @@ class Walker:
         return out
 
     def walk(self, entry: int, entries=None, stop_at=None, strict=False,
-             stop_rvas=None):
+             stop_rvas=None, bounds=None, strict_density=None):
         """从 RVA entry 出发做过程内递归下降，返回记录或 None。
 
         entries：已知的函数入口集合（VA）。`jmp` 落到已知入口 → 判为尾调用。
@@ -160,6 +197,15 @@ class Walker:
                 强证据入口落在包围盒里时，把末端截到它。
         strict：入口证据是否足够强。强证据入口即便密度校验不过也保留（记 low_density），
                 因为「它是函数」这件事已经由调用方/虚表证明了，只是边界可疑。
+        bounds：(lo, hi) **RVA**，硬边界。给「空隙通道」用：候选入口是猜的，
+                必须把它关在空隙里，否则一次遍历就能扫掉几十 KB，
+                既慢又会把整片数据当成一个"函数"。
+                越界的分支目标一律按尾调用处理，线性推进到边界即停，
+                并在这种情况下记一个 `bound` 出口（见下）。
+        strict_density：**密度校验**是否放宽。默认跟随 strict。空隙通道要把这两件事
+                拆开：它的候选有硬边界兜着，出口判据可以放宽（否则 fallthru /
+                走到边界这两类真出口全被毙，实测漏掉整片 CRT 函数）；
+                但密度校验**绝不能放** —— 那是在"猜"的场景里唯一的防伪手段。
         """
         idx = self.idx
         self.reason = ""
@@ -175,8 +221,13 @@ class Walker:
         icalls = 0
         switches = 0
         low_density = False
-        w_lo = max(idx.lo, entry - WIN_BACK)
-        w_hi = min(idx.hi, entry + WIN_FWD)
+        if bounds is None:
+            w_lo = max(idx.lo, entry - WIN_BACK)
+            w_hi = min(idx.hi, entry + WIN_FWD)
+        else:
+            # 硬边界模式：窗口就是给定的区间，回溯也不许越过它。
+            w_lo = max(idx.lo, bounds[0])
+            w_hi = min(idx.hi, bounds[1])
         out_of_win = 0
         # 遍历是否"撞上下一个强证据入口就停"了。用来识别一种真函数：
         # 本身不含 ret/jmp，一路 fall through 进下一个函数（不返回的跳板）。
@@ -185,6 +236,11 @@ class Walker:
         while stack:
             a = stack.pop()
             while True:
+                # 硬边界模式下窗口是**半开**区间 [w_lo, w_hi)：越界地址一律不认。
+                # 这是最后一道闸 —— 下面每个分支各自也查过窗口，但兜底闸放这里，
+                # 任何新加的分支路径都绕不过去。
+                if bounds is not None and not (w_lo <= a < w_hi):
+                    break
                 if a in seen or not idx.is_start(a):
                     break
                 f = idx.flags_at(a)
@@ -242,7 +298,27 @@ class Walker:
                 nxt = idx.next_addr(a)
                 if nxt <= a:
                     break
+                if bounds is not None:
+                    # 硬边界模式：线性推进的下一条必须**严格小于** w_hi。
+                    # 原先写成 `nxt > w_hi` 时，恰好落在边界上的那条指令会被解码、
+                    # 进 seen —— 而它按定义属于**下一个**区间。实测 CRT 区有 3 个
+                    # 函数因此各多算 1 条指令，S2 的「遍历指令 100% 落块」判据
+                    # 随即报出 3 条"块外指令"。
+                    #
+                    # 撞上边界同时要记成出口：空隙通道给的上界就是「下一个函数开头」，
+                    # 函数被边界截断不代表它是碎片（实测 0x7D6F86 这类
+                    # `push ebp; mov ebp,esp; sub esp,0x78; ...` 的真函数靠这条保住）。
+                    if nxt >= w_hi:
+                        exits["bound"] += 1
+                        break
+                elif nxt > w_hi:
+                    # 非硬边界：上界是随手取的探索窗口，撞上它没有证据价值，只停不记。
+                    break
                 a = nxt
+
+        # 把指令地址集合留给调用方（Stage 2 建基本块要用）。
+        # 只在成功返回时才有意义 —— 失败时是空集，别误用。
+        self.seen = seen
 
         if not seen:
             self.reason = "空"
@@ -252,6 +328,8 @@ class Walker:
             self.reason = "向前回溯（入口选错）"
             return None
         end = e + idx.size_at(e)
+        if end > w_hi:
+            end = w_hi                     # 包围盒末端同样不许越界
         truncated = False
         if stop_rvas:
             j = bisect.bisect_right(stop_rvas, entry)
@@ -263,8 +341,10 @@ class Walker:
             self.reason = "超过 MAX_FUNC"
             return None
         # 密度校验：真实代码约 3~4 字节/指令，跨度里混进大片数据就会露馅。
+        if strict_density is None:
+            strict_density = strict
         if size > 12 * len(seen) + 256:
-            if not strict:
+            if not strict_density:
                 self.reason = "密度校验不过（跨度里混进数据）"
                 return None
             low_density = True
@@ -281,16 +361,20 @@ class Walker:
         #   fallthru       —— 走到强证据入口就停了、中间没有 ret/jmp。
         #                     实测 0x6BEC50 = `push ecx; call 0x7CBDDC`（不返回的
         #                     纯虚/异常跳板），后面用 nop 填到 16 字节。
+        #   bound          —— 线性推进撞上**硬边界**（只有空隙通道有）。实测
+        #                     0x7D6F86 = `push ebp; mov ebp,esp; sub esp,0x78; ...`
+        #                     是 CRT 里一个正牌函数，被空隙上界截断而已。
         #
-        # 原判据只认前四类里的三类（ret/ret_imm/thunk/tails），把后三类全毙了 ——
+        # 原判据只认前四类里的三类（ret/ret_imm/thunk/tails），把后四类全毙了 ——
         # 代价是旧表的 call 档整整丢了 4 条**真入口**（见 docs/functions.md）。
         #
-        # 后三类**额外要求证据够强**（strict）：`ret` 是自证的，走到 ret 就是函数；
-        # 而这三种出口本身不自证 —— 一个 `jmp $` 也可能只是对齐填充，
+        # 后四类**额外要求证据够强**（strict）：`ret` 是自证的，走到 ret 就是函数；
+        # 而这四种出口本身不自证 —— 一个 `jmp $` 也可能只是对齐填充，
         # 一段以跳转表收尾的也可能是从派生入口走出来的中途片段。
         # 只有「有 call 点 / 占虚表槽」这类外部证据在，才认它是函数。
         plain_exit = (exits["ret"] or exits["ret_imm"] or exits["thunk"] or tails)
-        weak_exit = (exits["switch"] or exits["loop"] or stopped_at_entry)
+        weak_exit = (exits["switch"] or exits["loop"] or stopped_at_entry
+                     or exits["bound"])
         if stopped_at_entry and not plain_exit and not (exits["switch"] or exits["loop"]):
             exits["fallthru"] += 1            # 让它出现在产物里，别只活在注释里
         if not (plain_exit or (weak_exit and strict)):
@@ -439,6 +523,129 @@ def scan_pad_ends(img: PEImage, idx: disasm.CodeIndex):
 
 
 # --------------------------------------------------------------------------
+# 空隙通道用的两个小工具
+# --------------------------------------------------------------------------
+def gaps_of(spans, lo, hi):
+    """spans 是 [(a, b)] 的 RVA 区间（可乱序）。返回 [lo, hi) 内未被覆盖的极大区间。
+
+    只做区间求补，不带任何启发式 —— 「哪里还是空的」这件事必须是算出来的，
+    不能靠人眼看列表。
+    """
+    cl = []
+    for a, b in spans:
+        a, b = max(a, lo), min(b, hi)
+        if a < b:
+            cl.append((a, b))
+    cl.sort()
+    merged = []
+    for a, b in cl:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    out = []
+    pos = lo
+    for a, b in merged:
+        if a > pos:
+            out.append((pos, a))
+        pos = max(pos, b)
+    if pos < hi:
+        out.append((pos, hi))
+    return out
+
+
+def ptr_runs(seg, base_rva, tlo, thi, min_items=3):
+    """找「连续若干 4 字节值都落在 [tlo, thi)」的极大字节段 —— 跳转表 / 函数指针表。
+
+    这是**数据**，不是代码，必须先把它们标出来：
+      * 空隙通道的候选入口要避开它们（否则在 15 KB 的指针表里空转）；
+      * 分类阶段要把它们记成 `data` 而不是 `unknown`。
+
+    为什么不能只按 4 字节对齐找：实测 MSVC 的跳转表前面常垫一条 2 字节的
+    `mov edi,edi`（`8b ff`），整张表因此是 **2 mod 4** 对齐的 ——
+    0x4059D0 处是 `8b ff`，dword 表从 0x4059D2 才开始（表项 0x405639 / 0x4059C9 /
+    0x4055EB，都是 case 目标）。所以四个相位都要试。
+    """
+    n = len(seg)
+    runs = []
+    for off in range(4):
+        i = off
+        start = None
+        while i + 4 <= n:
+            v = struct.unpack_from("<I", seg, i)[0]
+            if tlo <= v < thi:
+                if start is None:
+                    start = i
+            else:
+                if start is not None and (i - start) >= 4 * min_items:
+                    runs.append((start, i))
+                start = None
+            i += 4
+        if start is not None:
+            e = start + 4 * ((n - start) // 4)
+            if e - start >= 4 * min_items:
+                runs.append((start, e))
+    runs.sort()
+    out = []
+    for a, b in runs:
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return [(base_rva + a, base_rva + b) for a, b in out]
+
+
+def byte_index_tables(seg, base_rva, tlo, thi, regions, min_bytes=8, max_dw=4096):
+    """找 MSVC 密集 switch 的**字节索引表**。
+
+    MSVC 对「case 值连续且密集」的 switch 生成的是：
+
+        movzx eax, byte ptr [eax + 字节表]
+        jmp   dword ptr [eax*4 + dword表]
+
+    所以布局上字节表**紧跟在 dword 表之后**，而且每个字节值都 `<` dword 表的项数。
+
+    关键是判据不能定成「字节值小」—— 那样会把一堆零填充也算进来。
+    真正的判据是**「这些值确实能当那张表的索引」**，这是可验证的：
+    拿实测的 `0x0071F6F8` 验，dword 表 2 项，后面是 `00 00 01 01 00 01 01 01`，
+    最大值 1 < 2，成立。
+
+    regions 只给「还没被认领的字节段」—— 不去动已经认定是代码的地方。
+    返回 [(lo_rva, hi_rva)]，整段（dword 表 + 字节表）都应记成数据。
+    """
+    out = []
+    for ra, rb in regions:
+        for ph in range(4):
+            p = ra + ph
+            while p + 8 <= rb:
+                ndw = 0
+                q = p
+                while q + 4 <= rb and ndw < max_dw:
+                    if not (tlo <= struct.unpack_from("<I", seg, q - base_rva)[0] < thi):
+                        break
+                    ndw += 1
+                    q += 4
+                if ndw >= 2:
+                    lim = min(0x20, ndw - 1)
+                    r = q
+                    while r < rb and seg[r - base_rva] <= lim:
+                        r += 1
+                    if r - q >= min_bytes:
+                        out.append((p, r))
+                        p = r
+                        continue
+                p += 4
+    out.sort()
+    merged = []
+    for a, b in out:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+# --------------------------------------------------------------------------
 # 主流程
 # --------------------------------------------------------------------------
 def run(path=None, verbose=True):
@@ -466,17 +673,38 @@ def run(path=None, verbose=True):
     log("  虚表槽去重目标 %d 个" % len(vt_tgts))
 
     # ---- 第二遍：以入口锚点重扫 ----
+    # 拆成 2a / 2b，中间夹一次跳表解析：
+    #   2a  只带锚点扫一遍 —— 这一遍质量已经够好，用它来认跳表；
+    #   2b  把 2a 认出来的跳表**当数据区**再扫一遍，扫描不再钻进表里，
+    #       表尾于是拿到指令边界（表尾/表首之间往往正夹着一个函数入口）。
+    # 为什么不直接拿第一遍（无锚点）的跳表：那一遍质量差，从数据里误码出来的
+    # `jmp [reg*4+disp]` 会指向随机位置，一旦当数据区就会**误遮真代码**。
+    # 多扫一遍的成本约 10 秒，换掉一整类静默失效，值得。
     anchors = set(call_targets) | vt_tgts
     log("第二遍扫描（锚点 %d 个）…" % len(anchors))
-    idx = disasm.build_index(img, anchors)
-    log("  %d 条指令；跳表(绝对形式) %d 处，跳表(寄存器形式) %d 处，ret imm %d 条"
+    idx_a = disasm.build_index(img, anchors)
+    n_a = idx_a.decoded
+    jt_a = JtResolver(img, idx_a)
+    for site in idx_a.jt:
+        jt_a.resolve(site)
+    dranges = sorted(jt_a.ranges())
+    del idx_a
+    log("  2a（只带锚点）：%d 条指令；认出跳表 %d 张 / %d 字节 -> 作数据区遮罩"
+        % (n_a, len(dranges), sum(b - a for a, b in dranges)))
+    idx = disasm.build_index(img, anchors, data_ranges=dranges)
+    log("  2b（锚点 + 数据区）：%d 条指令；跳表(绝对形式) %d 处，"
+        "跳表(寄存器形式) %d 处，ret imm %d 条"
         % (idx.decoded, len(idx.jt), idx.jt_indirect, len(idx.ret_imm)))
 
     jt = JtResolver(img, idx)
     for site in idx.jt:
         jt.resolve(site)
-    log("  解析出跳表 %d 张，表项合计 %d"
-        % (len(jt.cache), sum(len(t) for t, _ in jt.cache.values())))
+    # 注意：`len(jt.cache)` **不等于**表的张数 —— `resolve()` 把失败也缓存了
+    # （失败存 `([], 0)`），所以 cache 是"站点去过重的表址数"，
+    # 而 `bytes_of` 只收解析成功的（≥3 项）。报数时报后者。
+    log("  跳表站点 %d 处 -> 解析出表 %d 张，表项合计 %d"
+        % (len(idx.jt), len(jt.bytes_of),
+           sum(len(t) for t, _ in jt.cache.values())))
 
     wk = Walker(img, idx, jt)
 
@@ -495,9 +723,13 @@ def run(path=None, verbose=True):
     padends = scan_pad_ends(img, idx)
     for t in padends:
         seed(t, "padend")
-    for t in scan_prologues(img, idx):
+    # 播种仍按原列表顺序（不改成 set —— 迭代顺序变了会影响下游依赖顺序的逻辑）；
+    # 另存一个集合，给空隙通道当"像代码"的独立证据用（见 _gap_only_bound_ok）。
+    prologues = scan_prologues(img, idx)
+    for t in prologues:
         seed(t, "prologue")
-    dataptrs = scan_dataptrs(img, idx, vt_spans, list(jt.bytes_of.values()))
+    prologue_set = frozenset(prologues)
+    dataptrs = scan_dataptrs(img, idx, vt_spans, jt.ranges())
     for t, n in dataptrs.items():
         if n >= 1:
             seed(t, "dataptr")
@@ -516,37 +748,314 @@ def run(path=None, verbose=True):
     failed_tier: collections.Counter = collections.Counter()
     failed_detail: list[tuple[int, str, str]] = []
     failed: set[int] = set()
-    work = list(seeds)
     new_calls: set[int] = set()
-    while work:
-        va = work.pop()
-        if va in funcs or va in failed:
-            continue
-        r = wk.walk(va - ib, seeds, strong,
-                    bool(seeds.get(va, ()) & STRONG_SET), stop_rvas)
-        if r is None:
-            failed.add(va)
-            rejected["walk 失败"] += 1
-            rejected["原因：" + wk.reason] += 1
-            for t in seeds.get(va, ()):
-                failed_tier[t] += 1
-            failed_detail.append((va, wk.reason,
-                                  min(seeds.get(va, ("?",)),
-                                      key=lambda t: TIER_RANK.get(t, 99))))
-            continue
-        funcs[va] = r
-        for t in list(r["calls"]) + list(r["tails"]):
-            tv = t                            # walk() 已经在出口处换算成 VA 了
-            if tv not in funcs and tv not in seeds:
-                seeds[tv].add("call" if t in r["calls"] else "tail")
-                work.append(tv)
-                new_calls.add(tv)
-                strong.add(tv)
-    # 分档要等播种收敛之后再定：一个函数可能后面才被更强的通道认领。
-    for va, f in funcs.items():
-        f["tiers"] = set(seeds.get(va, ())) or {"call"}
+    bounds_of: dict[int, tuple[int, int]] = {}
+    gap_rej: collections.Counter = collections.Counter()
+
+    def pump(work):
+        """把队列跑干：walk、收函数、把新发现的 call / tail 目标塞回队列。
+        返回这一趟**新收下**的函数 VA 列表 —— 空隙通道要靠它更新"已覆盖"图。
+
+        第一次跑是「已知证据的发散」，后面几次跑是空隙通道的候选 —— 两者必须是
+        同一个函数，否则「空隙补出来的函数」和「call 跟出来的函数」会漂移成两套标准。
+        """
+        got = []
+        while work:
+            va = work.pop()
+            queued.discard(va)
+            if va in funcs or va in failed:
+                continue
+            r = wk.walk(va - ib, seeds, strong,
+                        bool(seeds.get(va, NO_TIERS) & STRONG_SET), stop_rvas,
+                        bounds_of.get(va))
+            if r is None:
+                failed.add(va)
+                rejected["walk 失败"] += 1
+                rejected["原因：" + wk.reason] += 1
+                if va in bounds_of:
+                    gap_rej[wk.reason] += 1
+                for t in seeds.get(va, ()):
+                    failed_tier[t] += 1
+                failed_detail.append((va, wk.reason,
+                                      min(seeds.get(va, ("?",)),
+                                          key=lambda t: TIER_RANK.get(t, 99))))
+                continue
+            funcs[va] = r
+            got.append(va)
+
+            def link(t, kind, first_seed):
+                """记一条出边目标：档位照加；只有「**头一次**被播种」的目标才入队、
+                才升为强证据路标。跟旧实现保持一致 —— 把每个 call 目标都升成强证据
+                看着更"对"，但数据里误解出来的 `E8 rel32` 会因此把真函数拦腰截断。"""
+                seeds[t].add(kind)          # 档位可以追加，取了 min 自然会选强的
+                if t in funcs or not first_seed:
+                    return
+                new_calls.add(t)
+                if t not in strong:
+                    strong.add(t)
+                    # stop_rvas 必须跟着长。原来它只在开头算一次，
+                    # 于是「后面才发现的强入口」能当 stop_at 却不能截包围盒 ——
+                    # 这正是 0x407040 那种吞掉整簇小函数的条件。
+                    bisect.insort(stop_rvas, t - ib)
+                if t not in queued:
+                    queued.add(t)
+                    work.append(t)
+
+            for t in r["calls"]:
+                link(t, "call", t not in seeds)
+            for t in r["tails"]:
+                link(t, "tail", t not in seeds)
+        return got
+
+    queued: set[int] = set(seeds)
+    pump(list(seeds))
     log("不动点收敛：函数 %d 个（其中由过程内出边新发现的 %d 个）；遍历失败 %d 次 %s"
         % (len(funcs), len(new_calls), rejected["walk 失败"], dict(failed_tier)))
+
+    # ---- 第 2 轮：空隙通道 ----
+    # 为什么需要它：S1 收官时对账第 6 条（unknown < 1%）**没做到**，逐段查下来
+    # 残下来的根本不是数据，而是我们没播种到的**真函数**：
+    #   0x00402020  `8b 41 14 c3`              getter，只被虚表间接调用
+    #   0x0040EBC0  `b9 2C 73 88 00; e9 ...`   尾调用跳板
+    #   0x00412540  `e9 5B FF 0C 00`           纯 jmp 跳板
+    # 共同点是「没有任何直接 call 指向它」，而虚表通道只覆盖 db/rtti.json
+    # 里那 6,686 个槽。真正的判据不该是"谁指过它"，而是
+    # **「空隙里 16 对齐处，一段能解成合法指令、且有出口的代码」**。
+    #
+    # 三条约束保证这不会退化成"把空闲字节都当函数"：
+    #   ① 候选只在**函数没覆盖**的字节里取 —— 不可能切碎已有函数；
+    #   ② 入口 16 字节对齐（§3 实测规律，本体区 100% 成立）；
+    #   ③ walk() 的硬边界就是那一段空隙 —— 越界即停，且必须走到底有出口。
+    # 另加一条：指针表（连续 4 字节值都指向 .text）整体排除 —— 那是数据。
+    off0 = img.rva_to_off(lo)
+    seg_all = img.data[off0:off0 + (hi - lo)]
+    tables = ptr_runs(seg_all, lo, ib + lo, ib + hi)
+    table_of = bytearray(hi - lo)
+    for a, b in tables:
+        for x in range(a - lo, b - lo):
+            table_of[x] = 1
+    log("  指针表（连续 ≥3 个 dword 都指向 .text，判为数据）%d 段 / %d 字节"
+        % (len(tables), sum(b - a for a, b in tables)))
+
+    gap_rounds = 0
+    gap_cand_n = 0
+    gap_failed: set[int] = set()
+    # 临时排查开关：FS_DBG=0x7C6FC8,0x7D910A 时，把这些地址在空隙通道里的
+    # 每一次出现都打出来（提出、拒绝原因、接受的区间）。
+    # 按**数值**比，不要比字符串 —— hx() 输出 8 位十六进制，人写字习惯写 6 位，
+    # 这个开关自己就先错过一次。
+    _dbg = set()
+    for _x in os.environ.get("FS_DBG", "").split(","):
+        _x = _x.strip()
+        if _x:
+            try:
+                _dbg.add(int(_x, 0))
+            except ValueError:
+                pass
+
+    def gap_candidates(a, b):
+        """一段空隙里值得一试的候选入口（RVA），升序。
+
+        两条规则**按区段分开**，别混：
+          * 本体区（`< ALIGN_SPLIT`）：只取 16 对齐处。这是实测规律，100% 成立。
+          * 运行时库区（`>= ALIGN_SPLIT`）：**不要求对齐** —— 那里不受对齐律约束，
+            实测硬按 16 对齐去取，会把 CRT 里一整批
+            `push ebp; mov ebp, esp; sub esp, N` 的真函数全部漏掉
+            （残差里 8,493 字节，绝大多数是这种真代码）。
+            改成取「空隙开头」、「每一段填充之后的那个字节」，再加
+            「**每一段指针表之后**」（跳过 0x00/0x90/0xCC 垫料）。
+            最后这条是实测逼出来的：`0x7C7758` 是一张 12 项跳表的表首，
+            `0x7C7788` 才是用它的那个真函数开头（`push ebp; push ebx;
+            xor edx,edx; …`），中间只隔一个 `0x00`。不把表后位置当候选，
+            这个真函数就没人发现；而表首**前面**那一个 `0x90` 反倒会成候选、
+            走通、认成函数，把真函数整个吞掉。
+        """
+        out = []
+        # 空隙开头：本体区必须 16 对齐，库区就是它自己。
+        if ib + a >= ALIGN_SPLIT or (a & 0xF) == 0:
+            out.append(a)
+        else:
+            out.append((a + 15) // 16 * 16)
+        # 空隙内部：本体区按 16 步进；库区按「填充尽头」取。
+        i = out[0]
+        while i < b:
+            out.append(i)
+            if ib + i < ALIGN_SPLIT:
+                i += 16
+            else:
+                j = i + 1
+                while j < b and seg_all[j - lo] not in (0x90, 0xCC):
+                    j += 1
+                while j < b and seg_all[j - lo] in (0x90, 0xCC):
+                    j += 1
+                i = max(j, i + 1)
+        # 库区追加：每张指针表结束之后、跳过垫料的那个位置。
+        # 只**加**候选、不改动上面已有的推进逻辑 —— 加法不会让原来的候选消失。
+        for ts, te in tables:
+            if ib + a >= ALIGN_SPLIT and a <= te < b:
+                k = te
+                while k < b and seg_all[k - lo] in (0x00, 0x90, 0xCC):
+                    k += 1
+                if k < b:
+                    out.append(k)
+        return sorted(set(x for x in out if a <= x < b))
+
+    def in_table(x):
+        """x 是否落在已知指针表内，**或紧贴在表头前面 1~3 字节（垫料）**。
+
+        方向很重要，**只往右看，不许往左看**：
+          * `d = 0`   —— x 本身是表里的字节（数据）；
+          * `d = 1..3`—— x 与表头只隔 1~3 字节，这不到 4 个字节装不下一条像样的
+            指令，只可能是表前的对齐垫料。`ptr_runs` 要试 4 个相位
+            （MSVC 常使表首不是 4 对齐，前面垫 1~3 字节），所以窗口取 3。
+
+        实测就是这么漏的：`0x7C7758` 才是一张 12 项跳表的表首
+        （dword 全指向 .text：`007C75C1 007C7694 …`），它前面一个 `0x90`
+        （`0x7C7757`）成了一段空隙的开头，被当成候选、走通、认成函数
+        （size 964），把 `0x7C7788` 那个真函数整个吞掉。
+
+        **往左看会误杀**：表尾之后第一个字节（`0x7C7788`）往往正是那个
+        真函数的入口，若把 `x-1..x-3` 也算进来，它会被自己右边的表挡掉。
+        本函数只在空隙通道当闸门用（见下方 `gap_candidates` 的调用点），
+        过宽会误杀真函数，过窄只会多留一个假函数——所以宁可只往右看。
+        """
+        i = x - lo
+        n = len(table_of)
+        for d in (0, 1, 2, 3):
+            j = i + d
+            if 0 <= j < n and table_of[j]:
+                return True
+        return False
+
+    def only_bound_ok(r, va):
+        """空隙候选的「像代码」闸门 —— 只对**唯一出口是撞硬边界**的候选生效。
+
+        为什么需要这道闸：空隙通道把 `bound`（线性推进撞上硬边界）算成合法出口，
+        是为了保住被上界截断的真函数 —— `0x7D6F86` 是
+        `push ebp; mov ebp,esp; sub esp,0x78; ...`，正牌 CRT 函数，只是被截断了。
+
+        但这条放宽会把**字节索引表**放进来。实测 `0x40DD54` 起是
+        `01 01 01 00 01 01 …` 这样一张表，恰好在 16 对齐处（`0x40DD60`）
+        能解码成一串 `add dword ptr [ecx], eax`：10 条指令、无控制流、无 call，
+        一路"走"到边界 `0x40DD70`（下一个真函数的入口）——
+        于是被判成"被边界截断的函数"，size 16。同型假函数实测 136 个，
+        每一个都在 Stage 2 的 CFG 里留下一个「块末 = 函数末且无终止指令」的链断
+        （S2 报 145 条），其中一个还造成孤儿块。
+
+        判据：出口只剩 `bound` 这一条**不自证**的证据时，必须再有一条**独立**证据
+        才认。独立证据取四类里任意一条：
+          calls   —— 它自己发起过调用；
+          frame   —— 头部有 `sub esp, N`（栈帧）；
+          seh     —— 头部出现 `fs:`（SEH 注册）；
+          prologue—— 入口是 `55 8B EC` 且 16 对齐。
+        字节表这三种全不沾。被拒的字节如实留在 unknown 里，不硬凑。
+        """
+        ex = r["exits"]
+        if ex["ret"] or ex["ret_imm"] or ex["thunk"] or r["tails"] \
+                or ex["switch"] or ex["loop"]:
+            return True                      # 有自证出口，无需再加证据
+        return bool(r["calls"] or r["frame"] or r["seh"] or va in prologue_set)
+
+    for rnd in range(16):
+        # 上一轮被拒的空隙候选中，**只有"边界相关"的失败才值得重试**：
+        # 硬边界可能因为同段空隙里新认下来的函数而变好。
+        # `不是指令起点` / `空` / `超过 MAX_FUNC` 是确定性的 ——
+        # 每轮重试它们纯属浪费（实测 3,195 个 × 11 轮全是白跑）。
+        failed.difference_update(gap_failed)
+        gap_failed.clear()
+        spans = [(f["rva"], f["rva"] + f["size"]) for f in funcs.values()]
+        gaps = gaps_of(spans, lo, hi)
+        covered = bytearray(hi - lo)
+        for a, b in spans:
+            for x in range(a - lo, b - lo):
+                covered[x] = 1
+        before = len(funcs)
+        taken = 0
+        n_cand = 0
+        for a, b in gaps:
+            for x in gap_candidates(a, b):
+                va = ib + x
+                if _dbg and va in _dbg:
+                    log("      DBG %s：轮 %d 提出（gap=[%s,%s) covered=%d funcs=%s failed=%s tab=%d）"
+                        % (hx(va), rnd + 1, hx(ib + a), hx(ib + b),
+                           covered[x - lo], va in funcs, va in failed,
+                           table_of[x - lo]))
+                if covered[x - lo] or va in funcs or va in failed or in_table(x):
+                    continue
+                n_cand += 1
+                # 硬边界 = 这一段空隙**当前还没被认领的部分**。
+                # 不用整段空隙：同一段里先认下来的函数会占掉一段，
+                # 后面候选的边界必须收窄到它之后，否则会产生大面积互相压
+                # （实测：用整段当边界时原始重叠 96 万字节、1,103 个空隙函数被丢掉）。
+                lo_b = max(a, x)
+                bounds_of[va] = (lo_b, b)
+                seeds[va].add("gap")
+                r = wk.walk(va - ib, seeds, strong, True, stop_rvas, (lo_b, b),
+                            strict_density=False)
+                if r is None:
+                    if _dbg and va in _dbg:
+                        log("      DBG %s：轮 %d 拒 —— %s"
+                            % (hx(va), rnd + 1, wk.reason))
+                    failed.add(va)
+                    if wk.reason in GAP_RETRY_REASONS:
+                        gap_failed.add(va)
+                    rejected["walk 失败"] += 1
+                    rejected["原因：" + wk.reason] += 1
+                    gap_rej[wk.reason] += 1
+                    failed_tier["gap"] += 1
+                    failed_detail.append((va, wk.reason, "gap"))
+                    continue
+                if _dbg and va in _dbg:
+                    log("      DBG %s：轮 %d 接受 size=%d insns=%d"
+                        % (hx(va), rnd + 1, r["size"], r["insns"]))
+                if not only_bound_ok(r, va):
+                    # 走通了，但出口只有 `bound`，且拿不出任何独立证据 ——
+                    # 这是字节索引表被解码成代码的典型样子，拒。
+                    failed.add(va)
+                    gap_failed.add(va)          # 边界收窄后仍可能翻盘，进重试集
+                    rejected["原因：只剩 bound 出口且无独立证据"] += 1
+                    gap_rej["只剩 bound 出口且无独立证据"] += 1
+                    failed_tier["gap"] += 1
+                    failed_detail.append((va, "只剩 bound 出口且无独立证据", "gap"))
+                    continue
+                funcs[va] = r
+                taken += 1
+                # 认下来的这段标记为已覆盖，里面的候选直接跳过（顺序剥离）。
+                # 注意：不再手工推进 x —— 覆盖图比"下一个 16 对齐"更准，
+                # 它同时管住了「新函数只覆盖了一部分」和「pump 又扩散进来一个」。
+                e = min(r["rva"] + r["size"], b)
+                for y in range(r["rva"] - lo, e - lo):
+                    covered[y] = 1
+                # 它的出边要当成新的播种证据，扩散到不动点。
+                # 扩散出来的函数（可能**落在这段空隙里**）也要标成已覆盖，
+                # 否则后面的候选会跟它们压上。
+                for t in r["calls"]:
+                    seeds[t].add("call")
+                for t in r["tails"]:
+                    seeds[t].add("tail")
+                for nv in pump(list(r["calls"]) + list(r["tails"])):
+                    rf = funcs[nv]
+                    for y in range(rf["rva"] - lo,
+                                   min(rf["rva"] + rf["size"], hi) - lo):
+                        covered[y] = 1
+        gap_rounds += 1
+        gap_cand_n += n_cand
+        rest = gaps_of([(f["rva"], f["rva"] + f["size"]) for f in funcs.values()], lo, hi)
+        log("  空隙第 %d 轮：候选 %d 个 → 新函数 %d 个"
+            "（未覆盖字节 %d 段 / %d 字节，含填充与数据）"
+            % (rnd + 1, n_cand, len(funcs) - before,
+               len(rest), sum(b - a for a, b in rest)))
+        if len(funcs) == before:
+            break
+    # 分档要等**两条通道都收敛**之后再定：一个函数可能先被空隙通道收下，
+    # 后面才被发现其实有 call 指着它 —— 那时它的档位应当升到 call。
+    for va, f in funcs.items():
+        f["tiers"] = set(seeds.get(va, ())) or {"call"}
+    gap_kept = [f for f in funcs.values()
+                if min(f["tiers"], key=lambda t: TIER_RANK.get(t, 99)) == "gap"]
+    log("空隙通道合计：%d 轮，候选 %d 个，接受 %d 个（主档=gap），拒绝 %d 个 %s"
+        % (gap_rounds, gap_cand_n, len(gap_kept),
+           sum(gap_rej.values()), dict(gap_rej)))
 
     # ---- 去重叠：按证据强度贪心接受 ----
     # 一个入口落在另一个函数体内部时，只能是两种情况：①强的那个才是真函数，
@@ -600,6 +1109,48 @@ def run(path=None, verbose=True):
 
     off0 = img.rva_to_off(lo)
     seg = img.data[off0:off0 + (hi - lo)]
+
+    # 数据：指针表。空隙通道已经把「指针表」整段排除在候选之外，这里把它们
+    # 落成 `data` —— 之前它们全被记成 unknown，于是 unknown 里混着两样东西：
+    # 没播种到的真函数 + 内嵌在 .text 里的跳转表。**一样一样地落标签**，
+    # 这样 unknown 才真正是「不知道」。
+    data_tables = []
+    for a, b in ptr_runs(seg, lo, ib + lo, ib + hi):
+        n = 0
+        for x in range(a - lo, b - lo):
+            if label[x] == 0:
+                label[x] = 3
+                n += 1
+        if n:
+            data_tables.append((a, b, n))
+
+    # 数据：字节索引表（紧跟在 dword 跳表之后的那张小表）。
+    # 只有 dword 部分被 ptr_runs 抓到的表才够长；case 数少的表 dword 部分不足 3 项，
+    # 于是整张表都留在 unknown 里 —— 本体区残差里 8,330 字节是这么来的。
+    #
+    # 注意扫描区段要**向前多给一段余量**：dword 表本身常常已经被 ptr_runs 判成数据，
+    # 于是它落在"未知区段"之外，只扫未知区段就永远找不到配对的 dword 表 ——
+    # 实测 0x5B81F8（字节表）前面 0x5B81D4 就是它的 dword 表，属于这种。
+    MARGIN = 1024
+    unk_regions = []
+    i0 = 0
+    while i0 < len(label):
+        if label[i0] == 0:
+            j0 = i0
+            while j0 < len(label) and label[j0] == 0:
+                j0 += 1
+            unk_regions.append((max(lo, lo + i0 - MARGIN), lo + j0))
+            i0 = j0
+        else:
+            i0 += 1
+    byte_tabs = byte_index_tables(seg, lo, ib + lo, ib + hi, unk_regions)
+    byte_tab_bytes = 0
+    for a, b in byte_tabs:
+        for x in range(a - lo, b - lo):
+            if label[x] == 0:
+                label[x] = 3
+                byte_tab_bytes += 1
+
     i = 0
     pad_bytes = 0
     while i < len(seg):
@@ -615,6 +1166,16 @@ def run(path=None, verbose=True):
             i = j
         else:
             i += 1
+
+    # 填充（孤立单字节）。走到这里还没被认领、而且字节是 0x90 / 0xCC 的，
+    # 只能是编译器插的对齐字节 —— 实测 353 处「1 字节空隙」全都是这种，
+    # 形态一律是「上一个函数末尾 + 1 个 0x90 + 下一个 16 对齐的函数」。
+    # 单列一类报出来，不跟成片的填充混在一起。
+    pad1_n = 0
+    for i in range(len(seg)):
+        if label[i] == 0 and seg[i] in (0x90, 0xCC):
+            label[i] = 2
+            pad1_n += 1
 
     n_code = label.count(1)
     n_pad = label.count(2)
@@ -662,7 +1223,7 @@ def run(path=None, verbose=True):
         e = f["exits"]
         if e["ret"] or e["ret_imm"] or e["thunk"] or f["tails"]:
             return "strong"
-        for k in ("switch", "loop", "fallthru"):
+        for k in ("switch", "loop", "fallthru", "bound"):
             if e[k]:
                 return k
         return "none"
@@ -682,13 +1243,28 @@ def run(path=None, verbose=True):
         "vt": {"slots": sum(len(v.get("entries") or []) for v in rtti["vtables"].values()),
                "targets": len(vt_tgts), "classes": len(rtti.get("classes", {}))},
         "jt": {"abs_sites": len(idx.jt), "reg_sites": idx.jt_indirect,
-               "tables": len(jt.cache),
-               "entries": sum(len(t) for t, _ in jt.cache.values())},
+               "tables": len(jt.bytes_of),
+               "entries": sum(len(t) for t, _ in jt.cache.values()),
+               "data_bytes": sum(n for _, n in jt.bytes_of.values()),
+               # 遮罩前后解出的指令数之差 = 从跳表字节里"解"出来的垃圾指令。
+               # 这个数要留着：它是"表本体以前一直被当代码"的量化证据。
+               "decode_drop": n_a - idx.decoded},
         "ret_imm_kinds": len(set(idx.ret_imm.values())),
         "seeds": {k: sum(1 for v in seeds.values() if k in v) for k in TIERS},
         "funcs": len(ents),
         "tier_primary": dict(tier_count),
         "bytes": {"code": n_code, "pad": n_pad, "data": n_data, "unknown": n_unknown},
+        "pad1": pad1_n,
+        "gap": {"rounds": gap_rounds, "cand": gap_cand_n, "kept": len(gap_kept),
+                "rej": dict(gap_rej), "rej_total": sum(gap_rej.values())},
+        "data_tables": {"n": len(data_tables),
+                        "bytes": sum(n for _a, _b, n in data_tables),
+                        "ptr_n": len(tables),
+                        "ptr_bytes": sum(b - a for a, b in tables),
+                        "byte_tabs": len(byte_tabs),
+                        "byte_tab_bytes": byte_tab_bytes,
+                        "list": [[hx(a), hx(b), n] for a, b, n in
+                                 sorted(data_tables, key=lambda x: -x[2])[:20]]},
         "unknown_runs": len(unknown_runs),
         "rejected": dict(rejected),
         "failed_tier": dict(failed_tier),
@@ -712,7 +1288,8 @@ def run(path=None, verbose=True):
             "weak_exit": [(hx(v), k) for v, k in weak_exit],
             "entry_present": (ib + img.entry_rva) in funcs,
         },
-        "top_unknown": [(hx(ib + a), hx(ib + b), b - a) for a, b in unknown_runs[:15]],
+        "top_unknown": [(hx(ib + a), hx(ib + b), b - a,
+                         seg[a - lo:a - lo + 16].hex(" ")) for a, b in unknown_runs[:15]],
         "unknown_buckets": _buckets(unknown_runs),
         "truncated_n": sum(1 for f in ents if f.get("truncated")),
         "low_density_n": sum(1 for f in ents if f.get("low_density")),
@@ -960,10 +1537,21 @@ def write_docs(ents, stats, img):
     A("| └ 填充（连续 ≥%d 的 `0x90`/`0xCC`） | %d（%.1f%%） |"
       % (PAD_MIN, stats["bytes"]["pad"],
          100.0 * stats["bytes"]["pad"] / stats["text"]["size"]))
-    A("| └ 数据（跳表本体） | %d（%.1f%%） |"
+    A("| └ 数据（跳表本体 + 指针表） | %d（%.1f%%） |"
       % (stats["bytes"]["data"], 100.0 * stats["bytes"]["data"] / stats["text"]["size"]))
     A("| └ **未知** | **%d（%.2f%%）** |"
       % (stats["bytes"]["unknown"], 100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
+    A("")
+    A("填充与数据各自还能再拆：")
+    A("")
+    A("| 细分 | 数量 |")
+    A("|---|---:|")
+    A("| 填充里的**孤立单字节** `0x90` | %d 字节（形态一律是「上个函数末尾 + 1 个 `0x90`"
+      " + 下一个 16 对齐的函数」） |" % stats["pad1"])
+    A("| 指针表（连续 ≥3 个 dword 都指向 `.text`） | %d 段 / %d 字节 |"
+      % (stats["data_tables"]["ptr_n"], stats["data_tables"]["ptr_bytes"]))
+    A("| 字节索引表（MSVC 密集 switch 的 case 索引表） | %d 张 / %d 字节 |"
+      % (stats["data_tables"]["byte_tabs"], stats["data_tables"]["byte_tab_bytes"]))
     A("")
     A("## 4. 对账")
     A("")
@@ -996,8 +1584,11 @@ def write_docs(ents, stats, img):
       % (stats["old_call_total"],
          "✅ 全部保留" if not c["old_call_missing"]
          else "⚠️ 未保留 %d 个（见 §6）" % len(c["old_call_missing"])))
-    A("| 8 | 未知字节 < `.text` 的 1%%（本阶段目标） | ❌ 实为 %.2f%% —— **没达成**，"
-      "残差见 §5 |" % (100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
+    _unk = stats["bytes"]["unknown"]
+    _unkpct = 100.0 * _unk / stats["text"]["size"]
+    A("| 8 | 未知字节 < `.text` 的 1%% | %s |"
+      % ("✅ %.2f%%（%d 字节）" % (_unkpct, _unk) if _unkpct < 1.0
+         else "❌ 实为 %.2f%% —— **没达成**，残差见 §5" % _unkpct))
     A("| 9 | `.text` 每字节恰好属于 代码/填充/数据/未知 之一 | %s |"
       % ("✅ %d = %d" % (stats["bytes"]["code"] + stats["bytes"]["pad"]
                         + stats["bytes"]["data"] + stats["bytes"]["unknown"],
@@ -1019,12 +1610,14 @@ def write_docs(ents, stats, img):
         A("- **%d 个函数出口不自证**（`loop`/`switch`/`fallthru`），靠强入口证据收下，"
           "明细见 §6.4。" % len(c["weak_exit"]))
         A("")
-    A("## 5. 残差：未知字节 —— 本阶段目标没达成")
+    # 标题按**实测**写，不写死：这条判据（< 1%）本轮真的过了，
+    # 但下一轮改口径就可能不过 —— 手写的标题一定会跟数字打架。
+    A("## 5. 残差：未知字节 —— %s" % ("已达成本阶段目标" if _unkpct < 1.0
+                                      else "本阶段目标没达成"))
     A("")
-    A("`unknown` = 既不属于任何函数、又不是连续填充、也不是跳表本体。")
-    A("共 **%d 段 / %d 字节 = `.text` 的 %.2f%%**。§4 第 8 条要求 < 1%%，**没做到**。"
-      % (stats["unknown_runs"], stats["bytes"]["unknown"],
-         100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
+    A("`unknown` = 既不属于任何函数、又不是填充、也不是数据。")
+    A("共 **%d 段 / %d 字节 = `.text` 的 %.2f%%**（§4 第 8 条要求 < 1%%）。"
+      % (stats["unknown_runs"], _unk, _unkpct))
     A("")
     A("| 段大小 | 段数 | 字节 |")
     A("|---|---:|---:|")
@@ -1033,16 +1626,16 @@ def write_docs(ents, stats, img):
     A("| **合计** | **%d** | **%d** |"
       % (stats["unknown_runs"], stats["bytes"]["unknown"]))
     A("")
-    A("最大的 15 段：")
+    A("最大的 15 段（附开头 16 字节的原始内容）：")
     A("")
-    A("| 起 | 止 | 字节 |")
-    A("|---|---|---:|")
-    for a, b, n in stats["top_unknown"]:
-        A("| `%s` | `%s` | %d |" % (a, b, n))
+    A("| 起 | 止 | 字节 | 开头 |")
+    A("|---|---|---:|---|")
+    for a, b, n, hexs in stats["top_unknown"]:
+        A("| `%s` | `%s` | %d | `%s` |" % (a, b, n, hexs))
     A("")
     A("这些字节**不做外推**：不说它们是代码，也不说它们是数据。")
     A("")
-    A("### 5.1 本轮查清并修掉的四个成因")
+    A("### 5.1 本轮查清并修掉的六个成因")
     A("")
     A("每一个都是先实测复现、再改代码的：")
     A("")
@@ -1054,34 +1647,104 @@ def write_docs(ents, stats, img):
     A("   实测 `0x407040` 因此吞掉 `0x407070` 起一整簇小函数，跨度 14.7 KB。")
     A("   修法：强证据入口落在包围盒内就把末端截到它 —— 本轮截断 **%d** 个函数。"
       % stats["truncated_n"])
-    A("3. **跳表不跟**。387 处 `jmp dword ptr [reg*4+表址]`，解析出 369 张表 / 2,706 个表项。")
+    A("3. **跳表不跟**。%d 处 `jmp dword ptr [reg*4+表址]`，解析出 %d 张表 / %d 个表项。"
+      % (stats["jt"]["abs_sites"], stats["jt"]["tables"], stats["jt"]["entries"]))
     A("   旧实现只跟立即数操作数，带 `switch` 的函数会被截断。")
     A("4. **出口判据太窄**。原判据只认 `ret`/`ret_imm`/`thunk`/`tails`，")
     A("   把 `loop`（`jmp $` 陷阱）、`switch`（唯一出口是跳转表）、")
     A("   `fallthru`（一路落进下一个函数的不返回跳板）三类**真出口全毙了**。")
     A("   代价是旧清单 `call` 档丢了 4 条真入口（对账第 7 条）。修法见 §6.4：")
     A("   这三类出口必须配强入口证据才收。")
+    A("5. **播种通道缺一条「没人指过的函数」**。这是把 unknown 从 2.81%% 压到 %.2f%% 的那一击。"
+      % _unkpct)
+    A("   逐段查下来，残下来的**根本不是数据**，而是没有直接 `call` 指向的真函数：")
+    A("   `0x402020`（`8b 41 14 c3`，getter）、`0x40EBC0`（`mov ecx,imm; jmp`，尾跳跳板）、")
+    A("   `0x412540`（`e9 rel32`，纯 jmp 跳板）。它们只被虚表间接调用，")
+    A("   而虚表通道只能覆盖 `db/rtti.json` 里那 6,686 个槽。")
+    A("   判据换成**「空隙里 16 对齐处，一段能解成合法指令、且有出口的代码」**，")
+    A("   并给它三条约束（候选只在未覆盖字节里取 / 入口 16 字节对齐 / 遍历硬边界就是那段空隙）：")
     A("")
-    A("四轮的效果：")
+    A("   | 项 | 值 |")
+    A("   |---|---:|")
+    A("   | 轮数 | %d（收敛） |" % stats["gap"]["rounds"])
+    A("   | 候选 | %d |" % stats["gap"]["cand"])
+    A("   | 接受（主档 = `gap`） | %d |" % stats["gap"]["kept"])
+    A("   | 拒绝 | %d |" % stats["gap"]["rej_total"])
+    A("")
+    A("   拒绝原因的分布：")
+    A("")
+    A("   | 原因 | 个数 |")
+    A("   |---|---:|")
+    for k, v in sorted(stats["gap"]["rej"].items(), key=lambda x: -x[1]):
+        A("   | %s | %d |" % (k, v))
+    A("")
+    A("   其中 `不是指令起点` 占大多数 —— 那些 16 对齐地址落在数据串中间，")
+    A("   反汇编器在那里根本没有指令边界。这正好说明该通道**没有**把数据当函数。")
+    A("")
+    A("6. **跳表本体被当成指令解码**。锚点是**点**，跳表是**区间** —— 扫描一头扎进"
+      "一张 dword 表里，那些 dword 恰好能解成一串合法指令，于是再也回不到正轨，"
+      "直到撞上下一个锚点。代价有两层：")
+    A("")
+    A("   - 表尾那个真入口**拿不到指令边界**。`0x7C7788` 是函数 `0x7C7371`"
+      "内嵌跳表之后的续段，夹在表尾（`0x7C7758` 起 12 项）与下一处之间，"
+      "反汇编器在那儿根本没有指令起点。")
+    A("   - 函数在表前**被截断**：`0x7C7371` 一度只报到 998 字节，实际 **2,942 字节**；"
+      "空隙通道只好在表里/表后造出假函数 —— 一个 `case` 标签 `0x7C77D0`"
+      "（跳表 `0x7C7B3C` 的第 3 项）曾被当成「函数入口」。")
+    A("")
+    A("   修法：把跳表本体当**数据区**交给反汇编器"
+      "（`disasm.build_index(..., data_ranges=…)`），扫描进区间直接跳到区间末重开解码"
+      "—— 这一步**制造**了表尾的指令边界。全局代价/收益：遮罩 %d 张表 / %d 字节，"
+      "解出的指令数从 %d 降到 %d（**少解 %d 条**从表字节里来的垃圾指令）。"
+      % (stats["jt"]["tables"], stats["jt"]["data_bytes"],
+         stats["insns"] + stats["jt"]["decode_drop"], stats["insns"],
+         stats["jt"]["decode_drop"]))
+    A("")
+    A("   两次都栽在同一个坑上，一并记下：")
+    A("")
+    A("   - **`JtResolver.bytes_of` 是「起始 + 长度」，不是「起始 + 结束」。**"
+      "消费方按 `range(a, b)` 用它时，`range(0x3C7758, 48)` 是**空区间** —— "
+      "逻辑静默失效，没有任何异常。`scan_dataptrs` 的「排除跳表本体」因此**从来没生效过**。"
+      "现在统一走 `JtResolver.ranges()`，口径写在函数名上。")
+    A("   - **生成器里的循环顶检查等于没写。** 数据区跳过最初只写在外层 `while` 顶部，"
+      "而 `md.disasm` 是生成器：`pos` 落进区间后，**同一次生成器调用**会接着往下解码，"
+      "顶层那次检查根本轮不到。改成每条指令之后都查一次、命中即 `break` 回外层。")
+    A("")
+    A("另外两笔是「把不属于函数的东西正确地归位」，不是缩小分母：")
+    A("")
+    A("- **指针表判为数据**。`.text` 里嵌着跳转表，之前全被记成 unknown。")
+    A("  判据：连续 ≥3 个 dword 值都落在 `.text` 内。本轮共认出 **%d 段 / %d 字节**；"
+      % (stats["data_tables"]["ptr_n"], stats["data_tables"]["ptr_bytes"]))
+    A("  其中此前落在 unknown 里、这轮才落上标签的是 %d 段 / %d 字节"
+      "（其余的早被函数体盖住或已落过标签）。"
+      % (stats["data_tables"]["n"], stats["data_tables"]["bytes"]))
+    A("  注意**不能**假设 4 字节对齐：MSVC 常在表前垫一条 2 字节的 `mov edi,edi`，")
+    A("  整张表因此是 `2 mod 4` 对齐的（实测 `0x4059D0`）。四个相位都要试。")
+    A("- **孤立单字节填充**。%d 个字节形态一律是「上个函数末尾 + 1 个 `0x90` +"
+      " 下一个 16 对齐的函数」，判为填充单列一类报出。" % stats["pad1"])
+    A("")
+    A("六轮的效果：")
     A("")
     A("| 轮次 | 未知字节 | 当轮做的事 |")
     A("|---|---:|---|")
     A("| 1 | 522,751（12.88%） | 只有 entry / call / 虚表三条通道 |")
     A("| 2 | 142,366（3.51%） | 加「填充尽头」通道 + 遍历路标 |")
     A("| 3 | 114,216（2.81%） | 修锚点偏移 + 截包围盒 + 跟跳表 |")
-    A("| 4 | %d（%.2f%%） | 补出口判据（收下 `loop`/`switch`/`fallthru` + 强入口证据）"
-      % (stats["bytes"]["unknown"],
-         100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
+    A("| 4 | 114,170（2.81%） | 补出口判据（收下 `loop`/`switch`/`fallthru` + 强入口证据）")
+    A("| 5 | 7,277（0.18%） | **空隙通道** + 指针表判数据 + 孤立填充字节")
+    A("| 6 | **%d（%.2f%%）** | **跳表本体作数据区遮罩**（表尾拿回指令边界） |"
+      % (_unk, _unkpct))
     A("")
-    A("### 5.2 还没修的成因（下一轮）")
+    A("### 5.2 还没修的成因（留给下一阶段）")
     A("")
-    A("- **大函数体内嵌查表数据**。`0x618CE4` 那段 14,360 字节是一例：函数开头是")
-    A("  `sub esp, 0x240` 这类巨大栈帧，体内夹着 CRC 之类的查找表；遍历走进表里会解成")
-    A("  一串假指令，最后被密度校验毙掉。要等 S2 能区分「代码块 / 数据块」之后才好处理。")
-    A("- **只被间接调用、且不出现在任何表里的函数**。没有任何一条通道能看到它们。")
+    A("- **跳表里那些字节型 case 表**（`00 01 01 01 ...`）。MSVC 的密集 switch 会在")
+    A("  dword 跳表后面再放一张字节索引表，长度只能从代码里推，光看字节看不出来。")
+    A("  dword 部分已经被判成数据，字节部分还留在 unknown 里。")
     A("- **表址在寄存器里的跳表**（`lea reg,[tab]; jmp [reg+reg*4]`）。本轮统计为 %d 处 ——"
       % stats["jt"]["reg_sites"])
     A("  这个数字本身要留着：它说明这条形式**没出现**，而不是我们解析过了。")
+    A("- **大函数体内嵌查表数据**。这类段 S2 会给出块级证据（块之间的洞就是数据），")
+    A("  这一阶段先不硬塞。")
     A("")
     A("## 6. 被丢弃与遍历失败的入口（一条都不藏）")
     A("")
@@ -1239,8 +1902,8 @@ def main() -> int:
              stats["bytes"]["code"] + stats["bytes"]["pad"] + stats["bytes"]["data"]
              + stats["bytes"]["unknown"]))
     print("未知段 %d 段，最大 10 段：" % stats["unknown_runs"])
-    for a, b, n in stats["top_unknown"][:10]:
-        print("   %s..%s  %d 字节" % (a, b, n))
+    for a, b, n, hexs in stats["top_unknown"][:10]:
+        print("   %s..%s  %5d 字节  %s" % (a, b, n, hexs))
 
     if args.check:
         return 0
