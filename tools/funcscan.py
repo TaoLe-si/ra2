@@ -178,6 +178,9 @@ class Walker:
         w_lo = max(idx.lo, entry - WIN_BACK)
         w_hi = min(idx.hi, entry + WIN_FWD)
         out_of_win = 0
+        # 遍历是否"撞上下一个强证据入口就停"了。用来识别一种真函数：
+        # 本身不含 ret/jmp，一路 fall through 进下一个函数（不返回的跳板）。
+        stopped_at_entry = False
 
         while stack:
             a = stack.pop()
@@ -188,6 +191,7 @@ class Walker:
                 if f & F_BAD:
                     break
                 if stop_at is not None and a != entry and (self.ib + a) in stop_at:
+                    stopped_at_entry = True
                     break                     # 撞上下一个函数的入口
                 seen.add(a)
 
@@ -265,7 +269,31 @@ class Walker:
                 return None
             low_density = True
         # 必须有出口，否则是一段没有返回的碎片。
-        if not (exits["ret"] or exits["ret_imm"] or exits["thunk"] or tails):
+        #
+        # 出口形态一共这几类，**漏掉任何一类都会把真函数当成碎片丢掉**：
+        #   ret / ret_imm  —— 常规返回（ret_imm 即 __stdcall 的参数字节）
+        #   thunk          —— `jmp [IAT]` / `jmp [reg]`，导入跳板或寄存器间接跳
+        #   tails          —— 尾调用（jmp 出窗口或到已知入口）
+        #   switch         —— 唯一的出口是一张跳转表（实测有这种函数）
+        #   loop           —— `jmp <本函数入口>`，即 `jmp $`：**不返回的陷阱**。
+        #                     实测 0x4F4D80 / 0x5175D0 就是 16 字节槽里的
+        #                     `eb fe` + 14 个 nop，而且有真实 call 指向它们。
+        #   fallthru       —— 走到强证据入口就停了、中间没有 ret/jmp。
+        #                     实测 0x6BEC50 = `push ecx; call 0x7CBDDC`（不返回的
+        #                     纯虚/异常跳板），后面用 nop 填到 16 字节。
+        #
+        # 原判据只认前四类里的三类（ret/ret_imm/thunk/tails），把后三类全毙了 ——
+        # 代价是旧表的 call 档整整丢了 4 条**真入口**（见 docs/functions.md）。
+        #
+        # 后三类**额外要求证据够强**（strict）：`ret` 是自证的，走到 ret 就是函数；
+        # 而这三种出口本身不自证 —— 一个 `jmp $` 也可能只是对齐填充，
+        # 一段以跳转表收尾的也可能是从派生入口走出来的中途片段。
+        # 只有「有 call 点 / 占虚表槽」这类外部证据在，才认它是函数。
+        plain_exit = (exits["ret"] or exits["ret_imm"] or exits["thunk"] or tails)
+        weak_exit = (exits["switch"] or exits["loop"] or stopped_at_entry)
+        if stopped_at_entry and not plain_exit and not (exits["switch"] or exits["loop"]):
+            exits["fallthru"] += 1            # 让它出现在产物里，别只活在注释里
+        if not (plain_exit or (weak_exit and strict)):
             self.reason = "没有出口"
             return None
 
@@ -289,7 +317,13 @@ class Walker:
             # end 统一用 **VA**。曾经这里存的是 RVA，而 va 是 VA，
             # 两个字段单位不同 —— 下游拿 VA 比 RVA，比出来的结论全是废的。
             "end": self.ib + end, "size": size,
-            "insns": len(seen), "calls": calls, "tails": tails,
+            "insns": len(seen),
+            # calls / tails 同样必须换算成 VA，理由和 end 完全一样。
+            # 内部遍历用 RVA（idx 的编号空间），**只在出口处换算一次**。
+            # 这条当初漏了：calls/tails 一直是 RVA，而 va 是 VA ——
+            # 于是「谁调用了 0x6BEC50」这种查询永远查不到，还查不出错。
+            "calls": sorted(self.ib + t for t in calls),
+            "tails": sorted(self.ib + t for t in tails),
             "exits": exits, "ret_bytes": ret_bytes, "icalls": icalls,
             "switches": switches, "out_of_win": out_of_win,
             "frame": frame, "seh": seh, "thunk": thunk,
@@ -502,7 +536,7 @@ def run(path=None, verbose=True):
             continue
         funcs[va] = r
         for t in list(r["calls"]) + list(r["tails"]):
-            tv = ib + t
+            tv = t                            # walk() 已经在出口处换算成 VA 了
             if tv not in funcs and tv not in seeds:
                 seeds[tv].add("call" if t in r["calls"] else "tail")
                 work.append(tv)
@@ -618,9 +652,24 @@ def run(path=None, verbose=True):
     old_gap_total = len(old_by["gap"])
     retained = sum(1 for v in old_by["gap"] if v in funcs)
 
-    bad_exit = [f for f in ents
-                if not (f["exits"]["ret"] or f["exits"]["ret_imm"]
-                        or f["exits"]["thunk"] or f["tails"])]
+    # 出口分两档，**别混成一个标签**：
+    #   strong —— ret / ret_imm / thunk / tails，走到这里就能自证"这是个函数"；
+    #   弱出口 —— switch / loop / fallthru，只有外部证据（有 call 点 / 占虚表槽）
+    #             在，才认它是函数（见 walk() 里的说明）。
+    # 原来的 bad_exit 只认 strong，于是那 4 个弱出口函数被标成"没有出口" ——
+    # 和自己刚写下的判据自相矛盾。现在分开报。
+    def _exit_kind(f):
+        e = f["exits"]
+        if e["ret"] or e["ret_imm"] or e["thunk"] or f["tails"]:
+            return "strong"
+        for k in ("switch", "loop", "fallthru"):
+            if e[k]:
+                return k
+        return "none"
+
+    bad_exit = [f for f in ents if _exit_kind(f) == "none"]
+    weak_exit = sorted((f["va"], _exit_kind(f)) for f in ents
+                       if _exit_kind(f) not in ("strong", "none"))
 
     tier_count = collections.Counter()
     for f in ents:
@@ -648,6 +697,7 @@ def run(path=None, verbose=True):
         "dropped_detail": [[hx(v), t, n] for v, t, n in dropped[:400]],
         "dropped_n": len(dropped),
         "dropped_tier": dict(dropped_tier),
+        "old_call_total": len(old_by["call"]),
         "checks": {
             "aligned_below": [len(below), len(below) - len(misaligned), len(misaligned)],
             "aligned_above": [len(above), len(above) - len(misaligned_above),
@@ -659,6 +709,7 @@ def run(path=None, verbose=True):
             "old_gap_total": old_gap_total,
             "old_gap_still_present": retained,
             "bad_exit": [hx(f["va"]) for f in bad_exit],
+            "weak_exit": [(hx(v), k) for v, k in weak_exit],
             "entry_present": (ib + img.entry_rva) in funcs,
         },
         "top_unknown": [(hx(ib + a), hx(ib + b), b - a) for a, b in unknown_runs[:15]],
@@ -935,12 +986,15 @@ def write_docs(ents, stats, img):
       "丢弃 %d 个弱证据入口 %s |"
       % (c["overlap_bytes"], c["overlap_after"], stats["dropped_n"],
          "✅" if c["overlap_after"] == 0 else "❌ 仍有 %d" % c["overlap_after"]))
-    A("| 5 | 每个函数终止于 `ret` / 尾跳 / thunk | %s |"
-      % ("✅ 全部有出口" if not c["bad_exit"]
+    A("| 5 | 每个函数有出口（`ret`/尾跳/thunk 自证；`switch`/`loop`/`fallthru` "
+      "须有强入口证据） | %s |"
+      % ("✅ 全部有出口（其中 %d 个靠弱出口，见 §6.4）" % len(c["weak_exit"])
+         if not c["bad_exit"]
          else "❌ %d 个没有出口" % len(c["bad_exit"])))
     A("| 6 | PE 入口点必须在结果里 | %s |" % ("✅" if c["entry_present"] else "❌"))
-    A("| 7 | 旧清单 `call` 档 6,635 条必须全部保留 | %s |"
-      % ("✅ 全部保留" if not c["old_call_missing"]
+    A("| 7 | 旧清单 `call` 档 %d 条必须全部保留 | %s |"
+      % (stats["old_call_total"],
+         "✅ 全部保留" if not c["old_call_missing"]
          else "⚠️ 未保留 %d 个（见 §6）" % len(c["old_call_missing"])))
     A("| 8 | 未知字节 < `.text` 的 1%%（本阶段目标） | ❌ 实为 %.2f%% —— **没达成**，"
       "残差见 §5 |" % (100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
@@ -960,6 +1014,10 @@ def write_docs(ents, stats, img):
         A("### 没有出口的函数")
         A("")
         A("> " + "、".join("`%s`" % v for v in c["bad_exit"][:40]))
+        A("")
+    elif c["weak_exit"]:
+        A("- **%d 个函数出口不自证**（`loop`/`switch`/`fallthru`），靠强入口证据收下，"
+          "明细见 §6.4。" % len(c["weak_exit"]))
         A("")
     A("## 5. 残差：未知字节 —— 本阶段目标没达成")
     A("")
@@ -984,7 +1042,7 @@ def write_docs(ents, stats, img):
     A("")
     A("这些字节**不做外推**：不说它们是代码，也不说它们是数据。")
     A("")
-    A("### 5.1 本轮查清并修掉的三个成因")
+    A("### 5.1 本轮查清并修掉的四个成因")
     A("")
     A("每一个都是先实测复现、再改代码的：")
     A("")
@@ -998,14 +1056,20 @@ def write_docs(ents, stats, img):
       % stats["truncated_n"])
     A("3. **跳表不跟**。387 处 `jmp dword ptr [reg*4+表址]`，解析出 369 张表 / 2,706 个表项。")
     A("   旧实现只跟立即数操作数，带 `switch` 的函数会被截断。")
+    A("4. **出口判据太窄**。原判据只认 `ret`/`ret_imm`/`thunk`/`tails`，")
+    A("   把 `loop`（`jmp $` 陷阱）、`switch`（唯一出口是跳转表）、")
+    A("   `fallthru`（一路落进下一个函数的不返回跳板）三类**真出口全毙了**。")
+    A("   代价是旧清单 `call` 档丢了 4 条真入口（对账第 7 条）。修法见 §6.4：")
+    A("   这三类出口必须配强入口证据才收。")
     A("")
-    A("三轮的效果：")
+    A("四轮的效果：")
     A("")
     A("| 轮次 | 未知字节 | 当轮做的事 |")
     A("|---|---:|---|")
     A("| 1 | 522,751（12.88%） | 只有 entry / call / 虚表三条通道 |")
     A("| 2 | 142,366（3.51%） | 加「填充尽头」通道 + 遍历路标 |")
-    A("| 3 | %d（%.2f%%） | 修锚点偏移 + 截包围盒 |"
+    A("| 3 | 114,216（2.81%） | 修锚点偏移 + 截包围盒 + 跟跳表 |")
+    A("| 4 | %d（%.2f%%） | 补出口判据（收下 `loop`/`switch`/`fallthru` + 强入口证据）"
       % (stats["bytes"]["unknown"],
          100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
     A("")
@@ -1066,6 +1130,26 @@ def write_docs(ents, stats, img):
         A("")
         A("> " + "、".join("`%s`" % v for v in c["bad_exit"][:40]))
         A("")
+    else:
+        A("### 6.4 出口不自证、需要外部证据的函数")
+        A("")
+        A("下表这 %d 个函数**没有 `ret`**，它们靠的是另外三种出口形态：" % len(c["weak_exit"]))
+        A("`loop`（`jmp $`，不返回的陷阱）、`switch`（唯一出口是跳转表）、")
+        A("`fallthru`（一路落进下一个函数，说明它调用的是个不返回的例程）。")
+        A("")
+        A("这三类出口**本身不自证「这是个函数」** —— 一个 `eb fe` 也可能只是")
+        A("对齐填充。之所以敢收，是因为它们同时有**强入口证据**（有 `call` 点、")
+        A("或占着虚表槽）。判据写死在 `walk()` 里：弱出口必须配 `strict`。")
+        A("")
+        A("这一条是补出来的。第一版判据只认 `ret`/`ret_imm`/`thunk`/`tails`，")
+        A("把这几类全毙了，代价是**旧清单 `call` 档整整丢了 4 条真入口**")
+        A("（对账第 7 条由「未保留 4 个」变成「全部保留」）。")
+        A("")
+        A("| 入口 | 出口形态 |")
+        A("|---|---|")
+        for v, k in c["weak_exit"][:40]:
+            A("| `%s` | `%s` |" % (v, k))
+        A("")
     A("## 7. 出口形态")
     A("")
     ex = collections.Counter()
@@ -1091,7 +1175,8 @@ def write_docs(ents, stats, img):
         A("")
     A("## 8. 已知局限")
     A("")
-    A("- **三分之一入口只靠启发式撑着**。19,533 个函数里，主档为 `padend` 的有 6,212 个 ——")
+    A("- **三分之一入口只靠启发式撑着**。%d 个函数里，主档为 `padend` 的有 %d 个 ——"
+      % (stats["funcs"], stats["tier_primary"].get("padend", 0)))
     A("  它们靠的是「16 字节对齐 + 前面是填充」这条规律，而不是直接调用或虚表。")
     A("  这条规律本身是实测的（本体区 12,374/12,374），但落实到单个函数上，")
     A("  它的强度明显弱于 `vtable` / `call`。JSON 里每个条目都带 `tier`，用的时候要看得见。")
@@ -1137,11 +1222,13 @@ def main() -> int:
     print("4. 原始重叠 %d 字节；去重后 %d 字节（丢弃弱证据入口 %d 个 %s）"
           % (c["overlap_bytes"], c["overlap_after"], stats["dropped_n"],
              stats["dropped_tier"]))
-    print("5. 无出口函数：%d 个；播种遍历失败 %d 次 %s"
-          % (len(c["bad_exit"]), stats["rejected"].get("walk 失败", 0),
-             stats["failed_tier"]))
+    print("5. 无出口函数：%d 个（另有 %d 个出口不自证：%s）；播种遍历失败 %d 次 %s"
+          % (len(c["bad_exit"]), len(c["weak_exit"]),
+             dict(collections.Counter(k for _, k in c["weak_exit"])),
+             stats["rejected"].get("walk 失败", 0), stats["failed_tier"]))
     print("6. 入口点入表：%s" % ("OK" if c["entry_present"] else "FAIL"))
-    print("7. 旧 call 档未保留：%d 个" % len(c["old_call_missing"]))
+    print("7. 旧 call 档未保留：%d 个（旧清单共 %d 条）"
+          % (len(c["old_call_missing"]), stats["old_call_total"]))
     print("8. 未知字节：%d (%.2f%%)" % (stats["bytes"]["unknown"],
                                        100.0 * stats["bytes"]["unknown"] / stats["text"]["size"]))
     print()
